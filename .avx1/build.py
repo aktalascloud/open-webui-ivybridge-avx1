@@ -71,6 +71,7 @@ def build_python(project, package, manifest):
         run(sys.executable, ROOT / ".avx1/test_terminal.py", env=test_environment)
     else:
         test_environment = dict(os.environ, PYTHONPATH=str(audit_target))
+        run(sys.executable, ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui", env=test_environment)
         run(sys.executable, ROOT / ".avx1/bench_json.py", env=test_environment)
     bootstrap = package / "bootstrap"
     bootstrap.mkdir()
