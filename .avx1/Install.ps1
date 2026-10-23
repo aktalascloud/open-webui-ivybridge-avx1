@@ -1,4 +1,4 @@
-param([string]$Destination = '', [switch]$CheckOnly)
+param([string]$Destination = '', [switch]$CheckOnly, [switch]$ExperimentalNativeJson)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $manifest = Get-Content -Raw -LiteralPath "$PSScriptRoot\manifest.json" | ConvertFrom-Json
@@ -34,6 +34,9 @@ $pip = Get-ChildItem -LiteralPath "$PSScriptRoot\bootstrap" -Filter 'pip-*.whl' 
 if (-not (Test-Path -LiteralPath (Join-Path $site 'pip'))) { [IO.Compression.ZipFile]::ExtractToDirectory($pip.FullName, $site) }
 $python = Join-Path $runtime 'python.exe'
 $wheels = @(Get-ChildItem -LiteralPath "$PSScriptRoot\wheels" -Filter '*.whl' | ForEach-Object FullName)
+if ($manifest.native_json.default -eq 'stock' -and -not $ExperimentalNativeJson) {
+    $wheels = @($wheels | Where-Object { [IO.Path]::GetFileName($_) -notlike 'orjson-*.whl' })
+}
 & $python -m pip install --no-cache-dir --disable-pip-version-check --no-input @wheels
 if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
 Copy-Item -LiteralPath "$PSScriptRoot\manifest.json" -Destination $Destination

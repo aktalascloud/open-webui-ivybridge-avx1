@@ -12,19 +12,16 @@ Extract the appropriate archive and run `Install.cmd`. `Install.cmd -CheckOnly` 
 
 | ID | Change | Source |
 |---|---|---|
-| WEB-001 | Build the frontend from its lockfile with npm ci; remove forced dependency resolution. | local |
-| WEB-002 | Build orjson for Ivy Bridge with Rust O3, LTO/ThinLTO without PGO; qualify on the target CPU. | local recipe |
-| WEB-003–005 | Source-level assistant voice/microphone compatibility; patched browser dependencies; official Windows build fix. | See `.avx1/PATCHES.json` |
+| WEB-001 | Build the frontend from its lockfile with npm ci; remove forced dependency resolution. | `.avx1/PATCHES.json` |
+| WEB-002 | Build orjson for Ivy Bridge with Rust O3 and LTO/ThinLTO, without PGO; compare on the actual CPU. | `.avx1/PATCHES.json` |
+| WEB-003 | Source-level microphone provenance, bounded report speech, same-message speech identity and local call emoji; replaces chunk-name-dependent private overlays. | `.avx1/PATCHES.json` |
+| WEB-004 | Patched browser dependency lock, current SheetJS tarball, sharp override and PDF.js 6; compatible Vite 7/Svelte plugin 6 toolchain. | `.avx1/PATCHES.json` |
+| WEB-005 | Backport official Windows file URL normalization for encryption artifact verification without changing cryptographic code. | `.avx1/PATCHES.json` |
+| WEB-006 | Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking. | `.avx1/PATCHES.json` |
 
 ## Measurements
 
-| Metric | Verified improvement |
-|---|---|
-| LLM generation throughput | Not measured |
-| JSON on Ivy Bridge | Pending stock/optimized comparison |
-| Android runtime performance | Not measured on a physical phone |
-
-Unmeasured changes have no claimed percentage. JSON timings cover serialization/parsing, not tokens/s. LTO and ISA flags apply only to the named native components; they do not turn Python or TypeScript into native code. AVX2/FMA and fast-math are not enabled.
+Measured on 2026-10-23, Xeon E5-2697 v2, orjson 3.11.9, 23 compatibility vectors: stock 11152 ns, LTO 11362 ns (throughput -1.85%), ThinLTO 11848 ns (-5.88%). These are synthetic JSON results, not LLM speed. Stock remains the default. Use `Install.cmd -ExperimentalNativeJson` to try O3 LTO. PGO is disabled. [Method and raw results](.avx1/measurements/json-no-pgo-20261023.json).
 
 ## Licensing and compatibility
 

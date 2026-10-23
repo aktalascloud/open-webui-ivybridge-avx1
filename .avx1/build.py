@@ -56,6 +56,10 @@ def build_python(project, package, manifest):
         run("npm", "audit", "--omit=dev", "--audit-level=high", env=environment)
         from native_json import build
         manifest["native_json"] = build(wheels)
+        policy = json.loads((ROOT / ".avx1/native-policy.json").read_text("utf-8"))
+        if policy["default"] not in ("stock", "optimized"):
+            raise RuntimeError("Unknown native JSON selection policy")
+        manifest["native_json"].update(policy)
     else:
         run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
     wheel_paths = list(wheels.glob("*.whl"))
@@ -73,7 +77,7 @@ def build_python(project, package, manifest):
     run(sys.executable, "-m", "pip", "download", "--no-deps", "--only-binary=:all:", "pip", "--dest", bootstrap)
     manifest["python"] = json.loads((ROOT / ".avx1/toolchains.json").read_text("utf-8"))["python"]
     manifest["optimization_scope"] = (
-        "orjson: Rust O3 + fat LTO + trained PGO for Ivy Bridge; Python/TypeScript retain normal semantics"
+        "orjson experiment: Rust O3 + LTO for Ivy Bridge, no PGO; stock wheel is the measured faster default; Python/TypeScript retain normal semantics"
         if project == "webui" else "Pure Python application; native compiler flags do not optimize Python bytecode"
     )
 
