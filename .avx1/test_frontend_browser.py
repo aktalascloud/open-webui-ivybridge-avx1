@@ -1,5 +1,6 @@
 """Boot the packaged UI in Chromium against an isolated, offline backend."""
 import json
+import argparse
 import os
 from pathlib import Path
 import socket
@@ -9,11 +10,20 @@ import time
 import urllib.request
 from common import ROOT,WORK
 
+parser=argparse.ArgumentParser()
+parser.add_argument('--check-bundle-only',action='store_true')
+parser.add_argument('--frontend',type=Path,default=ROOT/'build')
+args=parser.parse_args()
 # The previous regression resolved Svelte's server context into the client bundle.
-for mapping in (ROOT/'build/_app/immutable').rglob('*.js.map'):
+maps=list((args.frontend/'_app/immutable').rglob('*.js.map'))
+if not maps:raise RuntimeError('Browser sourcemaps missing from the test input')
+for mapping in maps:
     data=json.loads(mapping.read_text('utf-8'))
     if any('/svelte/src/internal/server/context.js' in source.replace('\\','/') for source in data.get('sources',[])):
         raise RuntimeError('Svelte server context was included in the browser bundle')
+if args.check_bundle_only:
+    print('CLIENT_BUNDLE_USES_NO_SVELTE_SERVER_CONTEXT')
+    raise SystemExit(0)
 
 subprocess.run([sys.executable,'-m','pip','install','playwright>=1.58,<2'],check=True)
 subprocess.run([sys.executable,'-m','playwright','install','chromium'],check=True)
@@ -47,6 +57,10 @@ try:
         if errors:raise RuntimeError('Packaged frontend JavaScript failed: '+errors[0])
         browser.close()
     print('CHROMIUM_PACKAGED_LOGIN_RENDERED_NO_PAGE_ERRORS')
+except Exception:
+    log.flush()
+    print((WORK/'browser-smoke-server.log').read_text('utf-8',errors='replace')[-6000:])
+    raise
 finally:
     process.terminate()
     try:process.wait(timeout=20)

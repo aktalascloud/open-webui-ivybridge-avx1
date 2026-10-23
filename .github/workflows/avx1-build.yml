@@ -52,6 +52,7 @@ jobs:
           path: |
             .avx1-work/pip-audit.json
             .avx1-work/security-gate.json
+            .avx1-work/browser-smoke-server.log
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 3
