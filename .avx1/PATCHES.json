@@ -6,7 +6,7 @@
   },
   {
     "id": "WEB-002",
-    "description": "Build orjson for Ivy Bridge with Rust O3, fat LTO and synthetic JSON PGO; qualify on the target CPU.",
+    "description": "Build orjson for Ivy Bridge with Rust O3 and LTO/ThinLTO, without PGO; compare on the actual CPU.",
     "source": "local recipe"
   },
   {

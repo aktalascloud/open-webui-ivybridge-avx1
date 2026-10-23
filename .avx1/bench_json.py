@@ -9,7 +9,6 @@ import time
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--train", action="store_true")
     args = parser.parse_args()
     import orjson
     payloads = []
@@ -23,7 +22,7 @@ def main():
         assert orjson.loads(orjson.dumps(payload)) == payload
         assert json.loads(orjson.dumps(payload)) == payload
     encoded = [orjson.dumps(payload) for payload in payloads]
-    repeats, loops = (2, 60000) if args.train else (9, 12000)
+    repeats, loops = 9, 12000
     measurements = []
     for repeat in range(repeats):
         start = time.perf_counter_ns()

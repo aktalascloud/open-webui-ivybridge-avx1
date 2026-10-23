@@ -13,7 +13,7 @@ Extract the appropriate archive and run `Install.cmd`. `Install.cmd -CheckOnly` 
 | ID | Change | Source |
 |---|---|---|
 | WEB-001 | Build the frontend from its lockfile with npm ci; remove forced dependency resolution. | local |
-| WEB-002 | Build orjson for Ivy Bridge with Rust O3, fat LTO and synthetic JSON PGO; qualify on the target CPU. | local recipe |
+| WEB-002 | Build orjson for Ivy Bridge with Rust O3, LTO/ThinLTO without PGO; qualify on the target CPU. | local recipe |
 | WEB-003–005 | Source-level assistant voice/microphone compatibility; patched browser dependencies; official Windows build fix. | See `.avx1/PATCHES.json` |
 
 ## Measurements
@@ -24,7 +24,7 @@ Extract the appropriate archive and run `Install.cmd`. `Install.cmd -CheckOnly` 
 | JSON on Ivy Bridge | Pending stock/optimized comparison |
 | Android runtime performance | Not measured on a physical phone |
 
-Unmeasured changes have no claimed percentage. JSON timings cover serialization/parsing, not tokens/s. PGO, LTO and ISA flags apply only to the named native components; they do not turn Python or TypeScript into native code. AVX2/FMA and fast-math are not enabled.
+Unmeasured changes have no claimed percentage. JSON timings cover serialization/parsing, not tokens/s. LTO and ISA flags apply only to the named native components; they do not turn Python or TypeScript into native code. AVX2/FMA and fast-math are not enabled.
 
 ## Licensing and compatibility
 
