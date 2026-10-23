@@ -140,7 +140,7 @@ def build_conduit(package, manifest, channel):
     key.write_bytes(base64.b64decode(os.environ["CONDUIT_KEYSTORE_BASE64"], validate=True))
     properties.write_text(f"storeFile={key.as_posix()}\nstorePassword={password}\nkeyPassword={password}\nkeyAlias=conduit\n", encoding="utf-8")
     android = toolchains["android"]
-    environment = dict(os.environ, ORG_GRADLE_PROJECT_avx1Channel=channel,
+    environment = dict(os.environ,
                        ORG_GRADLE_PROJECT_avx1ApiLevel=str(android["api_level"]),
                        ORG_GRADLE_PROJECT_avx1MinorApiLevel=str(android["minor_api_level"]))
     manifest["android_sdk"] = android
@@ -167,15 +167,15 @@ def build_conduit(package, manifest, channel):
     manifest["optimization_scope"] = "Flutter release AOT, ARM64 only, icon tree shaking, R8 minification/resource shrinking, Dart obfuscation"
     manifest["security"] = {"flutter_tests": "passed", "apk_signature": "verified",
                             "dependency_review": "outdated report; not a complete vulnerability audit"}
-    manifest["application_id"] = "io.github.aktalascloud.conduit" + (".dev" if channel == "development" else "")
+    manifest["application_id"] = "io.github.aktalascloud.conduit"
     manifest["device_performance"] = "Not measured on a physical Android device"
 
 
 def main():
     project = json.loads((ROOT / ".avx1/project.json").read_text("utf-8"))
-    channel = os.environ.get("BUILD_CHANNEL", "development")
+    channel = os.environ.get("BUILD_CHANNEL", "latest")
     day = os.environ.get("BUILD_DAY") or dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
-    if channel not in {"stable", "development"} or not re.fullmatch(r"\d{8}", day):
+    if channel != "latest" or not re.fullmatch(r"\d{8}", day):
         raise ValueError("Invalid build channel/date")
     if WORK.exists() or OUT.exists():
         raise RuntimeError("Use a fresh checkout for each build")

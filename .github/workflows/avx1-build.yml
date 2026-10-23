@@ -15,14 +15,10 @@ jobs:
   build:
     runs-on: windows-2022
     timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        channel: [stable, development]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ matrix.channel == 'stable' && 'stable-avx1' || 'avx1' }}
+          ref: avx1
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
@@ -33,13 +29,13 @@ jobs:
 
       - name: Build, test, audit and package
         env:
-          BUILD_CHANNEL: ${{ matrix.channel }}
+          BUILD_CHANNEL: latest
           BUILD_DAY: ${{ inputs.day }}
 
         run: python .avx1/build.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: candidate-${{ matrix.channel }}
+          name: candidate-latest
           path: .avx1-out/*
           if-no-files-found: error
           retention-days: 7
@@ -48,7 +44,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: diagnostics-${{ matrix.channel }}
+          name: diagnostics-latest
           path: |
             .avx1-work/pip-audit.json
             .avx1-work/security-gate.json

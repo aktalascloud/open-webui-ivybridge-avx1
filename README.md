@@ -6,7 +6,9 @@ Experimental builds for personal compatibility and performance testing. Upstream
 
 [Upstream project](https://github.com/open-webui/open-webui) · [Packages](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases)
 
-Extract the appropriate archive and run `Install.cmd`. `Install.cmd -CheckOnly` verifies integrity without installing. Packages exclude personal configuration, credentials, history, caches and model weights. Models download from Hugging Face on demand.
+Download the single latest package, extract it and run `Install.cmd`. `Install.cmd -CheckOnly` verifies integrity without installing. Packages exclude personal configuration, credentials, history, caches and model weights. Models download from Hugging Face on demand.
+
+One build combines current official source and reviewed fork patches. There are no separate stable/dev downloads.
 
 ## Patches
 
@@ -24,7 +26,7 @@ Extract the appropriate archive and run `Install.cmd`. `Install.cmd -CheckOnly` 
 
 Measured on 2026-10-23, Xeon E5-2697 v2, orjson 3.11.9, 23 compatibility vectors: stock 11152 ns, LTO 11362 ns (throughput -1.85%), ThinLTO 11848 ns (-5.88%). These are synthetic JSON results, not LLM speed. Stock remains the default. Use `Install.cmd -ExperimentalNativeJson` to try O3 LTO. PGO is disabled. [Method and raw results](.avx1/measurements/json-no-pgo-20261023.json).
 
-The development release wheel (`e55bfb2846e5`) was measured on the actual Xeon: JSON throughput -2.63% versus stock; all 23 compatibility vectors matched. Stock remains the default. [Exact wheel result](.avx1/measurements/json-release-e55bfb2846e5.json).
+The measured wheel (`e55bfb2846e5`) was measured on the actual Xeon: JSON throughput -2.63% versus stock; all 23 compatibility vectors matched. Stock remains the default. [Exact wheel result](.avx1/measurements/json-release-e55bfb2846e5.json).
 
 ## Licensing and compatibility
 
