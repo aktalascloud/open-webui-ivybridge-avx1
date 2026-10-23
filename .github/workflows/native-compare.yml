@@ -1,0 +1,29 @@
+name: Native LTO comparison
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        lto: [fat, thin]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Compile O3 without PGO
+        run: python .avx1/native_json.py --lto ${{ matrix.lto }} --output .avx1-native/${{ matrix.lto }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-${{ matrix.lto }}
+          path: .avx1-native/${{ matrix.lto }}/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
