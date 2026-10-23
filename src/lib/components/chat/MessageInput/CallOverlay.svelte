@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { __assistantVoiceBudget } from '$lib/utils/assistantCompatibility.js';
 	import { config, models, settings, showCallOverlay, TTSWorker } from '$lib/stores';
 	import { onMount, tick, getContext, onDestroy, createEventDispatcher } from 'svelte';
 
@@ -611,19 +612,14 @@
 	const audioCache = new Map();
 	const emojiCache = new Map();
 
-	const fetchAudio = async (content) => {
+	const fetchAudio = async (content, speechOptions = {}) => {
 		const id = currentMessageId;
 
 		if (!audioCache.has(content) && !failedMessages[id]) {
 			try {
 				// Set the emoji for the content if needed
 				if ($settings?.showEmojiInCall ?? false) {
-					const emoji = await generateEmoji(localStorage.token, modelId, content, chatId).catch(
-						(error) => {
-							console.error(error);
-							return null;
-						}
-					);
+					const emoji = __assistantVoiceBudget.emoji(content);
 					if (emoji) {
 						emojiCache.set(content, emoji);
 					}
@@ -644,7 +640,7 @@
 						audioCache.set(content, new Audio(url));
 					}
 				} else if ($config.audio.tts.engine !== '') {
-					const res = await synthesizeOpenAISpeech(localStorage.token, getVoiceId(), content).catch(
+					const res = await synthesizeOpenAISpeech(localStorage.token, getVoiceId(), content, undefined, speechOptions).catch(
 						(error) => {
 							console.error(error);
 							if (!failedMessages[id]) {
@@ -739,6 +735,7 @@
 
 			void stopAllAudio(false);
 			currentMessageId = id;
+			__assistantVoiceBudget.start(id, $settings?.audio?.tts?.playbackRate ?? 1);
 			interrupted = false;
 			audioAbortController = new AbortController();
 
@@ -756,6 +753,7 @@
 		// there will be many sentences for the same "id"
 
 		if (currentMessageId === id) {
+			if ($config.audio.tts.engine === "openai" && $settings?.audio?.tts?.engine !== "browser-kokoro" && __assistantVoiceBudget.hold(id, content)) return;
 			console.log(`Received chat event for message ID ${id}: ${content}`);
 
 			try {
@@ -777,6 +775,11 @@
 	const chatFinishHandler = async (e) => {
 		const { id, content } = e.detail;
 		// "content" here is the entire message from the assistant
+		const speech = __assistantVoiceBudget.finish(id, chatId);
+		if (speech && currentMessageId === id && !interrupted) {
+			(messages[id] ??= []).push(speech.text);
+			fetchAudio(speech.text, speech.options);
+		}
 		finishedMessages[id] = true;
 
 		chatStreaming = false;

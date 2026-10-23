@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
 	import type { TerminalContext } from '$lib/types';
 	import { resolveLocalizedFunction } from '$lib/utils/localizedContent';
 	import { functions as localizedFunctions } from '$lib/stores';
@@ -1861,6 +1862,7 @@
 
 								await tick();
 								await insertTextAtCursor(`${text}`);
+								__assistantMicOrigin.mark(prompt);
 								await tick();
 								focus({ preventScroll: true });
 
@@ -2173,6 +2175,7 @@
 													id="chat-input"
 													editable={!showInputModal}
 													onChange={(content) => {
+														__assistantMicOrigin.change(content.md);
 														prompt = content.md;
 														inputContent = content;
 														command = getCommand();

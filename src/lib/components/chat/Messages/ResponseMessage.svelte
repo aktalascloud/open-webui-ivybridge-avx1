@@ -306,10 +306,8 @@
 			};
 
 			loadingSpeech = true;
-			const messageContentParts: string[] = getMessageContentParts(
-				content,
-				$config?.audio?.tts?.split_on ?? 'punctuation'
-			);
+			const messageContentParts: string[] = $config.audio.tts.engine === 'openai' && $settings?.audio?.tts?.engine !== 'browser-kokoro'
+				? [content] : getMessageContentParts(content, $config?.audio?.tts?.split_on ?? 'punctuation');
 
 			if (!messageContentParts.length) {
 				toast.info($i18n.t('No content to speak'));
@@ -355,7 +353,9 @@
 				for (const [, sentence] of messageContentParts.entries()) {
 					if (signal.aborted) return;
 
-					const res = await synthesizeOpenAISpeech(localStorage.token, voiceId, sentence).catch(
+					const res = await synthesizeOpenAISpeech(localStorage.token, voiceId, sentence, undefined,
+						$config.audio.tts.engine === 'openai' ? {speech_message_id: message.id, speech_chat_id: chatId,
+							speech_max_chars: Math.max(80, Math.min(900, Math.floor(900 * Number($settings?.audio?.tts?.playbackRate ?? 1))))} : {}).catch(
 						(error) => {
 							console.error(error);
 							toast.error(`${error}`);

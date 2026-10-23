@@ -8,5 +8,20 @@
     "id": "WEB-002",
     "description": "Build orjson for Ivy Bridge with Rust O3, fat LTO and synthetic JSON PGO; qualify on the target CPU.",
     "source": "local recipe"
+  },
+  {
+    "id": "WEB-003",
+    "description": "Source-level microphone provenance, bounded report speech, same-message speech identity and local call emoji; replaces chunk-name-dependent private overlays.",
+    "source": "Generic compatibility hooks authored for this fork; no private filter/settings included."
+  },
+  {
+    "id": "WEB-004",
+    "description": "Patched browser dependency lock, current SheetJS tarball, sharp override and PDF.js 6; compatible Vite 7/Svelte plugin 6 toolchain.",
+    "source": "Official package releases and npm advisories; runtime high/critical gate."
+  },
+  {
+    "id": "WEB-005",
+    "description": "Backport official Windows file URL normalization for encryption artifact verification without changing cryptographic code.",
+    "source": "Official open-webui/dev encryption artifact verifier and matching manifest."
   }
 ]
