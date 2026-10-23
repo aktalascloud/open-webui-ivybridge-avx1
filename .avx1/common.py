@@ -60,10 +60,19 @@ FORBIDDEN_PARTS = {".git", "__pycache__", ".venv", "node_modules", "logs", "cach
 FORBIDDEN_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".log", ".pdb", ".jks", ".p12", ".pem", ".key", ".gguf", ".safetensors"}
 
 
+class SecretPatternError(ValueError):
+    def __init__(self, label, number, matched):
+        self.metadata = {'file':label,'pattern_index':number,'length':len(matched),
+                         'match_sha256':hashlib.sha256(matched).hexdigest()}
+        super().__init__(f'Secret pattern in {label}; pattern={number}; length={len(matched)}; contents withheld')
+
+
 def scan_bytes(data, label):
     for content in (data, data.replace(b"\x00", b"")):
-        if any(re.search(pattern, content) for pattern in SECRET_PATTERNS):
-            raise ValueError(f"Secret pattern in {label}; contents withheld")
+        for number, pattern in enumerate(SECRET_PATTERNS):
+            match = re.search(pattern, content)
+            if match:
+                raise SecretPatternError(label,number,match.group(0))
 
 
 def verify_archive(path):

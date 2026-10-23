@@ -12,7 +12,7 @@ import time
 import tomllib
 import zipfile
 
-from common import ROOT, WORK, OUT, download, run, sha256, verify_archive, write_json, zip_folder
+from common import ROOT, WORK, OUT, SecretPatternError, download, run, sha256, verify_archive, write_json, zip_folder
 
 
 def license_files(destination):
@@ -200,4 +200,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SecretPatternError as error:
+        write_json(WORK/'security-gate.json',error.metadata)
+        raise
