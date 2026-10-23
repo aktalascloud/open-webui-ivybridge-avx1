@@ -24,6 +24,7 @@ Extended Russian UI and menu translation; interpolation parameters are checked i
 | WEB-006 | Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking. | `.avx1/PATCHES.json` |
 | WEB-007 | Preserve browser export conditions in Vite; verify the packaged login screen in Chromium. | `.avx1/PATCHES.json` |
 | WEB-008 | Complete missing Russian UI strings and plural forms; localize exact legacy stock suggestions without changing custom prompts or persisted settings. | `.avx1/PATCHES.json` |
+| WEB-009 | Pin Brotli 1.2.1 and BrotliCFFI 1.2.1.0 to remediate CVE-2026-111497; verify valid round trips and rejection of trailing bytes. | `.avx1/PATCHES.json` |
 
 ## Measurements
 

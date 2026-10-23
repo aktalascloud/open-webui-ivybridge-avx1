@@ -38,5 +38,10 @@
     "id": "WEB-008",
     "description": "Complete missing Russian UI strings and plural forms; localize exact legacy stock suggestions without changing custom prompts or persisted settings.",
     "source": "Reviewed Russian translation in this fork; source key/placeholder gate."
+  },
+  {
+    "id": "WEB-009",
+    "description": "Pin Brotli 1.2.1 and BrotliCFFI 1.2.1.0 to remediate CVE-2026-111497; verify valid round trips and rejection of trailing bytes.",
+    "url": "https://pypi.org/project/brotlicffi/1.2.1.0/"
   }
 ]

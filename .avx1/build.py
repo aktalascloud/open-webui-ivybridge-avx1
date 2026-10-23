@@ -82,6 +82,7 @@ def build_python(project, package, manifest):
     else:
         checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
         checked_script(ROOT / ".avx1/bench_json.py")
+        checked_script(ROOT / ".avx1/test_brotli.py")
         checked_script(ROOT / ".avx1/test_frontend_browser.py")
         manifest['security']['browser_smoke']='Chromium rendered the packaged login form without JavaScript page errors'
     bootstrap = package / "bootstrap"
@@ -102,9 +103,27 @@ def build_desktop(package, manifest):
     run("npm", "ci", "--no-audit", "--no-fund", env=environment)
     run("npm", "audit", "--omit=dev", "--audit-level=high", env=environment)
     run("npm", "run", "build", env=environment)
-    run("npx", "--no-install", "electron-builder", "--win", "--x64", "--dir", "--publish", "never",
-        "-c.win.signAndEditExecutable=false", env=environment)
+    original=json.loads((ROOT/'package.json').read_text('utf-8'))['version']
+    major,minor,patch=original.split('-')[0].split('.')
+    version=f"{major}.{minor}.{int(patch)+1}-avx1.{manifest['day']}.{os.environ.get('GITHUB_RUN_NUMBER','1')}"
+    manifest['desktop_version']=version
+    run("npx", "--no-install", "electron-builder", "--win", "nsis", "--x64", "--publish", "never",
+        "-c.win.signAndEditExecutable=false",'-c.extraMetadata.version='+version, env=environment)
     shutil.copytree(ROOT / "dist/win-unpacked", package / "desktop", ignore=shutil.ignore_patterns("*.pdb", "*.map"))
+    installers=list((ROOT/'dist').glob('*-setup.exe'))
+    if len(installers)!=1:raise RuntimeError('Exactly one NSIS installer is required')
+    installer_dir=package/'installer';installer_dir.mkdir()
+    shutil.copy2(installers[0],installer_dir/'Open-WebUI-AVX1-Setup.exe')
+    smoke=WORK/'nsis-smoke-install'
+    run(installers[0],'/S','/D='+str(smoke))
+    if not (smoke/'open-webui.exe').is_file():raise RuntimeError('NSIS installation failed')
+    for relative in ('resources/app.asar','resources/app.asar.unpacked/node_modules/node-pty/build/Release/pty.node'):
+        if sha256(smoke/relative)!=sha256(package/'desktop'/relative):raise RuntimeError('Installed NSIS content differs from the qualified app')
+    test_tools=WORK/'test-tools'
+    run('npm','install','--prefix',test_tools,'--ignore-scripts','--no-package-lock','--no-save','playwright@1.58.2')
+    ui_environment=dict(os.environ,TEST_PLAYWRIGHT=str(test_tools/'node_modules/playwright'),EXPECTED_DESKTOP_VERSION=version)
+    run('node',ROOT/'.avx1/test_desktop_ui.cjs',smoke/'open-webui.exe',WORK/'desktop-test-profile',env=ui_environment)
+    manifest['installer_test']='NSIS installed in an isolated directory; app/PTY digests matched; Russian onboarding rendered without page errors'
     manifest["security"] = {"npm_runtime_audit": "passed; high/critical gate"}
     manifest["optimization_scope"] = "node-pty rebuilt with MSVC O2/GL/LTCG/AVX; Electron/Chromium use upstream prebuilt engines"
     manifest["authenticode"] = "Unsigned community build"
@@ -199,7 +218,9 @@ def main():
                 "built_utc": dt.datetime.now(dt.timezone.utc).isoformat(), "llm_weights_included": False,
                 "llm_speedup_percent": None}
     license_files(package / "licenses")
-    for name in ("Install.cmd", "Install.ps1", "bench_json.py"):
+    helper_files=(['Install.cmd','Install.ps1'] if project['id'] in ('webui','terminal') else [])
+    if project['id']=='webui':helper_files.append('bench_json.py')
+    for name in helper_files:
         shutil.copy2(ROOT / ".avx1" / name, package / name)
     if project["id"] in {"webui", "terminal"}:
         build_python(project["id"], package, manifest)
