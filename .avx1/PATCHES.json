@@ -23,5 +23,10 @@
     "id": "WEB-005",
     "description": "Backport official Windows file URL normalization for encryption artifact verification without changing cryptographic code.",
     "source": "Official open-webui/dev encryption artifact verifier and matching manifest."
+  },
+  {
+    "id": "WEB-006",
+    "description": "Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking.",
+    "source": "PyPI advisories and exact package releases; .avx1/security_scope.py and tests."
   }
 ]
