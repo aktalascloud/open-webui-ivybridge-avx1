@@ -18,14 +18,13 @@
 | WEB-004 | Исправленные зависимости браузера: Vite, Svelte plugin, sharp, SheetJS и PDF.js. | `.avx1/PATCHES.json` |
 | WEB-005 | Официальное исправление Windows file URL при проверке encryption artifacts. | `.avx1/PATCHES.json` |
 | WEB-006 | Обновлены 12 зависимостей Python. Исключения Chroma ограничены точно проверенным неприменимым серверным кодом; внешний Chroma не объявляется исправленным. | `.avx1/PATCHES.json` |
-
 | WEB-007 | Сохранены browser-условия Vite; готовый интерфейс проверяется реальным Chromium перед публикацией. | `.avx1/PATCHES.json` |
 
 ## Замеры
 
 Замер 23.10.2026, Xeon E5-2697 v2, orjson 3.11.9, 23 проверки совместимости: обычный wheel 11152 нс, LTO 11362 нс (производительность −1,85%), ThinLTO 11848 нс (−5,88%). Это синтетический JSON-тест, не скорость LLM. По умолчанию выбран обычный wheel. `Install.cmd -ExperimentalNativeJson` включает экспериментальный O3 LTO. PGO отключён. [Методика и результаты](.avx1/measurements/json-no-pgo-20261023.json).
 
-Готовый wheel development-релиза (`9dbaa78246e5`) проверен повторно: производительность JSON -2.22% к обычному wheel, 23 проверки совместимости совпали. По умолчанию оставлен обычный wheel. [Результат для точного wheel](.avx1/measurements/json-release-9dbaa78246e5.json).
+Wheel development-релиза (`e55bfb2846e5`) измерен на установленном Xeon: производительность JSON -2.63% относительно обычного wheel; результаты всех 23 проверок совместимости совпали. По умолчанию выбран обычный wheel. [Результат для точного wheel](.avx1/measurements/json-release-e55bfb2846e5.json).
 
 ## Лицензии и совместимость
 
