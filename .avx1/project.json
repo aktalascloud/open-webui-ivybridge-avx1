@@ -4,7 +4,7 @@
   "upstream": "open-webui/open-webui",
   "development": "dev",
   "runner": "windows-2022",
-  "description": "Open WebUI experiments for Ivy Bridge AVX1: JSON PGO/LTO, agent compatibility and reproducible Windows packages.",
+  "description": "Open WebUI experiments for Ivy Bridge AVX1: JSON LTO/ThinLTO, agent compatibility and reproducible Windows packages.",
   "repository": "aktalascloud/open-webui-ivybridge-avx1",
   "channel": "latest",
   "upstream_commit": "72d86c6b13c1ccb567e2ffa574b3a53a853361b3",
