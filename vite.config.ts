@@ -9,7 +9,7 @@ const buildInfo = resolveBuildInfo();
 
 export default defineConfig({
 	resolve: {
-		conditions: ['onnxruntime-web-use-extern-wasm']
+		conditions: ['module', 'browser', 'development|production', 'onnxruntime-web-use-extern-wasm']
 	},
 	plugins: [
 		sveltekit(),
