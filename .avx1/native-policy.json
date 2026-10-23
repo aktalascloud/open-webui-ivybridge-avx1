@@ -1,0 +1,5 @@
+{
+  "default": "stock",
+  "selection_reason": "Actual Ivy Bridge synthetic JSON: stock was faster than O3 LTO and ThinLTO; experimental LTO is opt-in.",
+  "measurement": ".avx1/measurements/json-no-pgo-20261023.json"
+}

@@ -13,7 +13,7 @@ from common import ROOT, WORK, download, run, sha256, write_json
 
 
 def build(destination, lto=None):
-    lto = lto or os.environ.get("NATIVE_LTO", "thin")
+    lto = lto or os.environ.get("NATIVE_LTO", "fat")
     if lto not in ("fat", "thin"):
         raise ValueError("Expected fat or thin LTO")
     destination = Path(destination)
@@ -47,7 +47,7 @@ def build(destination, lto=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lto", choices=("fat", "thin"), default="thin")
+    parser.add_argument("--lto", choices=("fat", "thin"), default="fat")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     build(args.output, args.lto)
