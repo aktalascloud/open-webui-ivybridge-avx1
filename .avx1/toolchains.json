@@ -1,0 +1,9 @@
+{
+  "python": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.12.15%2B20261021-x86_64-pc-windows-msvc-install_only.tar.gz",
+    "sha256": "be7f14464d1d66f84429ad27e01f6d1482963afff64a2fb5256b2a51c7b5d398",
+    "source": "https://github.com/astral-sh/python-build-standalone",
+    "asset": "cpython-3.12.15+20261021-x86_64-pc-windows-msvc-install_only.tar.gz"
+  },
+  "flutter_sha": "abaf9c523780a608bd46686fd5e53740a07077f8"
+}

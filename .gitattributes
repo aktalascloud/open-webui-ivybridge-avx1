@@ -47,3 +47,6 @@
 # Misc
 *.env text eol=lf
 *.lock text eol=lf
+README.md merge=ours
+README.ru.md merge=ours
+.avx1/project.json merge=ours

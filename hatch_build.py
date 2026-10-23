@@ -15,7 +15,7 @@ class CustomBuildHook(BuildHookInterface):
         if npm is None:
             raise RuntimeError('NodeJS `npm` is required for building Open Webui but it was not found')
         stderr.write('### npm install\n')
-        subprocess.run([npm, 'install', '--force'], check=True)  # noqa: S603
+        subprocess.run([npm, 'ci', '--no-audit', '--no-fund'], check=True)  # noqa: S603
         stderr.write('\n### npm run build\n')
         node_options = os.environ.get('NODE_OPTIONS', '')
         if '--max-old-space-size' not in node_options:
