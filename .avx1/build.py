@@ -66,13 +66,16 @@ def build_python(project, package, manifest):
     for path in wheel_paths:
         verify_archive(path)
     audit_target = audit_python(wheel_paths, manifest)
+    def checked_script(script, *arguments):
+        # --target installs do not process .pth files through PYTHONPATH alone.
+        # pywin32 uses one to register its win32 paths and DLL directory.
+        launcher = "import runpy,site,sys;site.addsitedir(sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name='__main__')"
+        run(sys.executable, "-c", launcher, audit_target, script, *arguments)
     if project == "terminal":
-        test_environment = dict(os.environ, PYTHONPATH=str(audit_target))
-        run(sys.executable, ROOT / ".avx1/test_terminal.py", env=test_environment)
+        checked_script(ROOT / ".avx1/test_terminal.py")
     else:
-        test_environment = dict(os.environ, PYTHONPATH=str(audit_target))
-        run(sys.executable, ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui", env=test_environment)
-        run(sys.executable, ROOT / ".avx1/bench_json.py", env=test_environment)
+        checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
+        checked_script(ROOT / ".avx1/bench_json.py")
     bootstrap = package / "bootstrap"
     bootstrap.mkdir()
     run(sys.executable, "-m", "pip", "download", "--no-deps", "--only-binary=:all:", "pip", "--dest", bootstrap)
