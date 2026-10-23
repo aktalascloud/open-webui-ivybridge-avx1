@@ -23,6 +23,8 @@ Extract the appropriate archive and run `Install.cmd`. `Install.cmd -CheckOnly` 
 
 Measured on 2026-10-23, Xeon E5-2697 v2, orjson 3.11.9, 23 compatibility vectors: stock 11152 ns, LTO 11362 ns (throughput -1.85%), ThinLTO 11848 ns (-5.88%). These are synthetic JSON results, not LLM speed. Stock remains the default. Use `Install.cmd -ExperimentalNativeJson` to try O3 LTO. PGO is disabled. [Method and raw results](.avx1/measurements/json-no-pgo-20261023.json).
 
+The final development release wheel (`9dbaa78246e5`) was checked again: JSON throughput -2.22% versus stock, 23 equal compatibility vectors. Stock remains the default. [Exact wheel result](.avx1/measurements/json-release-9dbaa78246e5.json).
+
 ## Licensing and compatibility
 
 Original licenses, notices and license history are preserved. Each binary package includes its corresponding source. Private signing keys stay outside the repository. APKs use a separate application ID.
