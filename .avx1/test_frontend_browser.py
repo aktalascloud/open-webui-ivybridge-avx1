@@ -53,7 +53,11 @@ try:
         errors=[]
         page.on('pageerror',lambda error:errors.append(str(error)))
         page.goto(f'http://127.0.0.1:{port}',wait_until='domcontentloaded')
-        page.locator('input[type="email"],input[type="password"]').first.wait_for(state='visible',timeout=45000)
+        form=page.locator('input[type="email"],input[type="password"]').first
+        onboarding=page.get_by_role('button',name='Get started',exact=True)
+        form.or_(onboarding).first.wait_for(state='visible',timeout=45000)
+        if onboarding.is_visible():onboarding.click()
+        form.wait_for(state='visible',timeout=45000)
         if errors:raise RuntimeError('Packaged frontend JavaScript failed: '+errors[0])
         browser.close()
     print('CHROMIUM_PACKAGED_LOGIN_RENDERED_NO_PAGE_ERRORS')
