@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
 	import type { TerminalContext } from '$lib/types';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
@@ -3566,7 +3567,8 @@
 	const submitPrompt = async (
 		inputContent: string,
 		inputFiles: any[],
-		bridgeRequest: { userMessageId: string; modelId: string } | null = null
+		bridgeRequest: { userMessageId: string; modelId: string } | null = null,
+		microphoneMeta: {input_source: string} | undefined = undefined
 	) => {
 		const _files = structuredClone(inputFiles);
 
@@ -3592,6 +3594,7 @@
 			user: { id: $user?.id, name: $user?.name },
 			user_id: $user?.id,
 			content: inputContent,
+			meta: microphoneMeta,
 			files: _files.length > 0 ? _files : undefined,
 			timestamp: Math.floor(Date.now() / 1000), // Unix epoch
 			models: selectedModels
@@ -3768,6 +3771,7 @@
 			bridge: bridgeRequest = null
 		}: { _raw?: boolean; bridge?: { userMessageId: string; modelId: string } | null } = {}
 	): Promise<BridgeSubmission> => {
+		const microphoneMeta = __assistantMicOrigin.peek(userPrompt);
 		emitTyping(false);
 		if (bridgeRequest && (selectedModelIds.length !== 1 || !bridgeRequest.modelId))
 			return { status: 'rejected' };
@@ -3903,7 +3907,7 @@
 		messageInput?.setText('');
 
 		return (
-			(await submitPrompt(userPrompt, _files, bridgeRequest)) ?? {
+			(await submitPrompt(userPrompt, _files, bridgeRequest, microphoneMeta)) ?? {
 				status: 'rejected'
 			}
 		);
@@ -4340,7 +4344,7 @@
 								: [])
 						]
 					: [],
-				features: getFeatures(),
+				features: {...getFeatures(), dictation: !!(userMessage?.meta?.input_source === "microphone")},
 				variables: {
 					...getPromptVariables(
 						$user?.name,

@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "hooks": [
+    "microphone-provenance",
+    "voice-budget",
+    "speech-identity",
+    "local-call-emoji"
+  ],
+  "helper_sha256": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
+  "sources": {
+    "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
+    "src/lib/components/chat/MessageInput.svelte": "81a43a22878a026f988f8e6c78ffd7620d4b1e64074c3967bdfd2ba7d1b61c8f",
+    "src/lib/components/chat/Chat.svelte": "1d867d5ece27920582bb16e219c7c0a088dda9e8a3a92e5285a2b7aa173fc2db",
+    "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "c43a59c6702baece3e6d5166a8ad0b0dd55148f0bd6e4da1dba5622e1691d25d",
+    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "916eac358c3a5241fb85397f3d47c54639a1fce697f9e90a3373143459bf5012"
+  }
+}

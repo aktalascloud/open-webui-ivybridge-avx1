@@ -14,6 +14,7 @@ Extract the appropriate archive and run `Install.cmd`. `Install.cmd -CheckOnly` 
 |---|---|---|
 | WEB-001 | Build the frontend from its lockfile with npm ci; remove forced dependency resolution. | local |
 | WEB-002 | Build orjson for Ivy Bridge with Rust O3, fat LTO and synthetic JSON PGO; qualify on the target CPU. | local recipe |
+| WEB-003–005 | Source-level assistant voice/microphone compatibility; patched browser dependencies; official Windows build fix. | See `.avx1/PATCHES.json` |
 
 ## Measurements
 

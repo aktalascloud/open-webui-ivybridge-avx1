@@ -45,6 +45,7 @@ def build_python(project, package, manifest):
     environment = dict(os.environ, CYPRESS_INSTALL_BINARY="0", HUSKY="0", PIP_DISABLE_PIP_VERSION_CHECK="1")
     run(sys.executable, "-m", "pip", "install", "build", "hatchling", "wheel")
     if project == "webui":
+        run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
         # The reviewed hatch hook uses npm ci and the checked-in lockfile.
         run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
         run("npm", "audit", "--omit=dev", "--audit-level=high", env=environment)
@@ -95,8 +96,14 @@ def build_conduit(package, manifest, channel):
     run("git", "-C", flutter_root, "remote", "add", "origin", "https://github.com/flutter/flutter.git")
     run("git", "-C", flutter_root, "fetch", "--depth=1", "origin", toolchains["flutter_sha"])
     run("git", "-C", flutter_root, "checkout", "--detach", "FETCH_HEAD")
+    run("git", "-C", flutter_root, "fetch", "--depth=1", "origin",
+        f"refs/tags/{toolchains['flutter_version']}:refs/tags/{toolchains['flutter_version']}")
+    if run("git", "-C", flutter_root, "rev-parse", f"{toolchains['flutter_version']}^{{commit}}", capture=True).stdout.strip() != toolchains["flutter_sha"]:
+        raise RuntimeError("Flutter tag/hash mismatch")
+    run("git", "-C", flutter_root, "switch", "--create", "stable")
     flutter = flutter_root / "bin/flutter"
     dart = flutter_root / "bin/dart"
+    os.environ["PATH"] = str(flutter_root / 'bin') + os.pathsep + os.environ['PATH']
     run(flutter, "--version")
     run("git", "submodule", "update", "--init", "--recursive", "--depth", "1", "third_party/katex", "third_party/mermaid")
     run(flutter, "pub", "get", "--enforce-lockfile")
@@ -117,7 +124,11 @@ def build_conduit(package, manifest, channel):
     password = os.environ["CONDUIT_KEYSTORE_PASSWORD"]
     key.write_bytes(base64.b64decode(os.environ["CONDUIT_KEYSTORE_BASE64"], validate=True))
     properties.write_text(f"storeFile={key.as_posix()}\nstorePassword={password}\nkeyPassword={password}\nkeyAlias=conduit\n", encoding="utf-8")
-    environment = dict(os.environ, ORG_GRADLE_PROJECT_avx1Channel=channel)
+    android = toolchains["android"]
+    environment = dict(os.environ, ORG_GRADLE_PROJECT_avx1Channel=channel,
+                       ORG_GRADLE_PROJECT_avx1ApiLevel=str(android["api_level"]),
+                       ORG_GRADLE_PROJECT_avx1MinorApiLevel=str(android["minor_api_level"]))
+    manifest["android_sdk"] = android
     try:
         symbols = WORK / "private-symbols"
         run(flutter, "build", "apk", "--release", "--split-per-abi", "--target-platform", "android-arm64",
@@ -161,7 +172,7 @@ def main():
                 "repository": project["repository"], "channel": channel, "day": day,
                 "source_commit": run("git", "rev-parse", "HEAD", capture=True).stdout.strip(),
                 "upstream_commit": project["upstream_commit"], "stable_tag": project["stable_tag"],
-                "built_utc": dt.datetime.now(dt.timezone.utc).isoformat(), "models_included": False,
+                "built_utc": dt.datetime.now(dt.timezone.utc).isoformat(), "llm_weights_included": False,
                 "llm_speedup_percent": None}
     license_files(package / "licenses")
     for name in ("Install.cmd", "Install.ps1", "bench_json.py"):
