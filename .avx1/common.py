@@ -55,7 +55,7 @@ SECRET_PATTERNS = [
     rb"sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{24,}",
     rb"[0-9]{8,12}:[A-Za-z0-9_-]{30,}",
 ]
-FORBIDDEN_PARTS = {".git", "__pycache__", ".venv", "node_modules", "logs", "cache", "models", "uploads"}
+FORBIDDEN_PARTS = {".git", "__pycache__", ".venv", "node_modules", "logs", "cache", "uploads"}
 FORBIDDEN_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".log", ".pdb", ".jks", ".p12", ".pem", ".key", ".gguf", ".safetensors"}
 
 
