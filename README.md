@@ -30,7 +30,7 @@ Extended Russian UI and menu translation; interpolation parameters are checked i
 
 Measured on 2026-10-23, Xeon E5-2697 v2, orjson 3.11.9, 23 compatibility vectors: stock 11152 ns, LTO 11362 ns (throughput -1.85%), ThinLTO 11848 ns (-5.88%). These are synthetic JSON results, not LLM speed. Stock remains the default. Use `Install.cmd -ExperimentalNativeJson` to try O3 LTO. PGO is disabled. [Method and raw results](.avx1/measurements/json-no-pgo-20261023.json).
 
-The measured wheel (`e55bfb2846e5`) was measured on the actual Xeon: JSON throughput -2.63% versus stock; all 23 compatibility vectors matched. Stock remains the default. [Exact wheel result](.avx1/measurements/json-release-e55bfb2846e5.json).
+The unified release wheel (`b71d6430976b`) measured JSON throughput -6.46% versus stock on the actual Xeon; all 23 compatibility vectors matched. Stock remains the default. [Exact wheel result](.avx1/measurements/json-release-b71d6430976b.json).
 
 ## Licensing and compatibility
 
