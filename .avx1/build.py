@@ -35,8 +35,13 @@ def audit_python(wheels, manifest):
     audit=subprocess.run([sys.executable,'-m','pip_audit','--path',str(target),'--strict','--format','json','--output',str(report)],cwd=ROOT)
     if audit.returncode not in {0,1} or not report.exists():raise RuntimeError('Dependency audit unavailable; publication blocked')
     data = json.loads(report.read_text("utf-8"))
-    from security_scope import review
-    assessment=review(data,ROOT)
+    if manifest['project']=='webui':
+        from security_scope import review
+        assessment=review(data,ROOT)
+    else:
+        if any(item.get('vulns') for item in data['dependencies']):
+            raise RuntimeError('Dependency advisory blocks this package')
+        assessment={'status':'passed; no dependency advisories','exceptions':[]}
     write_json(WORK/'security-review.json',assessment)
     manifest["security"] = {"python_audit": "passed with explicit applicability review", "dependencies": len(data["dependencies"]),
                             'assessment':assessment}
@@ -50,6 +55,7 @@ def build_python(project, package, manifest):
     environment = dict(os.environ, CYPRESS_INSTALL_BINARY="0", HUSKY="0", PIP_DISABLE_PIP_VERSION_CHECK="1")
     run(sys.executable, "-m", "pip", "install", "build", "hatchling", "wheel")
     if project == "webui":
+        run("node", "--experimental-strip-types", "--test", ROOT / ".avx1/test_suggestions.mjs", env=environment)
         run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
         # The reviewed hatch hook uses npm ci and the checked-in lockfile.
         run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
@@ -182,7 +188,8 @@ def main():
     WORK.mkdir()
     OUT.mkdir()
     run(sys.executable, ROOT / '.avx1/test_public_gate.py')
-    run(sys.executable, ROOT / '.avx1/test_security_scope.py')
+    run(sys.executable, ROOT / '.avx1/test_locales.py')
+    if project['id']=='webui':run(sys.executable, ROOT / '.avx1/test_security_scope.py')
     package = WORK / "package"
     package.mkdir()
     manifest = {"schema": 1, "project": project["id"], "upstream": project["upstream"],

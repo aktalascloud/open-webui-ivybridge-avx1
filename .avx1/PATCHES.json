@@ -33,5 +33,10 @@
     "id": "WEB-007",
     "description": "Preserve Vite browser export conditions alongside ONNX WASM; prevent Svelte server context in client chunks. Gate packages with a real Chromium login render against an isolated backend.",
     "source": "Diagnosed from the shipped sourcemap and browser lifecycle_outside_component; official Vite resolve.conditions defaults."
+  },
+  {
+    "id": "WEB-008",
+    "description": "Complete missing Russian UI strings and plural forms; localize exact legacy stock suggestions without changing custom prompts or persisted settings.",
+    "source": "Reviewed Russian translation in this fork; source key/placeholder gate."
   }
 ]

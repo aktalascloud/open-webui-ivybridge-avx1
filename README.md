@@ -10,6 +10,8 @@ Download the single latest package, extract it and run `Install.cmd`. `Install.c
 
 One build combines current official source and reviewed fork patches. There are no separate stable/dev downloads.
 
+Extended Russian UI and menu translation; interpolation parameters are checked in every build.
+
 ## Patches
 
 | ID | Change | Source |
@@ -21,6 +23,7 @@ One build combines current official source and reviewed fork patches. There are 
 | WEB-005 | Backport official Windows file URL normalization for encryption artifact verification without changing cryptographic code. | `.avx1/PATCHES.json` |
 | WEB-006 | Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking. | `.avx1/PATCHES.json` |
 | WEB-007 | Preserve browser export conditions in Vite; verify the packaged login screen in Chromium. | `.avx1/PATCHES.json` |
+| WEB-008 | Complete missing Russian UI strings and plural forms; localize exact legacy stock suggestions without changing custom prompts or persisted settings. | `.avx1/PATCHES.json` |
 
 ## Measurements
 
