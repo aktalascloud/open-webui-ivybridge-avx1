@@ -166,6 +166,7 @@ def main():
         raise RuntimeError("Use a fresh checkout for each build")
     WORK.mkdir()
     OUT.mkdir()
+    run(sys.executable, ROOT / '.avx1/test_public_gate.py')
     package = WORK / "package"
     package.mkdir()
     manifest = {"schema": 1, "project": project["id"], "upstream": project["upstream"],
