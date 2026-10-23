@@ -50,9 +50,10 @@ def write_json(path, value):
 
 SECRET_PATTERNS = [
     rb"-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----",
-    rb"gh[pousr]_[A-Za-z0-9]{30,}",
-    rb"github_pat_[A-Za-z0-9_]{40,}",
-    rb"sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{24,}",
+    rb"(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}",
+    rb"(?<![A-Za-z0-9_-])github_pat_[A-Za-z0-9_]{40,}",
+    rb"(?<![A-Za-z0-9_-])sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{24,}",
+    rb"(?<![A-Za-z0-9_-])hf_[A-Za-z0-9]{30,}",
     rb"[0-9]{8,12}:[A-Za-z0-9_-]{30,}",
 ]
 FORBIDDEN_PARTS = {".git", "__pycache__", ".venv", "node_modules", "logs", "cache", "uploads"}
