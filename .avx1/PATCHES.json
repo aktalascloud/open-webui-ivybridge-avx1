@@ -1,0 +1,12 @@
+[
+  {
+    "id": "WEB-001",
+    "description": "Build the frontend from its lockfile with npm ci; remove forced dependency resolution.",
+    "source": "local"
+  },
+  {
+    "id": "WEB-002",
+    "description": "Build orjson for Ivy Bridge with Rust O3, fat LTO and synthetic JSON PGO; qualify on the target CPU.",
+    "source": "local recipe"
+  }
+]
