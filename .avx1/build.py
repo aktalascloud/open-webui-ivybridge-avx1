@@ -76,6 +76,8 @@ def build_python(project, package, manifest):
     else:
         checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
         checked_script(ROOT / ".avx1/bench_json.py")
+        checked_script(ROOT / ".avx1/test_frontend_browser.py")
+        manifest['security']['browser_smoke']='Chromium rendered the packaged login form without JavaScript page errors'
     bootstrap = package / "bootstrap"
     bootstrap.mkdir()
     run(sys.executable, "-m", "pip", "download", "--no-deps", "--only-binary=:all:", "pip", "--dest", bootstrap)

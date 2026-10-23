@@ -28,5 +28,10 @@
     "id": "WEB-006",
     "description": "Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking. MCP stays on security-maintained 1.30.0; verify the actual client API call signatures before packaging.",
     "source": "PyPI advisories and exact package releases; .avx1/security_scope.py and tests."
+  },
+  {
+    "id": "WEB-007",
+    "description": "Preserve Vite browser export conditions alongside ONNX WASM; prevent Svelte server context in client chunks. Gate packages with a real Chromium login render against an isolated backend.",
+    "source": "Diagnosed from the shipped sourcemap and browser lifecycle_outside_component; official Vite resolve.conditions defaults."
   }
 ]
