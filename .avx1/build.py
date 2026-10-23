@@ -69,7 +69,7 @@ def build_python(project, package, manifest):
     def checked_script(script, *arguments):
         # --target installs do not process .pth files through PYTHONPATH alone.
         # pywin32 uses one to register its win32 paths and DLL directory.
-        launcher = "import runpy,site,sys;site.addsitedir(sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name='__main__')"
+        launcher = "import runpy,site,sys;from pathlib import Path;site.addsitedir(sys.argv[1]);sys.argv=sys.argv[2:];sys.path.insert(0,str(Path(sys.argv[0]).resolve().parent));runpy.run_path(sys.argv[0],run_name='__main__')"
         run(sys.executable, "-c", launcher, audit_target, script, *arguments)
     if project == "terminal":
         checked_script(ROOT / ".avx1/test_terminal.py")
