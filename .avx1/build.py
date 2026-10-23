@@ -208,7 +208,9 @@ def main():
     OUT.mkdir()
     run(sys.executable, ROOT / '.avx1/test_public_gate.py')
     run(sys.executable, ROOT / '.avx1/test_locales.py')
-    if project['id']=='webui':run(sys.executable, ROOT / '.avx1/test_security_scope.py')
+    if project['id']=='webui':
+        run(sys.executable, ROOT / '.avx1/test_build_inputs.py')
+        run(sys.executable, ROOT / '.avx1/test_security_scope.py')
     package = WORK / "package"
     package.mkdir()
     manifest = {"schema": 1, "project": project["id"], "upstream": project["upstream"],
