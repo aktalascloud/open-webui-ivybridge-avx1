@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-24",
+  "workload": "synthetic-json-roundtrip-v1",
+  "package": "orjson",
+  "version": "3.11.9",
+  "source_commit": "a9cda489a9edfa4657b6a573d74dfb969944c85e",
+  "cpu": "Intel Xeon E5-2697 v2 (Ivy Bridge)",
+  "isa": {
+    "avx": true,
+    "avx2": false,
+    "fma": false
+  },
+  "stock_median_ns": 10506.595833333333,
+  "optimized_median_ns": 11978.520833333332,
+  "throughput_change_percent": -12.288036398484092,
+  "latency_change_percent": -14.00953290056286,
+  "scope": "JSON serialization/parsing only; no LLM inference performed",
+  "samples_medians_ns": {
+    "stock": [
+      10506.595833333333,
+      10501.7,
+      12198.941666666666
+    ],
+    "optimized": [
+      11998.066666666666,
+      11978.520833333332,
+      10682.529166666667
+    ]
+  },
+  "differential_compatibility_vectors": 23,
+  "native_build": {
+    "package": "orjson",
+    "version": "3.11.9",
+    "source_sha256": "4fef17e1f8722c11587a6ef18e35902450221da0028e65dbaaa543619e68e48f",
+    "flags": "-C target-cpu=ivybridge -C target-feature=-avx2,-fma -C opt-level=3 -C embed-bitcode=yes",
+    "pgo": false,
+    "lto": "fat",
+    "wheel_sha256": "3c849d00628bb63c943d4b65c33b355695a613246fccfccde417c070824c79a9",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "default": "stock",
+    "selection_reason": "Actual Ivy Bridge synthetic JSON: stock was faster than O3 LTO and ThinLTO; experimental LTO is opt-in.",
+    "measurement": ".avx1/measurements/json-no-pgo-20261023.json"
+  },
+  "wheel_sha256": "3c849d00628bb63c943d4b65c33b355695a613246fccfccde417c070824c79a9"
+}

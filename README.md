@@ -28,12 +28,14 @@ Extended Russian UI and menu translation; interpolation parameters are checked i
 
 ## Measurements
 
+2026-10-24 release `a9cda489a9ed`: stock 10507 ns, experimental O3 LTO 11979 ns; JSON throughput **-12.29%** versus stock. All 23 compatibility vectors matched. Stock remains the default. [Exact build measurement](.avx1/measurements/json-release-a9cda489a9ed.json).
+
 Measured on 2026-10-23, Xeon E5-2697 v2, orjson 3.11.9, 23 compatibility vectors: stock 11152 ns, LTO 11362 ns (throughput -1.85%), ThinLTO 11848 ns (-5.88%). These are synthetic JSON results, not LLM speed. Stock remains the default. Use `Install.cmd -ExperimentalNativeJson` to try O3 LTO. PGO is disabled. [Method and raw results](.avx1/measurements/json-no-pgo-20261023.json).
 
 The unified release wheel (`b71d6430976b`) measured JSON throughput -6.46% versus stock on the actual Xeon; all 23 compatibility vectors matched. Stock remains the default. [Exact wheel result](.avx1/measurements/json-release-b71d6430976b.json).
 
 ## Licensing and compatibility
 
-Original licenses, notices and license history are preserved. Each binary package includes its corresponding source. Private signing keys stay outside the repository. APKs use a separate application ID.
+Original licenses, notices and license history are preserved. Each binary package includes its corresponding source. Runtime credentials, settings, logs and data are excluded.
 
 Local deployment additionally checks the owner's private filter and Telegram bridge. Their source, settings and data are not published. Unreviewed PR/fork changes remain candidates; accepted upstream fixes arrive through merges of official branches.
