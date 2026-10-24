@@ -28,4 +28,5 @@ jobs:
           name: json-experiment-${{ matrix.profile }}
           path: .avx1-out/*
           retention-days: 2
+          include-hidden-files: true
           if-no-files-found: error
