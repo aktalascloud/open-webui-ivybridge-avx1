@@ -11,9 +11,16 @@ import urllib.request
 
 from common import ROOT, WORK, download, run, sha256, write_json
 
+EXPERIMENTS = {
+    'ivy-o3-fat-cgu1': {'lto':'fat','opt':3,'codegen':1},
+    'ivy-o3-thin-cgu1': {'lto':'thin','opt':3,'codegen':1},
+    'ivy-o3-thin-cgu8': {'lto':'thin','opt':3,'codegen':8},
+    'ivy-o2-thin-cgu1': {'lto':'thin','opt':2,'codegen':1},
+}
 
-def build(destination, lto=None):
-    lto = lto or os.environ.get("NATIVE_LTO", "fat")
+def build(destination, lto=None, experiment=None):
+    profile=EXPERIMENTS[experiment] if experiment else None
+    lto = profile['lto'] if profile else lto or os.environ.get("NATIVE_LTO", "fat")
     if lto not in ("fat", "thin"):
         raise ValueError("Expected fat or thin LTO")
     destination = Path(destination)
@@ -31,8 +38,14 @@ def build(destination, lto=None):
     checkout = next(path for path in source_root.iterdir() if path.is_dir())
     run(sys.executable, "-m", "pip", "install", "maturin>=1.9,<2", "wheel")
     base_flags = "-C target-cpu=ivybridge -C target-feature=-avx2,-fma -C opt-level=3 -C embed-bitcode=yes"
+    if profile:
+        base_flags = ("-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma "
+                      f"-C opt-level={profile['opt']} -C embed-bitcode=yes")
     environment = dict(os.environ, CARGO_BUILD_JOBS="4", CARGO_INCREMENTAL="0", RUSTFLAGS=base_flags,
                        CARGO_PROFILE_RELEASE_LTO=lto, CARGO_TARGET_DIR=str(WORK / ("cargo-" + lto)))
+    if profile:
+        environment.update(CARGO_PROFILE_RELEASE_CODEGEN_UNITS=str(profile['codegen']),
+                           CARGO_PROFILE_RELEASE_OPT_LEVEL=str(profile['opt']))
     environment.pop("LLVM_PROFILE_FILE", None)
     run(sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation", "--wheel-dir", destination,
         checkout, env=environment)
@@ -40,6 +53,7 @@ def build(destination, lto=None):
     result = {"package": "orjson", "version": version, "source_sha256": sha256(archive),
               "flags": base_flags, "pgo": False, "lto": lto, "wheel_sha256": sha256(wheel),
               "rustc": run("rustc", "--version", capture=True).stdout.strip()}
+    if profile:result.update(experiment=experiment,codegen_units=profile['codegen'],opt_level=profile['opt'])
     write_json(destination / "native-build.json", result)
     (destination / "wheel.sha256").write_text(sha256(wheel) + "  " + wheel.name + "\n", encoding="utf-8")
     return result
