@@ -13,6 +13,7 @@
 		tags,
 		folders as _folders,
 		showSidebar,
+		showControls,
 		showSearch,
 		mobile,
 		pinnedChats,
@@ -1024,6 +1025,7 @@
 <MobileSwipePanel
 	open={$showSidebar}
 	enabled={$mobile}
+	blocked={$showControls}
 	width={$sidebarWidth}
 	onOpenChange={(open) => showSidebar.set(open)}
 	let:visible
@@ -1764,7 +1766,7 @@
 								{#if $chats}
 									{#each $chats as chat, idx (`chat-${chat?.id ?? idx}`)}
 										{#if idx === 0 || (idx > 0 && chat.time_range !== $chats[idx - 1].time_range)}
-											<div
+											<h3
 												class="w-full pl-2.5 text-xs text-gray-500 dark:text-gray-500 font-normal {idx ===
 												0
 													? ''
@@ -1789,7 +1791,7 @@
 							{$i18n.t('November')}
 							{$i18n.t('December')}
 							-->
-											</div>
+											</h3>
 										{/if}
 
 										<ChatItem
