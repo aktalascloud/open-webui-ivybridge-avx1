@@ -43,5 +43,26 @@
     "id": "WEB-009",
     "description": "Pin Brotli 1.2.1 and BrotliCFFI 1.2.1.0 to remediate CVE-2026-111497; verify valid round trips and rejection of trailing bytes.",
     "url": "https://pypi.org/project/brotlicffi/1.2.1.0/"
+  },
+  {
+    "id": "WEB-010",
+    "description": "Preserve MCP arguments for anyOf/oneOf input schemas in native and legacy tool calling; ordinary function argument filtering remains intact.",
+    "source": "reviewed upstream PR; adapted and regression-tested",
+    "url": "https://github.com/open-webui/open-webui/pull/32903",
+    "upstream_head": "1e42eb28f2ed0c75d699454b2c1cf50405a8b151"
+  },
+  {
+    "id": "WEB-011",
+    "description": "Return readable MCP error text instead of a raw content-object dump.",
+    "source": "reviewed upstream PR; adapted and regression-tested",
+    "url": "https://github.com/open-webui/open-webui/pull/32942",
+    "upstream_head": "9cc638b5945bfec89f13d7c0726c30e7f2009392"
+  },
+  {
+    "id": "WEB-012",
+    "description": "Enforce sharing permissions in backend APIs; retain the legacy positional database parameter and administrator behavior.",
+    "source": "reviewed upstream PR; adapted and regression-tested",
+    "url": "https://github.com/open-webui/open-webui/pull/32991",
+    "upstream_head": "ace8830529a88ba02d5a91e2b83e400df5e409cd"
   }
 ]

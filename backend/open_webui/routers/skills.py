@@ -261,8 +261,7 @@ async def create_new_skill(
         user.id,
         user.role,
         form_data.access_grants,
-        'sharing.public_skills',
-    )
+        'sharing.public_skills', sharing_permission_key='sharing.skills')
 
     try:
         skill = await Skills.insert_new_skill(user.id, form_data, db=db)
@@ -383,8 +382,7 @@ async def update_skill_by_id(
         user.id,
         user.role,
         form_data.access_grants,
-        'sharing.public_skills',
-    )
+        'sharing.public_skills', sharing_permission_key='sharing.skills')
 
     try:
         updated = {
@@ -461,8 +459,7 @@ async def update_skill_access_by_id(
         user.id,
         user.role,
         form_data.access_grants,
-        'sharing.public_skills',
-    )
+        'sharing.public_skills', sharing_permission_key='sharing.skills')
 
     await AccessGrants.set_access_grants('skill', id, form_data.access_grants, db=db)
 

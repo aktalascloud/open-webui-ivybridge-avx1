@@ -226,6 +226,7 @@ async def filter_allowed_access_grants(
     public_permission_key: str,
     anyone_permission_key: str | None = None,
     db: AsyncSession | None = None,
+    sharing_permission_key: str | None = None,
 ) -> list:
     """
     Checks if the user has the required permissions to grant access to a resource.
@@ -250,6 +251,9 @@ async def filter_allowed_access_grants(
 
     if user_role == 'admin':
         return access_grants
+
+    if sharing_permission_key and not await has_permission(user_id, sharing_permission_key, default_permissions, db=db):
+        return []
 
     # Check if user can share publicly
     if (

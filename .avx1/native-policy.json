@@ -1,5 +1,5 @@
 {
   "default": "stock",
-  "selection_reason": "Actual Ivy Bridge synthetic JSON: stock was faster than O3 LTO and ThinLTO; experimental LTO is opt-in.",
-  "measurement": ".avx1/measurements/json-no-pgo-20261023.json"
+  "selection_reason": "Four explicit Ivy Bridge O2/O3 Fat/ThinLTO/codegen profiles passed23 compatibility vectors. Best mixed JSON CPU throughput was +0.40%, with a -5.42% tool-schema dumps regression; stock remains the default.",
+  "measurement": ".avx1/measurements/ivy-flags-20261024.json"
 }

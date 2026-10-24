@@ -79,6 +79,8 @@ def build_python(project, package, manifest):
         run(sys.executable, "-c", launcher, audit_target, script, *arguments)
     if project == "terminal":
         checked_script(ROOT / ".avx1/test_terminal.py")
+        measurement=WORK/'grep-preview-measurement.json'
+        if measurement.exists():manifest['context_guard']=json.loads(measurement.read_text('utf-8'))
     else:
         checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
         checked_script(ROOT / ".avx1/bench_json.py")
@@ -130,6 +132,10 @@ def build_desktop(package, manifest):
 
 
 def build_conduit(package, manifest, channel):
+    # Build tools and downloaded dependency code never receive the signing secrets.
+    signing_material = os.environ.pop("CONDUIT_KEYSTORE_BASE64")
+    password = os.environ.pop("CONDUIT_KEYSTORE_PASSWORD")
+    os.environ['PUB_CACHE'] = str(WORK/'pub-cache')
     toolchains = json.loads((ROOT / ".avx1/toolchains.json").read_text("utf-8"))
     flutter_root = WORK / "flutter"
     run("git", "init", flutter_root)
@@ -147,6 +153,8 @@ def build_conduit(package, manifest, channel):
     run(flutter, "--version")
     run("git", "submodule", "update", "--init", "--recursive", "--depth", "1", "third_party/katex", "third_party/mermaid")
     run(flutter, "pub", "get", "--enforce-lockfile")
+    from native_arm64 import prepare as prepare_native, inventory as native_inventory
+    native_receipt = prepare_native()
     # Workspace members must finish their code generation before the app.
     for parent in (ROOT / "packages", ROOT / "apps"):
         if parent.exists():
@@ -161,8 +169,7 @@ def build_conduit(package, manifest, channel):
     (WORK / "dependency-review.json").write_text(outdated, encoding="utf-8")
     key = WORK / "conduit-signing.p12"
     properties = ROOT / "android/key.properties"
-    password = os.environ["CONDUIT_KEYSTORE_PASSWORD"]
-    key.write_bytes(base64.b64decode(os.environ["CONDUIT_KEYSTORE_BASE64"], validate=True))
+    key.write_bytes(base64.b64decode(signing_material, validate=True))
     properties.write_text(f"storeFile={key.as_posix()}\nstorePassword={password}\nkeyPassword={password}\nkeyAlias=conduit\n", encoding="utf-8")
     android = toolchains["android"]
     environment = dict(os.environ,
@@ -180,6 +187,7 @@ def build_conduit(package, manifest, channel):
     apk = ROOT / "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
     if not apk.is_file():
         raise RuntimeError("ARM64 APK missing")
+    manifest['native_arm64'] = native_inventory(apk,native_receipt)
     sdk = Path(os.environ.get("ANDROID_SDK_ROOT") or os.environ["ANDROID_HOME"])
     apksigner = sorted((sdk / "build-tools").glob("*/apksigner"))[-1]
     signing = run(apksigner, "verify", "--verbose", "--print-certs", apk, capture=True).stdout
@@ -189,11 +197,18 @@ def build_conduit(package, manifest, channel):
         if abis != {"arm64-v8a"}:
             raise RuntimeError(f"Unexpected APK architectures: {abis}")
     shutil.copy2(apk, package / f"conduit-{channel}-arm64-v8a.apk")
-    manifest["optimization_scope"] = "Flutter release AOT, ARM64 only, icon tree shaking, R8 minification/resource shrinking, Dart obfuscation"
+    manifest["optimization_scope"] = "Flutter release AOT, ARM64, R8/tree shaking; SQLite/dartjni/ONNX Runtime+JNI rebuilt with O3 ARMv8-A ThinLTO; remaining vendor libraries explicitly inventoried"
     manifest["security"] = {"flutter_tests": "passed", "apk_signature": "verified",
                             "dependency_review": "outdated report; not a complete vulnerability audit"}
     manifest["application_id"] = "io.github.aktalascloud.conduit"
     manifest["device_performance"] = "Not measured on a physical Android device"
+
+
+def reusable_native_cache(project):
+    if project!='conduit' or WORK.is_symlink() or not WORK.is_dir():return False
+    if {p.name for p in WORK.iterdir()}!={'native'}:return False
+    folder=WORK/'native'
+    return folder.is_dir() and not folder.is_symlink() and {p.name for p in folder.iterdir()}.issubset({'onnxruntime','eigen','ort-build'})
 
 
 def main():
@@ -202,15 +217,15 @@ def main():
     day = os.environ.get("BUILD_DAY") or dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
     if channel != "latest" or not re.fullmatch(r"\d{8}", day):
         raise ValueError("Invalid build channel/date")
-    if WORK.exists() or OUT.exists():
+    if OUT.exists() or (WORK.exists() and not reusable_native_cache(project['id'])):
         raise RuntimeError("Use a fresh checkout for each build")
-    WORK.mkdir()
+    WORK.mkdir(exist_ok=True)
     OUT.mkdir()
     run(sys.executable, ROOT / '.avx1/test_public_gate.py')
     run(sys.executable, ROOT / '.avx1/test_locales.py')
     if project['id']=='webui':
-        run(sys.executable, ROOT / '.avx1/test_build_inputs.py')
         run(sys.executable, ROOT / '.avx1/test_security_scope.py')
+        run(sys.executable, ROOT / '.avx1/test_agent_prs.py')
     package = WORK / "package"
     package.mkdir()
     manifest = {"schema": 1, "project": project["id"], "upstream": project["upstream"],

@@ -1,0 +1,25 @@
+{
+  "cpu": {
+    "model": "Ivy Bridge",
+    "rust_flags": "-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma",
+    "pgo": false,
+    "fast_math": false
+  },
+  "cuda_source_build": {
+    "toolkit": "12.9",
+    "TORCH_CUDA_ARCH_LIST": "6.1",
+    "CMAKE_CUDA_ARCHITECTURES": "61",
+    "nvcc_flags": [
+      "-O3",
+      "--generate-code=arch=compute_61,code=sm_61"
+    ],
+    "validated": "Installed nvcc12.9 --list-gpu-code contains sm_61; no GPU model or CUDA context was started",
+    "source": "https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/"
+  },
+  "installed_owui_dependency": {
+    "torch": "2.14.0+cpu",
+    "cuda_runtime": null,
+    "cuda_flags_applied": false,
+    "reason": "The installed PyTorch dependency is a vendor CPU wheel; setting compiler variables does not rebuild it. Source CUDA flags are a separate build profile, not a GPU speed claim."
+  }
+}

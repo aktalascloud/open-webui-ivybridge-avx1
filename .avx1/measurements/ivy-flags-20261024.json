@@ -1,0 +1,631 @@
+{
+  "date": "2026-10-24",
+  "cpu": "Intel Xeon E5-2697 v2 / Ivy Bridge",
+  "ci_run": 40070909137,
+  "compatibility_vectors": 23,
+  "pgo": false,
+  "scope": "QueryThreadCycleTime CPU cycles; four synthetic JSON fixtures x dumps/loads, five calibrated samples; no LLM inference. Initial 100ms process_time measurements were discarded for timer quantization.",
+  "scores": {
+    "ivy-o3-thin-cgu8": {
+      "geomean_cpu_throughput_change_percent": -3.682620120266411,
+      "by_case_percent": {
+        "stream_event_dumps": -8.208029370484748,
+        "stream_event_loads": 7.668641662520881,
+        "tool_schema_dumps": -9.739976446732312,
+        "tool_schema_loads": 4.8275092702563915,
+        "report_rows_dumps": -6.460952935062991,
+        "report_rows_loads": -7.821953951884675,
+        "unicode_text_dumps": -3.8006030056545237,
+        "unicode_text_loads": -4.50517135345061
+      }
+    },
+    "ivy-o3-thin-cgu1": {
+      "geomean_cpu_throughput_change_percent": -0.5300918852959469,
+      "by_case_percent": {
+        "stream_event_dumps": -0.9307392297690842,
+        "stream_event_loads": 17.650615683515802,
+        "tool_schema_dumps": -6.981205276621349,
+        "tool_schema_loads": 3.24005477562761,
+        "report_rows_dumps": -1.089323546877985,
+        "report_rows_loads": -1.1162458682582255,
+        "unicode_text_dumps": -8.004044377833575,
+        "unicode_text_loads": -4.842106387124623
+      }
+    },
+    "ivy-o2-thin-cgu1": {
+      "geomean_cpu_throughput_change_percent": -4.941740044688769,
+      "by_case_percent": {
+        "stream_event_dumps": -5.250541689254662,
+        "stream_event_loads": 15.423381400396918,
+        "tool_schema_dumps": -11.500584395754132,
+        "tool_schema_loads": 4.902886708679555,
+        "report_rows_dumps": -12.910033919695929,
+        "report_rows_loads": -8.632156998597829,
+        "unicode_text_dumps": -9.73146868126953,
+        "unicode_text_loads": -8.583910216018554
+      }
+    },
+    "stock": {
+      "geomean_cpu_throughput_change_percent": 0.0,
+      "by_case_percent": {
+        "stream_event_dumps": 0.0,
+        "stream_event_loads": 0.0,
+        "tool_schema_dumps": 0.0,
+        "tool_schema_loads": 0.0,
+        "report_rows_dumps": 0.0,
+        "report_rows_loads": 0.0,
+        "unicode_text_dumps": 0.0,
+        "unicode_text_loads": 0.0
+      }
+    },
+    "ivy-o3-fat-cgu1": {
+      "geomean_cpu_throughput_change_percent": 0.4022550875211417,
+      "by_case_percent": {
+        "stream_event_dumps": -2.7009294875058876,
+        "stream_event_loads": 18.535217204768717,
+        "tool_schema_dumps": -5.42202757395237,
+        "tool_schema_loads": 3.5025707322991595,
+        "report_rows_dumps": 0.6551445204635353,
+        "report_rows_loads": -3.6488249268287865,
+        "unicode_text_dumps": -5.061556899320796,
+        "unicode_text_loads": -0.6619995060666461
+      }
+    }
+  },
+  "samples": {
+    "ivy-o3-thin-cgu8": {
+      "orjson": "3.11.9",
+      "scope": "Synthetic JSON dumps/loads CPU time; no model inference; five calibrated samples per case; QueryThreadCycleTime, high-resolution CPU cycles",
+      "fixtures_sha256": {
+        "stream_event": "219bae0097708d9a6deaccb92125eafdc7cae2c9f28c12828c8f4f303275ad41",
+        "tool_schema": "e8c9f8eb123cd0777b1d645edc6fd3eae87919d06381ffd90e908af83cd701c2",
+        "report_rows": "82b19e9eb34f381542cf82232afec74cb5b530a08e00b90f068743f507d06b5e",
+        "unicode_text": "8e510c4c19152b18905663dd915098ef45d7d715d849757b626256403041b47c"
+      },
+      "results": {
+        "stream_event_dumps": {
+          "median_cpu_cycles": 1436.289921875,
+          "samples_cpu_cycles": [
+            1433.165419921875,
+            1620.8548901367187,
+            1436.289921875,
+            1587.4526049804688,
+            1435.571171875
+          ],
+          "iterations": 409600
+        },
+        "stream_event_loads": {
+          "median_cpu_cycles": 3426.2046142578124,
+          "samples_cpu_cycles": [
+            3592.0222900390627,
+            3420.90884765625,
+            3310.78119140625,
+            3906.42783203125,
+            3426.2046142578124
+          ],
+          "iterations": 204800
+        },
+        "tool_schema_dumps": {
+          "median_cpu_cycles": 59853.889765625,
+          "samples_cpu_cycles": [
+            66262.975390625,
+            59629.405703125,
+            59853.889765625,
+            58420.9825,
+            61874.854296875
+          ],
+          "iterations": 12800
+        },
+        "tool_schema_loads": {
+          "median_cpu_cycles": 186040.90375,
+          "samples_cpu_cycles": [
+            185839.6,
+            186000.495,
+            195899.0815625,
+            194077.7646875,
+            186040.90375
+          ],
+          "iterations": 3200
+        },
+        "report_rows_dumps": {
+          "median_cpu_cycles": 679183.635,
+          "samples_cpu_cycles": [
+            631606.51625,
+            679183.635,
+            720815.97375,
+            689571.21875,
+            627271.365
+          ],
+          "iterations": 800
+        },
+        "report_rows_loads": {
+          "median_cpu_cycles": 2714477.435,
+          "samples_cpu_cycles": [
+            2722808.535,
+            2650318.22,
+            2714477.435,
+            2919334.015,
+            2530604.56
+          ],
+          "iterations": 200
+        },
+        "unicode_text_dumps": {
+          "median_cpu_cycles": 326229.9425,
+          "samples_cpu_cycles": [
+            326229.9425,
+            326067.2375,
+            340221.47375,
+            334519.280625,
+            325830.03
+          ],
+          "iterations": 1600
+        },
+        "unicode_text_loads": {
+          "median_cpu_cycles": 1133872.41,
+          "samples_cpu_cycles": [
+            1133872.41,
+            1146581.245,
+            1101717.6425,
+            1047300.18,
+            1153983.03375
+          ],
+          "iterations": 800
+        }
+      }
+    },
+    "ivy-o3-thin-cgu1": {
+      "orjson": "3.11.9",
+      "scope": "Synthetic JSON dumps/loads CPU time; no model inference; five calibrated samples per case; QueryThreadCycleTime, high-resolution CPU cycles",
+      "fixtures_sha256": {
+        "stream_event": "219bae0097708d9a6deaccb92125eafdc7cae2c9f28c12828c8f4f303275ad41",
+        "tool_schema": "e8c9f8eb123cd0777b1d645edc6fd3eae87919d06381ffd90e908af83cd701c2",
+        "report_rows": "82b19e9eb34f381542cf82232afec74cb5b530a08e00b90f068743f507d06b5e",
+        "unicode_text": "8e510c4c19152b18905663dd915098ef45d7d715d849757b626256403041b47c"
+      },
+      "results": {
+        "stream_event_dumps": {
+          "median_cpu_cycles": 1330.7849609375,
+          "samples_cpu_cycles": [
+            1294.651640625,
+            1319.2013793945312,
+            1337.1431811523437,
+            1330.7849609375,
+            1340.6160498046875
+          ],
+          "iterations": 409600
+        },
+        "stream_event_loads": {
+          "median_cpu_cycles": 3135.5109765625,
+          "samples_cpu_cycles": [
+            3567.4067041015624,
+            3135.5109765625,
+            3142.457890625,
+            3119.0868359375,
+            3132.10146484375
+          ],
+          "iterations": 204800
+        },
+        "tool_schema_dumps": {
+          "median_cpu_cycles": 58078.730390625,
+          "samples_cpu_cycles": [
+            63953.912890625,
+            56536.60375,
+            59839.088515625,
+            56881.5,
+            58078.730390625
+          ],
+          "iterations": 12800
+        },
+        "tool_schema_loads": {
+          "median_cpu_cycles": 188901.5325,
+          "samples_cpu_cycles": [
+            209412.075625,
+            185982.71875,
+            188901.5325,
+            201381.916875,
+            185683.34125
+          ],
+          "iterations": 3200
+        },
+        "report_rows_dumps": {
+          "median_cpu_cycles": 642298.61,
+          "samples_cpu_cycles": [
+            635048.745,
+            639189.695,
+            642298.61,
+            643778.27,
+            689382.03625
+          ],
+          "iterations": 800
+        },
+        "report_rows_loads": {
+          "median_cpu_cycles": 2530397.72,
+          "samples_cpu_cycles": [
+            2522131.72,
+            2613645.725,
+            2664165.125,
+            2530397.72,
+            2527869.18
+          ],
+          "iterations": 200
+        },
+        "unicode_text_dumps": {
+          "median_cpu_cycles": 341135.906875,
+          "samples_cpu_cycles": [
+            323584.105,
+            354631.748125,
+            341135.906875,
+            337320.7225,
+            392955.096875
+          ],
+          "iterations": 1600
+        },
+        "unicode_text_loads": {
+          "median_cpu_cycles": 1137887.225,
+          "samples_cpu_cycles": [
+            1109830.49,
+            1122589.6875,
+            1142338.35625,
+            1137887.225,
+            1167427.25375
+          ],
+          "iterations": 800
+        }
+      }
+    },
+    "ivy-o2-thin-cgu1": {
+      "orjson": "3.11.9",
+      "scope": "Synthetic JSON dumps/loads CPU time; no model inference; five calibrated samples per case; QueryThreadCycleTime, high-resolution CPU cycles",
+      "fixtures_sha256": {
+        "stream_event": "219bae0097708d9a6deaccb92125eafdc7cae2c9f28c12828c8f4f303275ad41",
+        "tool_schema": "e8c9f8eb123cd0777b1d645edc6fd3eae87919d06381ffd90e908af83cd701c2",
+        "report_rows": "82b19e9eb34f381542cf82232afec74cb5b530a08e00b90f068743f507d06b5e",
+        "unicode_text": "8e510c4c19152b18905663dd915098ef45d7d715d849757b626256403041b47c"
+      },
+      "results": {
+        "stream_event_dumps": {
+          "median_cpu_cycles": 1391.457900390625,
+          "samples_cpu_cycles": [
+            1632.1090356445313,
+            1391.457900390625,
+            1362.735400390625,
+            1364.991884765625,
+            1477.6769018554687
+          ],
+          "iterations": 409600
+        },
+        "stream_event_loads": {
+          "median_cpu_cycles": 3196.0144677734374,
+          "samples_cpu_cycles": [
+            3238.7840576171875,
+            3182.13435546875,
+            3196.0144677734374,
+            3223.7082666015626,
+            3132.3975
+          ],
+          "iterations": 204800
+        },
+        "tool_schema_dumps": {
+          "median_cpu_cycles": 61044.6234375,
+          "samples_cpu_cycles": [
+            61004.57921875,
+            61044.6234375,
+            67350.829140625,
+            60833.275,
+            65588.406640625
+          ],
+          "iterations": 12800
+        },
+        "tool_schema_loads": {
+          "median_cpu_cycles": 185907.225,
+          "samples_cpu_cycles": [
+            190473.2778125,
+            184683.9425,
+            201365.02125,
+            185568.1325,
+            185907.225
+          ],
+          "iterations": 3200
+        },
+        "report_rows_dumps": {
+          "median_cpu_cycles": 729477.72125,
+          "samples_cpu_cycles": [
+            675368.155,
+            734512.26875,
+            729477.72125,
+            670144.07,
+            785137.0225
+          ],
+          "iterations": 800
+        },
+        "report_rows_loads": {
+          "median_cpu_cycles": 2738548.025,
+          "samples_cpu_cycles": [
+            2738548.025,
+            2971991.625,
+            2559862.46,
+            2708763.26,
+            2812704.275
+          ],
+          "iterations": 200
+        },
+        "unicode_text_dumps": {
+          "median_cpu_cycles": 347664.05625,
+          "samples_cpu_cycles": [
+            329206.35125,
+            347664.05625,
+            322738.7225,
+            386486.74125,
+            385333.138125
+          ],
+          "iterations": 1600
+        },
+        "unicode_text_loads": {
+          "median_cpu_cycles": 1184462.7325,
+          "samples_cpu_cycles": [
+            1069100.99,
+            1250025.6925,
+            1184462.7325,
+            1067327.8,
+            1239473.33375
+          ],
+          "iterations": 800
+        }
+      }
+    },
+    "stock": {
+      "orjson": "3.11.9",
+      "scope": "Synthetic JSON dumps/loads CPU time; no model inference; five calibrated samples per case; QueryThreadCycleTime, high-resolution CPU cycles",
+      "fixtures_sha256": {
+        "stream_event": "219bae0097708d9a6deaccb92125eafdc7cae2c9f28c12828c8f4f303275ad41",
+        "tool_schema": "e8c9f8eb123cd0777b1d645edc6fd3eae87919d06381ffd90e908af83cd701c2",
+        "report_rows": "82b19e9eb34f381542cf82232afec74cb5b530a08e00b90f068743f507d06b5e",
+        "unicode_text": "8e510c4c19152b18905663dd915098ef45d7d715d849757b626256403041b47c"
+      },
+      "results": {
+        "stream_event_dumps": {
+          "median_cpu_cycles": 1318.3988232421875,
+          "samples_cpu_cycles": [
+            1266.73181640625,
+            1489.931416015625,
+            1533.2920043945312,
+            1318.3988232421875,
+            1310.265654296875
+          ],
+          "iterations": 409600
+        },
+        "stream_event_loads": {
+          "median_cpu_cycles": 3688.94796875,
+          "samples_cpu_cycles": [
+            3445.8196875,
+            3423.9333203125,
+            3904.2088623046875,
+            3735.0948388671877,
+            3688.94796875
+          ],
+          "iterations": 204800
+        },
+        "tool_schema_dumps": {
+          "median_cpu_cycles": 54024.135,
+          "samples_cpu_cycles": [
+            54410.968828125,
+            53944.8296875,
+            54024.135,
+            53842.639375,
+            61661.5603125
+          ],
+          "iterations": 12800
+        },
+        "tool_schema_loads": {
+          "median_cpu_cycles": 195022.045625,
+          "samples_cpu_cycles": [
+            195022.045625,
+            186307.52625,
+            202894.09625,
+            187256.7225,
+            200916.1746875
+          ],
+          "iterations": 3200
+        },
+        "report_rows_dumps": {
+          "median_cpu_cycles": 635301.9,
+          "samples_cpu_cycles": [
+            628223.41,
+            693071.28875,
+            635301.9,
+            633105.575,
+            670373.23375
+          ],
+          "iterations": 800
+        },
+        "report_rows_loads": {
+          "median_cpu_cycles": 2502152.26,
+          "samples_cpu_cycles": [
+            2502152.26,
+            2581048.49,
+            2499284.9,
+            2523876.44,
+            2493190.86
+          ],
+          "iterations": 400
+        },
+        "unicode_text_dumps": {
+          "median_cpu_cycles": 313831.2375,
+          "samples_cpu_cycles": [
+            313831.2375,
+            321946.0675,
+            314743.3075,
+            310031.42375,
+            313323.3721875
+          ],
+          "iterations": 3200
+        },
+        "unicode_text_loads": {
+          "median_cpu_cycles": 1082789.515,
+          "samples_cpu_cycles": [
+            1170296.51375,
+            1082789.515,
+            1065003.725,
+            1111920.1225,
+            1069596.6
+          ],
+          "iterations": 800
+        }
+      }
+    },
+    "ivy-o3-fat-cgu1": {
+      "orjson": "3.11.9",
+      "scope": "Synthetic JSON dumps/loads CPU time; no model inference; five calibrated samples per case; QueryThreadCycleTime, high-resolution CPU cycles",
+      "fixtures_sha256": {
+        "stream_event": "219bae0097708d9a6deaccb92125eafdc7cae2c9f28c12828c8f4f303275ad41",
+        "tool_schema": "e8c9f8eb123cd0777b1d645edc6fd3eae87919d06381ffd90e908af83cd701c2",
+        "report_rows": "82b19e9eb34f381542cf82232afec74cb5b530a08e00b90f068743f507d06b5e",
+        "unicode_text": "8e510c4c19152b18905663dd915098ef45d7d715d849757b626256403041b47c"
+      },
+      "results": {
+        "stream_event_dumps": {
+          "median_cpu_cycles": 1354.996318359375,
+          "samples_cpu_cycles": [
+            1342.7465942382812,
+            1317.540078125,
+            1434.6709521484374,
+            1371.116474609375,
+            1354.996318359375
+          ],
+          "iterations": 409600
+        },
+        "stream_event_loads": {
+          "median_cpu_cycles": 3112.1113671875,
+          "samples_cpu_cycles": [
+            3105.59529296875,
+            3112.20052734375,
+            3109.89240234375,
+            3121.63271484375,
+            3112.1113671875
+          ],
+          "iterations": 204800
+        },
+        "tool_schema_dumps": {
+          "median_cpu_cycles": 57121.26578125,
+          "samples_cpu_cycles": [
+            58734.70265625,
+            55518.4625,
+            64321.7815625,
+            55563.32875,
+            57121.26578125
+          ],
+          "iterations": 12800
+        },
+        "tool_schema_loads": {
+          "median_cpu_cycles": 188422.4171875,
+          "samples_cpu_cycles": [
+            224451.776875,
+            186499.24875,
+            201515.125625,
+            186393.68125,
+            188422.4171875
+          ],
+          "iterations": 3200
+        },
+        "report_rows_dumps": {
+          "median_cpu_cycles": 631166.845,
+          "samples_cpu_cycles": [
+            627674.68,
+            722040.72375,
+            629970.165,
+            631166.845,
+            673686.5625
+          ],
+          "iterations": 800
+        },
+        "report_rows_loads": {
+          "median_cpu_cycles": 2596908.92,
+          "samples_cpu_cycles": [
+            2590615.58,
+            3269107.39,
+            2586253.74,
+            2596908.92,
+            2749680.855
+          ],
+          "iterations": 200
+        },
+        "unicode_text_dumps": {
+          "median_cpu_cycles": 330562.865,
+          "samples_cpu_cycles": [
+            330562.865,
+            333496.0775,
+            365270.630625,
+            324904.5225,
+            319953.6775
+          ],
+          "iterations": 1600
+        },
+        "unicode_text_loads": {
+          "median_cpu_cycles": 1090005.345,
+          "samples_cpu_cycles": [
+            1090005.345,
+            1079525.455,
+            1084405.62,
+            1164543.71375,
+            1108119.44125
+          ],
+          "iterations": 800
+        }
+      }
+    }
+  },
+  "builds": {
+    "ivy-o2-thin-cgu1": {
+      "package": "orjson",
+      "version": "3.11.9",
+      "source_sha256": "4fef17e1f8722c11587a6ef18e35902450221da0028e65dbaaa543619e68e48f",
+      "flags": "-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma -C opt-level=2 -C embed-bitcode=yes",
+      "pgo": false,
+      "lto": "thin",
+      "wheel_sha256": "be47433a9c56e239fdfb92c14431e8238677c3bbded32027a9e7964370282164",
+      "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+      "experiment": "ivy-o2-thin-cgu1",
+      "codegen_units": 1,
+      "opt_level": 2
+    },
+    "ivy-o3-fat-cgu1": {
+      "package": "orjson",
+      "version": "3.11.9",
+      "source_sha256": "4fef17e1f8722c11587a6ef18e35902450221da0028e65dbaaa543619e68e48f",
+      "flags": "-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma -C opt-level=3 -C embed-bitcode=yes",
+      "pgo": false,
+      "lto": "fat",
+      "wheel_sha256": "c6cca4223a9db346cc76c98b0c16b6d31562481b1898887b454efac14f06d8eb",
+      "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+      "experiment": "ivy-o3-fat-cgu1",
+      "codegen_units": 1,
+      "opt_level": 3
+    },
+    "ivy-o3-thin-cgu1": {
+      "package": "orjson",
+      "version": "3.11.9",
+      "source_sha256": "4fef17e1f8722c11587a6ef18e35902450221da0028e65dbaaa543619e68e48f",
+      "flags": "-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma -C opt-level=3 -C embed-bitcode=yes",
+      "pgo": false,
+      "lto": "thin",
+      "wheel_sha256": "fd029f718163d066c55240b69d34c2f2d22ea76e85def59fcf7fa59a4a8b68ca",
+      "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+      "experiment": "ivy-o3-thin-cgu1",
+      "codegen_units": 1,
+      "opt_level": 3
+    },
+    "ivy-o3-thin-cgu8": {
+      "package": "orjson",
+      "version": "3.11.9",
+      "source_sha256": "4fef17e1f8722c11587a6ef18e35902450221da0028e65dbaaa543619e68e48f",
+      "flags": "-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma -C opt-level=3 -C embed-bitcode=yes",
+      "pgo": false,
+      "lto": "thin",
+      "wheel_sha256": "5a21ab53c8ca924fa6c37c078fb305d68245ae54352b08b90b1ea328b338e89c",
+      "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+      "experiment": "ivy-o3-thin-cgu8",
+      "codegen_units": 8,
+      "opt_level": 3
+    }
+  }
+}

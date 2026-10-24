@@ -37,7 +37,7 @@ def build(destination, lto=None, experiment=None):
         stream.extractall(source_root, filter="data")
     checkout = next(path for path in source_root.iterdir() if path.is_dir())
     run(sys.executable, "-m", "pip", "install", "maturin>=1.9,<2", "wheel")
-    base_flags = "-C target-cpu=ivybridge -C target-feature=-avx2,-fma -C opt-level=3 -C embed-bitcode=yes"
+    base_flags = "-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma -C opt-level=3 -C embed-bitcode=yes"
     if profile:
         base_flags = ("-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma "
                       f"-C opt-level={profile['opt']} -C embed-bitcode=yes")

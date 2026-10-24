@@ -1,41 +1,23 @@
 # Open WebUI · Ivy Bridge AVX1
 
-[English](README.md) · [Русский](README.ru.md)
+[English](README.md) · [Русский](README.ru.md) · [Upstream](https://github.com/open-webui/open-webui) · [Releases](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest)
 
-Experimental builds for personal compatibility and performance testing. Upstream application names and interface branding are retained.
+Windows build for Ivy Bridge. Extended Russian UI and menus.
 
-[Upstream project](https://github.com/open-webui/open-webui) · [Packages](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases)
+Download the latest ZIP, extract it and run `Install.cmd`.
 
-Download the single latest package, extract it and run `Install.cmd`. `Install.cmd -CheckOnly` verifies integrity without installing. Packages exclude personal configuration, credentials, history, caches and model weights. Models download from Hugging Face on demand.
+## Changes
 
-One build combines current official source and reviewed fork patches. There are no separate stable/dev downloads.
+- MCP arguments with alternative schemas: [#32903](https://github.com/open-webui/open-webui/pull/32903). Readable errors: [#32942](https://github.com/open-webui/open-webui/pull/32942).
+- Backend sharing permissions: [#32991](https://github.com/open-webui/open-webui/pull/32991), adapted without changing positional database arguments.
+- Filter/bridge compatibility, microphone provenance, bounded speech and packaged Chromium checks. [Full patch list](.avx1/PATCHES.json).
 
-Extended Russian UI and menu translation; interpolation parameters are checked in every build.
+## Evidence
 
-## Patches
+Four explicit `ivybridge` profiles were tested: SSE4.2/AVX/F16C/POPCNT, O2/O3, Fat/ThinLTO and codegen units 1/8. AVX2/FMA/PGO/fast-math stay disabled. Best mixed JSON CPU result: **+0.40%**, with a **−5.42%** tool-schema serialization regression. Stock `orjson` remains the default. All 23 compatibility vectors match. These are JSON CPU tests, not LLM tokens/s. [Raw samples and flags](.avx1/measurements/ivy-flags-20261024.json).
 
-| ID | Change | Source |
-|---|---|---|
-| WEB-001 | Build the frontend from its lockfile with npm ci; remove forced dependency resolution. | `.avx1/PATCHES.json` |
-| WEB-002 | Build orjson for Ivy Bridge with Rust O3 and LTO/ThinLTO, without PGO; compare on the actual CPU. | `.avx1/PATCHES.json` |
-| WEB-003 | Source-level microphone provenance, bounded report speech, same-message speech identity and local call emoji; replaces chunk-name-dependent private overlays. | `.avx1/PATCHES.json` |
-| WEB-004 | Patched browser dependency lock, current SheetJS tarball, sharp override and PDF.js 6; compatible Vite 7/Svelte plugin 6 toolchain. | `.avx1/PATCHES.json` |
-| WEB-005 | Backport official Windows file URL normalization for encryption artifact verification without changing cryptographic code. | `.avx1/PATCHES.json` |
-| WEB-006 | Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking. | `.avx1/PATCHES.json` |
-| WEB-007 | Preserve browser export conditions in Vite; verify the packaged login screen in Chromium. | `.avx1/PATCHES.json` |
-| WEB-008 | Complete missing Russian UI strings and plural forms; localize exact legacy stock suggestions without changing custom prompts or persisted settings. | `.avx1/PATCHES.json` |
-| WEB-009 | Pin Brotli 1.2.1 and BrotliCFFI 1.2.1.0 to remediate CVE-2026-111497; verify valid round trips and rejection of trailing bytes. | `.avx1/PATCHES.json` |
+[Hardware profile](.avx1/hardware-profile.json): installed PyTorch 2.14 is a CPU wheel. The separate source-build profile uses CUDA 12.9 and `sm_61`; it does not rebuild a vendor wheel.
 
-## Measurements
+Original licenses/notices and source history are preserved. Exact corresponding source is linked from each release. Credentials, logs, models and private filter/bridge code stay outside the public packages.
 
-2026-10-24 release `a9cda489a9ed`: stock 10507 ns, experimental O3 LTO 11979 ns; JSON throughput **-12.29%** versus stock. All 23 compatibility vectors matched. Stock remains the default. [Exact build measurement](.avx1/measurements/json-release-a9cda489a9ed.json).
-
-Measured on 2026-10-23, Xeon E5-2697 v2, orjson 3.11.9, 23 compatibility vectors: stock 11152 ns, LTO 11362 ns (throughput -1.85%), ThinLTO 11848 ns (-5.88%). These are synthetic JSON results, not LLM speed. Stock remains the default. Use `Install.cmd -ExperimentalNativeJson` to try O3 LTO. PGO is disabled. [Method and raw results](.avx1/measurements/json-no-pgo-20261023.json).
-
-The unified release wheel (`b71d6430976b`) measured JSON throughput -6.46% versus stock on the actual Xeon; all 23 compatibility vectors matched. Stock remains the default. [Exact wheel result](.avx1/measurements/json-release-b71d6430976b.json).
-
-## Licensing and compatibility
-
-Original licenses, notices and license history are preserved. Each binary package includes its corresponding source. Runtime credentials, settings, logs and data are excluded.
-
-Local deployment additionally checks the owner's private filter and Telegram bridge. Their source, settings and data are not published. Unreviewed PR/fork changes remain candidates; accepted upstream fixes arrive through merges of official branches.
+[PR/fork review: accepted and deferred changes](.avx1/review-20261024.json).

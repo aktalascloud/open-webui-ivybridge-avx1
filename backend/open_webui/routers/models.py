@@ -410,8 +410,7 @@ async def create_new_model(
         user.id,
         user.role,
         form_data.access_grants,
-        'sharing.public_models',
-    )
+        'sharing.public_models', sharing_permission_key='sharing.models')
 
     await _check_model_controls(form_data, None, user, request)
     model = await Models.insert_new_model(form_data, user.id, db=db)
@@ -614,8 +613,7 @@ async def import_models(
                                 user.id,
                                 user.role,
                                 updated_model.access_grants,
-                                'sharing.public_models',
-                            )
+                                'sharing.public_models', sharing_permission_key='sharing.models')
                         imported_model = updated_model
                     else:
                         # Insert new model
@@ -656,8 +654,7 @@ async def import_models(
                             user.id,
                             user.role,
                             new_model.access_grants,
-                            'sharing.public_models',
-                        )
+                            'sharing.public_models', sharing_permission_key='sharing.models')
                         imported_model = new_model
 
                     await _check_model_controls(imported_model, existing_model, user, request)
@@ -1226,8 +1223,7 @@ async def update_model_by_id(
             user.id,
             user.role,
             new_access_grants,
-            'sharing.public_models',
-        )
+            'sharing.public_models', sharing_permission_key='sharing.models')
 
     await _check_model_controls(form_data, model, user, request)
     model = await Models.update_model_by_id(form_data.id, form_data, db=db, user_id=user.id)
@@ -1307,8 +1303,7 @@ async def update_model_access_by_id(
         user.id,
         user.role,
         form_data.access_grants,
-        'sharing.public_models',
-    )
+        'sharing.public_models', sharing_permission_key='sharing.models')
 
     await AccessGrants.set_access_grants('model', form_data.id, form_data.access_grants, db=db)
 

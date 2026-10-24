@@ -233,8 +233,7 @@ async def create_new_note(
         user.role,
         form_data.access_grants,
         'sharing.public_notes',
-        db=db,
-    )
+        db=db, sharing_permission_key='sharing.notes')
 
     try:
         note = await Notes.insert_new_note(user.id, form_data, db=db)
@@ -540,8 +539,7 @@ async def update_note_by_id(
             user.role,
             form_data.access_grants,
             'sharing.public_notes',
-            db=db,
-        )
+            db=db, sharing_permission_key='sharing.notes')
 
     previous_access_grants = note.access_grants
 
@@ -618,8 +616,7 @@ async def update_note_access_by_id(
         user.id,
         user.role,
         form_data.access_grants,
-        'sharing.public_notes',
-    )
+        'sharing.public_notes', sharing_permission_key='sharing.notes')
 
     await AccessGrants.set_access_grants('note', id, form_data.access_grants, db=db)
     await leave_note_rooms_for_revoked_users(note, note.access_grants, db=db)

@@ -420,8 +420,7 @@ async def create_new_tools(
                 user.id,
                 user.role,
                 form_data.access_grants,
-                'sharing.public_tools',
-            )
+                'sharing.public_tools', sharing_permission_key='sharing.tools')
 
             form_data.content = replace_imports(form_data.content)
             tool_module, frontmatter, source_module = await load_tool_module_by_id(
@@ -591,8 +590,7 @@ async def _update_tool(request, id, form_data, user, db, version_id=None):
                 user.id,
                 user.role,
                 new_access_grants,
-                'sharing.public_tools',
-            )
+                'sharing.public_tools', sharing_permission_key='sharing.tools')
 
         updated = {
             **form_data.model_dump(exclude={'id'}),
@@ -682,8 +680,7 @@ async def update_tool_access_by_id(
         user.id,
         user.role,
         form_data.access_grants,
-        'sharing.public_tools',
-    )
+        'sharing.public_tools', sharing_permission_key='sharing.tools')
 
     await AccessGrants.set_access_grants('tool', id, form_data.access_grants, db=db)
 

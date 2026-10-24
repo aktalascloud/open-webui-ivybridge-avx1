@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-24",
+  "inventory": {
+    "active_forks": 1107,
+    "repositories": 1111,
+    "open_prs": 913,
+    "categorized_full_diffs": 819,
+    "unavailable_repositories": [],
+    "all_candidates_semantically_reviewed": false
+  },
+  "decisions": [
+    {
+      "url": "https://github.com/open-webui/open-webui/pull/32903",
+      "decision": "adapted",
+      "reason": "MCP alternative-schema arguments preserved in native and legacy paths; ordinary function whitelist unchanged.",
+      "head": "1e42eb28f2ed0c75d699454b2c1cf50405a8b151",
+      "diff_sha256": "93daddabb28e076df1ad019212a7272aebbd30257879a3ae914ee441ffd022b4"
+    },
+    {
+      "url": "https://github.com/open-webui/open-webui/pull/32942",
+      "decision": "adapted",
+      "reason": "Readable MCP error content, success/dedup behavior retained.",
+      "head": "9cc638b5945bfec89f13d7c0726c30e7f2009392",
+      "diff_sha256": "5bf99c7a1f25dca49e739ca44f78deb831e6d610c6531a01f0523796287a5ea6"
+    },
+    {
+      "url": "https://github.com/open-webui/open-webui/pull/32991",
+      "decision": "adapted",
+      "reason": "Server sharing permission enforced; existing positional db parameter preserved.",
+      "head": "ace8830529a88ba02d5a91e2b83e400df5e409cd",
+      "diff_sha256": "e0dcaeb6d48995e52d8a0f5b5f516a39b0d21a21d794f8295e707f4043a7d4bf"
+    },
+    {
+      "url": "https://github.com/CodeAssureLabs/open-webui/pull/4",
+      "decision": "rejected",
+      "reason": "Full diff only adds # touch comments; no model-list cache implementation.",
+      "head": "9e671c52292189b01e40b9782b8ecb385f5cc391",
+      "diff_sha256": "5fe365b55019ec9bf43eeb0186e77047f781e90269d67aae448e5653ae52e285"
+    },
+    {
+      "url": "https://github.com/CodeAssureLabs/open-webui/pull/10",
+      "decision": "rejected",
+      "reason": "Full diff only adds # touch comments; no streaming implementation.",
+      "head": "61e0c74bf1e5e5be061189a23befbe8878b0696e",
+      "diff_sha256": "00b5955d9302431bfbafbb007cb8cfb4d3aeb51b079fbd9eceeb86464f979c82"
+    },
+    {
+      "url": "https://github.com/R0Wi/open-webui/pull/2",
+      "decision": "deferred",
+      "reason": "Transient OAuth refresh handling is useful, but raw provider error logging and rejection/expiry behavior need focused regression tests.",
+      "head": "02768956007914df699431725cd699de798d9d8c",
+      "diff_sha256": "7721da894e032fb37f7c7ae9c91e9726711e96c267cb6957aa61c72eade20eaa"
+    },
+    {
+      "url": "https://github.com/open-webui/open-terminal/pull/116",
+      "decision": "deferred",
+      "reason": "API-key resolution needs tests for _FILE/env conflicts and inbound network MCP authentication; no auth changes imported.",
+      "head": "8fa2930a0b868882c04eebed7d1c8c34bc30e8d9",
+      "diff_sha256": "39c4a36adfd3318b0e4e6e70ccfc6412dfbcaef777a2d994d2210d399186a357"
+    },
+    {
+      "url": "https://github.com/open-webui/open-terminal/pull/149",
+      "decision": "deferred",
+      "reason": "Orphan log sweep must exclude live quiet processes and be adapted from its old baseline before adoption.",
+      "head": "601c58f323afe40a14455cea556a03d93b988ad5",
+      "diff_sha256": "9a74e9643879dcdd1b9c477b0f7f9a2fba9d6400880a76a2ddd0cedb68b38a7b"
+    },
+    {
+      "url": "https://github.com/open-webui/open-terminal/pull/160",
+      "decision": "not applicable",
+      "reason": "Linux container cache relocation/symlinks; current deployment is Windows.",
+      "head": "61f8a67ca7927c4acd8c5996c1ef39223b5d96e4",
+      "diff_sha256": "e131a78763837ae22e9395395062ad65a74b4d7cf39b1b82c279b98d4d20f42d"
+    },
+    {
+      "url": "https://github.com/open-webui/desktop/pull/265",
+      "decision": "not applicable",
+      "reason": "CUDA13 variants do not provide Pascal sm_61 compilation/library support; CUDA12.9 profile retained.",
+      "head": "a61d553762be375ef8e491d5fd9f3c963c88e391",
+      "diff_sha256": "34cace3a124d9a84d426d121f7d193141ef9c7d86fcdfc64dfbd852aa729cf3a"
+    },
+    {
+      "url": "https://github.com/cogwheel0/conduit/pull/717",
+      "decision": "deferred",
+      "reason": "Persisted tool-call HTML normalization changes CODE rich-report semantics; requires dedicated interoperability fixtures.",
+      "head": "110c3101290a04ecadbdcb4444611bc33127a1c7",
+      "diff_sha256": "2ad9a796432d5b3871cd738ec396fc6a8dc3bf0626509f43f33371b2f6322347"
+    },
+    {
+      "url": "https://github.com/sander-uni/open-webui/pull/5",
+      "decision": "deferred",
+      "reason": "Full12.8MB immutable Git diff downloaded; broad tool-chain/UI changes require independent CODE/Conduit qualification.",
+      "head": "354d9c7106bf8708fda4ce6e164dd7abae84f6ce",
+      "diff_sha256": "60c8fe990a669f2e88607868c28b7ccba46d150f5e721eff094716e725f5da61"
+    }
+  ],
+  "dependency_findings": "Installed torch2.14.0+cpu, MCP1.30.0, Authlib1.7.2, OAuthlib4.0.0 already satisfy the older dependency-bump PRs reviewed. No version downgrade imported.",
+  "scope": "Full inventory and categorized diffs are not a claim that every PR was approved. Only listed adapted patches are integrated."
+}

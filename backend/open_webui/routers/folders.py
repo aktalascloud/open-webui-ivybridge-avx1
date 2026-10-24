@@ -561,8 +561,7 @@ async def update_folder_access_by_id(
         user.role,
         form_data.access_grants,
         None,
-        db=db,
-    )
+        db=db, sharing_permission_key='sharing.folders')
 
     await AccessGrants.set_access_grants('folder', id, form_data.access_grants, db=db)
     if 'share_mode' in form_data.model_fields_set:
