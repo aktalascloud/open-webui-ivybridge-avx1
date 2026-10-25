@@ -1,12 +1,13 @@
 {
   "day": "2026-10-25",
   "fork_inventory": {
-    "active_forks": 1117,
-    "repositories": 1121,
+    "active_forks": 1118,
+    "repositories": 1122,
     "open_prs": 897,
     "categorized_full_diffs": 814,
     "missing_diffs": 0,
-    "all_semantically_reviewed": false
+    "all_semantically_reviewed": false,
+    "all_open_pr_diffs_saved": 897
   },
   "integrated_upstream": {
     "webui": {
@@ -66,5 +67,12 @@
     "brotlicffi": "1.2.1.0",
     "setuptools": "84.2.1"
   },
-  "scope": "Inventory and immutable diff coverage are distinct from semantic approval. Only reviewed applicable changes enter binaries."
+  "scope": "Inventory and immutable diff coverage are distinct from semantic approval. Only reviewed applicable changes enter binaries.",
+  "upstream_inventory": {
+    "issues_delta_scanned": 235,
+    "pulls_delta_scanned": 131,
+    "changed_immutable_pr_diffs": 43,
+    "fork_comparisons_unavailable_after_retry": 58,
+    "unavailable_candidates_applied": false
+  }
 }
