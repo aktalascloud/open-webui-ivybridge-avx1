@@ -494,18 +494,10 @@
 					{#each filteredItems as skill (skill.id)}
 						<div
 							class="group flex min-h-8 w-full cursor-pointer items-center gap-2 overflow-hidden rounded-xl px-2 py-1 text-left"
-							role="button"
-							tabindex="0"
+							role="presentation"
 							on:click={(e) => {
 								if (shouldIgnoreRowClick(e.target)) return;
 								openSkill(skill);
-							}}
-							on:keydown={(e) => {
-								if (e.currentTarget !== e.target) return;
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									openSkill(skill);
-								}
 							}}
 						>
 							<div class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
@@ -513,11 +505,11 @@
 									<div class="flex min-w-0 items-center gap-2 overflow-hidden">
 										<div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
 											<Tooltip content={skill.id} className="min-w-0" placement="top-start">
-												<div
-													class="truncate text-[0.8125rem] leading-5 text-gray-800 group-hover:underline dark:text-gray-200"
+												<a
+													href={`/workspace/skills/edit?id=${encodeURIComponent(skill.id)}`}
+													class="focus-ring block truncate rounded text-[0.8125rem] leading-5 text-gray-800 group-hover:underline focus-visible:underline dark:text-gray-200"
+													>{resolveLocalizedResource(skill, $i18n.language)}</a
 												>
-													{resolveLocalizedResource(skill, $i18n.language)}
-												</div>
 											</Tooltip>
 
 											<div
@@ -643,9 +635,9 @@
 												</button>
 											</SkillMenu>
 
-											<button
+											<div
 												class="flex h-6 items-center"
-												type="button"
+												role="presentation"
 												on:click={(e) => {
 													e.stopPropagation();
 													e.preventDefault();
@@ -656,13 +648,14 @@
 												>
 													<Switch
 														bind:state={skill.is_active}
+														ariaLabel={$i18n.t('Enabled')}
 														on:change={async () => {
 															await toggleSkillById(localStorage.token, skill.id);
 															_skills.set(await getSkills(localStorage.token));
 														}}
 													/>
 												</Tooltip>
-											</button>
+											</div>
 										</div>
 									{/if}
 								</div>

@@ -2390,7 +2390,7 @@
 		if (!$chatId) {
 			const modelId = selectedModelIds[0];
 			const _chatId = await initChatHandler(history);
-			if (!$temporaryChatEnabled) {
+			if (_chatId && !$temporaryChatEnabled) {
 				// Realtime replies need no chat completion; start metadata work at chat creation.
 				void generateVoiceChatMetadata(_chatId, modelId, content, chat.title).catch((error) => {
 					console.error('Could not save voice chat metadata', error);
@@ -2604,6 +2604,14 @@
 			return;
 		}
 
+		if (
+			$user?.role !== 'admin' &&
+			!($user?.permissions?.chat?.stt ?? true) &&
+			!$config?.audio?.realtime?.enabled
+		) {
+			return;
+		}
+
 		if (selectedModels.length > 1) {
 			toast.error($i18n.t('Select only one model to call'));
 			return;
@@ -2768,7 +2776,7 @@
 		const previousMessageId = history.currentId;
 		await resetInput();
 		// A chat opened or a message sent in the meantime keeps its id and history
-		if ($chatId !== previousChatId || history.currentId !== previousMessageId) return;
+		if (($chatId && $chatId !== previousChatId) || history.currentId !== previousMessageId) return;
 		await chatId.set('');
 		await chatTitle.set('');
 
@@ -3796,6 +3804,37 @@
 		prompt = '';
 	};
 
+	const getChatId = async (_history: typeof history) => {
+		let _chatId = $chatId;
+		// Empty embedded drafts create their backing chat only when the first message is sent.
+		if (!_chatId) {
+			if (embedded && onCreateEmbeddedChat) {
+				const createdChat = await onCreateEmbeddedChat();
+				if (!createdChat?.id) {
+					toast.error($i18n.t('Failed to create chat'));
+					return null;
+				}
+				if (history !== _history) return null;
+
+				chat = createdChat;
+				_chatId = createdChat.id;
+				loadedChatIdProp = _chatId;
+				await chatId.set(_chatId);
+				await chatTitle.set(createdChat?.chat?.title ?? createdChat?.title ?? $i18n.t('Chat'));
+
+				params = structuredClone(createdChat?.chat?.params ?? {});
+				delete params.note_id;
+				chatFiles = mergeFiles(chatFiles, createdChat?.chat?.files ?? []);
+				await onSelectEmbeddedChat?.(_chatId);
+			} else if ($temporaryChatEnabled) {
+				_chatId = createTemporaryChatId($socket?.id);
+				await chatId.set(_chatId);
+			}
+			await tick();
+		}
+		return _chatId;
+	};
+
 	const submitHandler = async (
 		userPrompt: string,
 		{
@@ -3803,6 +3842,7 @@
 			bridge: bridgeRequest = null
 		}: { _raw?: boolean; bridge?: { userMessageId: string; modelId: string } | null } = {}
 	): Promise<BridgeSubmission> => {
+		if (processing === 'uploading') return { status: 'deferred' };
 		const microphoneMeta = __assistantMicOrigin.peek(userPrompt);
 		emitTyping(false);
 		if (bridgeRequest && (selectedModelIds.length !== 1 || !bridgeRequest.modelId))
@@ -3884,6 +3924,26 @@
 			return { status: 'deferred' };
 		}
 
+		const currentHistory = history;
+		processing = 'uploading';
+		try {
+			const _chatId = await getChatId(currentHistory);
+			if (_chatId === null) return { status: 'rejected' };
+
+			if (history !== currentHistory) return { status: 'rejected' };
+			if (
+				files.some((file) => file.status === 'pending' && file.file instanceof File) &&
+				!(await messageInput?.uploadPendingFiles(_chatId || (await initChatHandler(history))))
+			)
+				return { status: 'rejected' };
+			if (history !== currentHistory) return { status: 'rejected' };
+		} catch (error) {
+			toast.error(`${error}`);
+			return { status: 'rejected' };
+		} finally {
+			processing = '';
+		}
+
 		if (
 			($chatRequestQueues[$chatId] ?? []).some((m) =>
 				(m.files ?? []).some((file) => ['uploading', 'error'].includes(file.status))
@@ -3952,12 +4012,14 @@
 			messages = null,
 			modelId = null,
 			modelIdx = null,
-			regenerationPrompt = null
+			regenerationPrompt = null,
+			regenerationMessageId = null
 		}: {
 			messages?: any[] | null;
 			modelId?: string | null;
 			modelIdx?: number | null;
 			regenerationPrompt?: string | null;
+			regenerationMessageId?: string | null;
 		} = {}
 	) => {
 		const parent = _history.messages[parentId];
@@ -4040,32 +4102,6 @@
 		}
 		history = history;
 
-		// Empty embedded drafts create their backing chat only when the first message is sent.
-		if (!_chatId) {
-			if (embedded && onCreateEmbeddedChat) {
-				const createdChat = await onCreateEmbeddedChat();
-				if (!createdChat?.id) {
-					toast.error($i18n.t('Failed to create chat'));
-					return;
-				}
-
-				chat = createdChat;
-				_chatId = createdChat.id;
-				loadedChatIdProp = _chatId;
-				await chatId.set(_chatId);
-				await chatTitle.set(createdChat?.chat?.title ?? createdChat?.title ?? $i18n.t('Chat'));
-
-				params = structuredClone(createdChat?.chat?.params ?? {});
-				delete params.note_id;
-				chatFiles = mergeFiles(chatFiles, createdChat?.chat?.files ?? []);
-				await onSelectEmbeddedChat?.(_chatId);
-			} else if ($temporaryChatEnabled) {
-				_chatId = createTemporaryChatId($socket?.id);
-				await chatId.set(_chatId);
-			}
-			await tick();
-		}
-
 		await tick();
 
 		// Re-clone history so sendMessageSocket gets the response messages we just added
@@ -4120,7 +4156,8 @@
 						// regenerations in a duplicate-model chat, which would otherwise lose their
 						// column identity and collapse on reload.
 						messageIdsList: messageIdsList.length > 0 ? messageIdsList : undefined,
-						regenerationPrompt
+						regenerationPrompt,
+						regenerationMessageId
 					}
 				);
 				submittedTaskIds =
@@ -4188,10 +4225,12 @@
 		{
 			messageIdsList,
 			regenerationPrompt,
+			regenerationMessageId,
 			continueResponse = false
 		}: {
 			messageIdsList?: Array<{ model_id: string; message_id: string }>;
 			regenerationPrompt?: string | null;
+			regenerationMessageId?: string | null;
 			continueResponse?: boolean;
 		} = {}
 	) => {
@@ -4404,13 +4443,13 @@
 				parent_id: userMessage?.parentId ?? null,
 				user_message: userMessage,
 				...(regenerationPrompt ? { regeneration_prompt: regenerationPrompt } : {}),
+				...(regenerationMessageId ? { regeneration_message_id: regenerationMessageId } : {}),
 				...(continueResponse ? { assistant_message_id: responseMessageId } : {}),
 
 				background_tasks: {
 					...(!$temporaryChatEnabled &&
 					(!_chatId ||
-						(embedded &&
-							(userMessage?.parentId ?? null) === null &&
+						((userMessage?.parentId ?? null) === null &&
 							createMessagesList(_history, responseMessageId).length === 2))
 						? {
 								title_generation: $settings?.title?.auto ?? true,
@@ -4645,7 +4684,8 @@
 				...(suggestionPrompt
 					? {
 							messages: createMessagesList(history, message.id),
-							regenerationPrompt: suggestionPrompt
+							regenerationPrompt: suggestionPrompt,
+							regenerationMessageId: message.id
 						}
 					: {}),
 				...((userMessage?.models ?? [...selectedModels]).length > 1
@@ -4737,12 +4777,12 @@
 		}
 	};
 
-	const initChatHandler = async (history) => {
+	const initChatHandler = async (_history: typeof history) => {
 		let _chatId = $chatId;
 		const selectedFolderId = $selectedFolder?.id;
 
 		if (!$temporaryChatEnabled) {
-			chat = await createNewChat(
+			const createdChat = await createNewChat(
 				localStorage.token,
 				{
 					id: _chatId,
@@ -4750,8 +4790,8 @@
 					models: selectedModels,
 					system: $settings.system ?? undefined,
 					params: params,
-					history: history,
-					messages: createMessagesList(history, history.currentId),
+					history: _history,
+					messages: createMessagesList(_history, _history.currentId),
 					tags: [],
 					timestamp: Date.now()
 				},
@@ -4759,6 +4799,9 @@
 				chatVariables
 			);
 
+			if (!createdChat?.id) throw new Error($i18n.t('Failed to create chat'));
+			if (history !== _history || $chatId !== _chatId) return '';
+			chat = createdChat;
 			_chatId = chat.id;
 			await chatId.set(_chatId);
 
@@ -4832,7 +4875,7 @@
 	const getChatInputDraft = () => ({
 		prompt,
 		files: files
-			.filter((file) => file.type !== 'image')
+			.filter((file) => file.type !== 'image' && !(file.file instanceof File))
 			.map((file) => ({
 				...file,
 				user: undefined,
@@ -5479,6 +5522,7 @@
 						{:else}
 							<div class="flex items-center h-full">
 								<Placeholder
+									chatId={$chatId}
 									{terminalContext}
 									callActive={!!(bridge?.connected || bridge?.connecting)}
 									callEnabled={!isShared}

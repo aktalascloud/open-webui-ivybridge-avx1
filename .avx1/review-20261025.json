@@ -1,0 +1,70 @@
+{
+  "day": "2026-10-25",
+  "fork_inventory": {
+    "active_forks": 1117,
+    "repositories": 1121,
+    "open_prs": 897,
+    "categorized_full_diffs": 814,
+    "missing_diffs": 0,
+    "all_semantically_reviewed": false
+  },
+  "integrated_upstream": {
+    "webui": {
+      "commit": "f21eadbc1abcc1196c61cab4aaf6979a0c3a7635",
+      "priority_prs": [
+        33087,
+        33000,
+        32888,
+        32872,
+        33028,
+        32982,
+        33084,
+        33103
+      ]
+    },
+    "conduit": {
+      "commit": "2550086b17976230b67ead9820152f716bdf36e2",
+      "prs": [
+        869,
+        870
+      ]
+    }
+  },
+  "reviewed_open_patch": {
+    "url": "https://github.com/cogwheel0/conduit/pull/873",
+    "head": "831301e86ac86e695af2c666559092e1204b92d6",
+    "decision": "Integrate the server-transcription Stop race fix and all three upstream regression cases; preserve bound speech backend and bundled VAD path."
+  },
+  "deferred": [
+    {
+      "url": "https://github.com/cogwheel0/conduit/pull/871",
+      "reason": "Reasoning opt-in changes need explicit provider/filter compatibility qualification; not silently applied."
+    },
+    {
+      "url": "https://github.com/cogwheel0/conduit/pull/872",
+      "reason": "Android assistant reboot/entry lifecycle needs device-specific checks."
+    },
+    {
+      "url": "https://github.com/cogwheel0/conduit/pull/874",
+      "reason": "Unread-state feature is outside the targeted speech/MCP fixes and needs server-state qualification."
+    },
+    {
+      "url": "https://github.com/cogwheel0/conduit/pull/875",
+      "reason": "iOS-only share fixes do not apply to this ARM64 Android package."
+    },
+    {
+      "url": "https://github.com/open-webui/open-terminal/pull/192",
+      "reason": "Linux pseudo-filesystem guard changes traversal across filesystem boundaries; Windows/junction behavior requires separate regression qualification."
+    },
+    {
+      "url": "https://github.com/Gradient-DS/open-webui/pull/525",
+      "reason": "Custom v2 deletion/offboarding policy changes are not compatible generic upstream fixes."
+    }
+  ],
+  "already_satisfied": {
+    "pypdf": "6.21.2",
+    "brotlicffi": "1.2.1.0",
+    "setuptools": "84.2.1"
+  },
+  "scope": "Inventory and immutable diff coverage are distinct from semantic approval. Only reviewed applicable changes enter binaries."
+}

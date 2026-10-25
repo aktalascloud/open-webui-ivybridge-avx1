@@ -2,6 +2,7 @@
 import ast
 import copy
 import json
+import math
 from pathlib import Path
 import types
 import unittest
@@ -55,17 +56,19 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
 
     async def test_mcp_errors_are_plain_readable_text(self):
         for content,expected in [([{'type':'text','text':'Permission denied'},{'type':'image','data':'synthetic'}],'Permission denied'),([], 'MCP tool call returned an error.')]:
-            reply=types.SimpleNamespace(isError=True,model_dump=lambda **_: {'content':content})
+            reply=types.SimpleNamespace(is_error=True,model_dump=lambda **_: {'content':content})
             session=types.SimpleNamespace(call_tool=AsyncMock(return_value=reply))
-            call=function(Path('utils/mcp/client.py'),'call_tool',{'AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER':None,'JSONCodec':json})
-            with self.assertRaisesRegex(Exception,expected):await call(types.SimpleNamespace(session=session),'demo',{})
+            call=function(Path('utils/mcp/client.py'),'call_tool',{'AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER':None,'JSONCodec':json,'math':math})
+            with self.assertRaisesRegex(Exception,expected):await call(types.SimpleNamespace(client=session),'demo',{})
 
     async def test_mcp_success_content_remains_unchanged(self):
         content=[{'type':'text','text':'[1, 2]'}]
-        reply=types.SimpleNamespace(isError=False,model_dump=lambda **_: {'content':content,'structuredContent':{'result':[1,2]}})
-        call=function(Path('utils/mcp/client.py'),'call_tool',{'AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER':None,'JSONCodec':json})
-        result=await call(types.SimpleNamespace(session=types.SimpleNamespace(call_tool=AsyncMock(return_value=reply))),'demo',{})
+        reply=types.SimpleNamespace(is_error=False,model_dump=lambda **_: {'content':content,'structuredContent':{'result':[1,2]}})
+        call=function(Path('utils/mcp/client.py'),'call_tool',{'AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER':None,'JSONCodec':json,'math':math})
+        rpc=AsyncMock(return_value=reply)
+        result=await call(types.SimpleNamespace(client=types.SimpleNamespace(call_tool=rpc)),'demo',{})
         self.assertEqual(result,content)
+        self.assertEqual(rpc.call_args.kwargs['read_timeout_seconds'],math.inf)
 
     async def test_api_sharing_permission_and_admin_behavior(self):
         grants=[{'principal_type':'user','principal_id':'synthetic-other','permission':'read'}]

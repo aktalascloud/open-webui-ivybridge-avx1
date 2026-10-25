@@ -26,7 +26,7 @@
   },
   {
     "id": "WEB-006",
-    "description": "Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking. MCP stays on security-maintained 1.30.0; verify the actual client API call signatures before packaging.",
+    "description": "Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking. MCP 2.3.0 is qualified against the actual client constructor signatures, wire aliases and both discovery/legacy HTTP protocols.",
     "source": "PyPI advisories and exact package releases; .avx1/security_scope.py and tests."
   },
   {
@@ -47,14 +47,14 @@
   {
     "id": "WEB-010",
     "description": "Preserve MCP arguments for anyOf/oneOf input schemas in native and legacy tool calling; ordinary function argument filtering remains intact.",
-    "source": "reviewed upstream PR; adapted and regression-tested",
+    "source": "Now included upstream; retained regression coverage for native/legacy arguments and readable MCP errors.",
     "url": "https://github.com/open-webui/open-webui/pull/32903",
     "upstream_head": "1e42eb28f2ed0c75d699454b2c1cf50405a8b151"
   },
   {
     "id": "WEB-011",
     "description": "Return readable MCP error text instead of a raw content-object dump.",
-    "source": "reviewed upstream PR; adapted and regression-tested",
+    "source": "Now included upstream; retained regression coverage for native/legacy arguments and readable MCP errors.",
     "url": "https://github.com/open-webui/open-webui/pull/32942",
     "upstream_head": "9cc638b5945bfec89f13d7c0726c30e7f2009392"
   },
@@ -64,5 +64,21 @@
     "source": "reviewed upstream PR; adapted and regression-tested",
     "url": "https://github.com/open-webui/open-webui/pull/32991",
     "upstream_head": "ace8830529a88ba02d5a91e2b83e400df5e409cd"
+  },
+  {
+    "id": "WEB-013",
+    "description": "Integrate MCP protocol 2026-07-28 discovery with legacy fallback, snake_case SDK models and httpx2; preserve unlimited tool-call timeout semantics.",
+    "source": "Merged official upstream #33087; fork adds real SDK ASGI protocol regression checks.",
+    "url": "https://github.com/open-webui/open-webui/pull/33087"
+  },
+  {
+    "id": "WEB-014",
+    "description": "Keep tool required-argument ordering deterministic for prompt caching; batch chat-owner access checks and restrict client-supplied message authors.",
+    "source": "Official upstream merges #33000, #32888 and #32872.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33000",
+      "https://github.com/open-webui/open-webui/pull/32888",
+      "https://github.com/open-webui/open-webui/pull/32872"
+    ]
   }
 ]

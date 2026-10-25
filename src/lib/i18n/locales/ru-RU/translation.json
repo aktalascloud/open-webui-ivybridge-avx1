@@ -4195,5 +4195,7 @@
   "YouTube": "YouTube",
   "YouTube video player": "Видеоплеер YouTube",
   "Zoom in": "Увеличить",
-  "Zoom out": "Уменьшить"
+  "Zoom out": "Уменьшить",
+  "settings.admin.authentication.defaultEmailDomain.label": "Домен электронной почты по умолчанию",
+  "settings.admin.authentication.defaultEmailDomain.description": "Использует имя_пользователя@домен, если атрибут электронной почты LDAP пуст. Оставьте пустым для отключения. Выполняет вход в существующую учётную запись с таким адресом; используйте домен, которым вы управляете."
 }

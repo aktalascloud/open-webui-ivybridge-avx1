@@ -332,6 +332,7 @@
 
 				for (const [, sentence] of messageContentParts.entries()) {
 					if (signal.aborted) return;
+					if (!speaking) break;
 
 					const url = await $TTSWorker
 						.generate({ text: sentence, voice: voiceId })
@@ -352,6 +353,7 @@
 			} else {
 				for (const [, sentence] of messageContentParts.entries()) {
 					if (signal.aborted) return;
+					if (!speaking) break;
 
 					const res = await synthesizeOpenAISpeech(localStorage.token, voiceId, sentence, undefined,
 						$config.audio.tts.engine === 'openai' ? {speech_message_id: message.id, speech_chat_id: chatId,
