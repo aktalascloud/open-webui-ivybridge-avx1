@@ -1003,11 +1003,11 @@
 		files = files;
 		try {
 			const terminal = getFilesystemUploadTerminal(fileItem.terminal_id);
-			if (!terminal) throw new Error('The attached file’s terminal is unavailable.');
+			if (!terminal) throw new Error($i18n.t('The attached file’s terminal is unavailable.'));
 			if (fileItem.session_id && fileItem.session_id !== sessionId)
-				throw new Error('Attached files must belong to this chat.');
+				throw new Error($i18n.t('Attached files must belong to this chat.'));
 			if (terminal.contexts?.chat?.context_id === 'chat_id' && !isSavedChatId(sessionId))
-				throw new Error('A saved chat is required for this terminal');
+				throw new Error($i18n.t('A saved chat is required for this terminal'));
 
 			const cwd =
 				(terminalContext?.terminalId === fileItem.terminal_id

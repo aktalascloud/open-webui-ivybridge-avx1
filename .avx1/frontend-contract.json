@@ -9,15 +9,14 @@
   "helper_sha256": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
-    "src/lib/components/chat/MessageInput.svelte": "eff6efb1bed453e8ab37d3fc9d2c2b978a8b8076916344a4a97e8f326f090137",
-    "src/lib/components/chat/Chat.svelte": "9cdf6b41650ba99f9def47f9217b90b9023b364ce1fd2cafc3194b39bdca5681",
+    "src/lib/components/chat/MessageInput.svelte": "4fc2c1fcc03b06f82d0f977e01ff0086c9c538b3cc3c0c0280634e22ac2d5993",
+    "src/lib/components/chat/Chat.svelte": "71e3068bed3f481676dd61121c0bb80dc7d1800cc341f831995dd91cf7ff75c5",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-    "src/lib/components/chat/Messages/ResponseMessage.svelte": "0d2c398ba86a722f9d5a46f538f825fac6e6cbb2b4d3b26678521a85958fbb68",
+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "39bca3ae78072b36618155f15d99078598cceacb67a1c5123806fc5b615c9926",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
   },
   "reviewed_upstream_change": {
-    "pr": "https://github.com/open-webui/open-webui/pull/32996",
-    "upstream_commit": "f83f9f40b3513acc82f53696aaf78a2c5d251e70",
-    "scope": "Only direct-tool permission predicate changed; microphone provenance and message-scoped speech hooks unchanged. Private assistant actions use owned tool_ids and clear external tool_servers."
+    "upstream_commit": "f21eadbc1abcc1196c61cab4aaf6979a0c3a7635",
+    "scope": "Reviewed deferred terminal uploads and permission predicates in Chat/MessageInput, plus #33028 speech cancellation. Preserve microphone capture after the upload reentrancy guard, message-scoped voice budget, exact speech identity and bridge submission result. New terminal errors are localized. Assistant helper, audio API and call overlay remain unchanged."
   }
 }
