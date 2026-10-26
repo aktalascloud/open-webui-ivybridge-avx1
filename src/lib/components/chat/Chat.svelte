@@ -4,14 +4,14 @@
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
 
-	import { getContext, onDestroy, onMount, tick } from 'svelte';
+	import { getContext, setContext, onDestroy, onMount, tick } from 'svelte';
 	import { fade } from 'svelte/transition';
 	const i18n: Writable<i18nType> = getContext('i18n');
 
 	import { goto, beforeNavigate } from '$app/navigation';
 	import { page } from '$app/stores';
 
-	import { get, type Unsubscriber, type Writable } from 'svelte/store';
+	import { get, writable, type Unsubscriber, type Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import equal from 'fast-deep-equal';
@@ -188,6 +188,7 @@
 	let eventConfirmationInputType = '';
 	let eventConfirmationInputOptions: ({ label?: string; value: string } | string)[] = [];
 	let eventCallback: (value: any) => void = () => {};
+	let eventInteractionId: string | null = null;
 	type BrowserInteraction = {
 		id: string;
 		messageId: string;
@@ -407,7 +408,13 @@
 	let generating = false;
 	let dragged = false;
 	let generationController = null;
-	let contextCompactionToastId = null;
+	const contextCompactions = writable<Record<string, 'in_progress' | { error: string }>>({});
+	setContext('contextCompactions', contextCompactions);
+	let compactionChatId = '';
+	$: if (compactionChatId !== $chatId) {
+		contextCompactions.set({});
+		compactionChatId = $chatId;
+	}
 
 	let chat: any = null;
 	let tags = [];
@@ -1310,40 +1317,21 @@
 		}
 	};
 
-	const dismissContextCompactionToast = () => {
-		if (contextCompactionToastId !== null) {
-			toast.dismiss(contextCompactionToastId);
-			contextCompactionToastId = null;
-		}
+	const clearContextCompaction = (messageId: string) => {
+		const next = { ...$contextCompactions };
+		delete next[messageId];
+		contextCompactions.set(next);
 	};
 
-	const handleContextCompactionStatus = (status) => {
-		if (status?.action !== 'context_compaction') {
-			return;
-		}
-
-		if (status?.done) {
-			if (contextCompactionToastId !== null) {
-				if (status?.error) {
-					toast.error($i18n.t('Context compaction failed'), {
-						id: contextCompactionToastId,
-						duration: 3000
-					});
-				} else {
-					toast.success($i18n.t('Context compacted'), {
-						id: contextCompactionToastId,
-						duration: 1800
-					});
-				}
-				contextCompactionToastId = null;
-			}
-			return;
-		}
-
-		if (contextCompactionToastId === null) {
-			contextCompactionToastId = toast.loading($i18n.t('Compacting context'), {
-				duration: Infinity
-			});
+	const handleContextCompactionStatus = (status, messageId: string) => {
+		if (status?.action !== 'context_compaction') return;
+		if (status.done && !status.error) {
+			clearContextCompaction(messageId);
+		} else {
+			$contextCompactions = {
+				...$contextCompactions,
+				[messageId]: status.error ? { error: $i18n.t('Context compaction failed') } : 'in_progress'
+			};
 		}
 	};
 
@@ -1508,6 +1496,10 @@
 		const interactionType = event?.data?.type;
 		const interactionData = event?.data?.data;
 		if (interactionType === 'request:interaction:done') {
+			if (eventInteractionId && eventInteractionId === interactionData?.interaction_id) {
+				showEventConfirmation = false;
+				eventInteractionId = null;
+			}
 			browserInteractions = browserInteractions.filter(
 				(item) => item.id !== interactionData?.interaction_id
 			);
@@ -1519,7 +1511,7 @@
 			(interactionType === 'confirmation' && interactionData?.tool_call)
 		) {
 			if (!cb) return;
-			if (event.chat_id !== $chatId || !history.messages[event.message_id]) {
+			if (event.chat_id !== $chatId) {
 				cb({ status: 'cancelled', answers: {} });
 				return;
 			}
@@ -1589,7 +1581,7 @@
 			let message = history.messages[event.message_id];
 			if (message) message = { ...message };
 
-			if (message) {
+			if (message || type === 'confirmation' || type === 'input') {
 				const data = event?.data?.data ?? null;
 
 				queueMicrotask(() => bridge?.update());
@@ -1603,7 +1595,8 @@
 					if (data?.checkpoint_message_id && history.messages[data.checkpoint_message_id]) {
 						history.messages[data.checkpoint_message_id].contextSummary = data.context_summary;
 					}
-					handleContextCompactionStatus(data);
+					handleContextCompactionStatus(data, event.message_id);
+					autoScrollToBottom();
 				} else if (type === 'chat:active') {
 					if (!data?.active) {
 						taskIds = null;
@@ -1633,7 +1626,7 @@
 					}
 					message.bridgeCancelled = true;
 					bridgeCancellations.get(event.message_id)?.();
-					if (!event.shared) dismissContextCompactionToast();
+					clearContextCompaction(event.message_id);
 					if (data?.output) {
 						message.output = data.output;
 					}
@@ -1642,6 +1635,7 @@
 						// Set all response messages to done
 						for (const messageId of history.messages[message.parentId].childrenIds) {
 							history.messages[messageId].done = true;
+							clearContextCompaction(messageId);
 						}
 						message.done = true;
 						await processNextInQueue($chatId);
@@ -1678,7 +1672,7 @@
 						message.done = true;
 					} else handleOpenAIError(data.error, message);
 					if (!event.shared && !responseCompleted) {
-						dismissContextCompactionToast();
+						clearContextCompaction(message.id);
 						if (event.message_id === history.currentId) {
 							await processNextInQueue(event.chat_id);
 						}
@@ -1761,6 +1755,7 @@
 					}
 				} else if (type === 'confirmation') {
 					eventCallback = cb;
+					eventInteractionId = data.interaction_id ?? null;
 
 					eventConfirmationInput = false;
 					showEventConfirmation = true;
@@ -1782,6 +1777,7 @@
 					}
 				} else if (type === 'input') {
 					eventCallback = cb;
+					eventInteractionId = data.interaction_id ?? null;
 
 					eventConfirmationInput = true;
 					showEventConfirmation = true;
@@ -1798,7 +1794,7 @@
 					console.log('Unknown message type', data);
 				}
 
-				history.messages[event.message_id] = message;
+				if (message) history.messages[event.message_id] = message;
 			}
 		} else {
 			// Non-active chat completion: queue stays in the global store.
@@ -1842,6 +1838,7 @@
 					eventConfirmationInput = false;
 					eventConfirmationTitle = $i18n.t('Confirm Prompt from Embed');
 					eventConfirmationMessage = prompt;
+					eventInteractionId = null;
 					eventCallback = async (confirmed: boolean) => {
 						if (confirmed) {
 							await tick();
@@ -1875,6 +1872,7 @@
 					eventConfirmationInput = false;
 					eventConfirmationTitle = $i18n.t('Confirm Prompt from Embed');
 					eventConfirmationMessage = event.data.text;
+					eventInteractionId = null;
 					eventCallback = async (confirmed: boolean) => {
 						if (confirmed) {
 							await tick();
@@ -2034,7 +2032,7 @@
 				$socket?.off('disconnect', clearTyping);
 				$socket?.off('disconnect', clearPresence);
 				$socket?.off('disconnect', cancelBrowserInteractions);
-				dismissContextCompactionToast();
+				contextCompactions.set({});
 				audioQueueInstance?.destroy();
 				audioQueue.set(null);
 			} catch (e) {
@@ -3546,9 +3544,10 @@
 
 		if (done) {
 			message.done = true;
+			if ($contextCompactions[message.id] === 'in_progress') clearContextCompaction(message.id);
 			if (shared) return;
 			if (message.error) {
-				dismissContextCompactionToast();
+				clearContextCompaction(message.id);
 				bridge?.update();
 				await processNextInQueue(chatId);
 				return;
@@ -3686,15 +3685,19 @@
 		}
 
 		const model = atSelectedModel?.id ?? selectedModels.find((modelId) => modelId);
-		const toastId = toast.loading($i18n.t('Compacting context...'));
+		// Preserve the former toast translation for i18n extraction.
+		// const toastId = toast.loading($i18n.t('Compacting context...'));
+		const compactChatId = $chatId;
+		const compactMessageId = history.currentId;
+		if ($contextCompactions[compactMessageId] === 'in_progress') return;
+		$contextCompactions = { ...$contextCompactions, [compactMessageId]: 'in_progress' };
 
 		try {
-			const result = await compactChatById(localStorage.token, $chatId, model);
+			const result = await compactChatById(localStorage.token, compactChatId, model);
+			if ($chatId !== compactChatId) return;
 			serverContextUsage = result?.context_usage ?? serverContextUsage;
 
-			if (result?.compacted) {
-				toast.success($i18n.t('Context compacted'), { id: toastId });
-			} else {
+			if (!result?.compacted) {
 				const skippedReason =
 					result?.reason === 'too_short'
 						? $i18n.t('Chat is too short to compact')
@@ -3703,13 +3706,20 @@
 							: result?.reason === 'disabled'
 								? $i18n.t('Context compaction is disabled')
 								: $i18n.t('Nothing to compact');
-				toast.message(skippedReason, { id: toastId });
+				toast.message(skippedReason);
 			}
 
 			await loadChat();
+			clearContextCompaction(compactMessageId);
 		} catch (error) {
-			const message = error?.detail ?? error?.message ?? $i18n.t('Context compaction failed');
-			toast.error(message, { id: toastId });
+			if ($chatId === compactChatId) {
+				$contextCompactions = {
+					...$contextCompactions,
+					[compactMessageId]: {
+						error: String(error?.detail ?? error?.message ?? $i18n.t('Context compaction failed'))
+					}
+				};
+			}
 		} finally {
 			messageInput?.focus({ preventScroll: true });
 		}
@@ -4611,6 +4621,7 @@
 			if (responseMessage?.parentId && history.messages[responseMessage.parentId]) {
 				for (const messageId of history.messages[responseMessage.parentId].childrenIds) {
 					history.messages[messageId].done = true;
+					clearContextCompaction(messageId);
 				}
 			}
 

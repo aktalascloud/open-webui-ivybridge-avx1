@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 import redis
 import requests
 from authlib.integrations.starlette_client import OAuth
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool, TypeAdapter
 
 from open_webui.env import (
     USE_SLIM,
@@ -1745,6 +1745,12 @@ except Exception as e:
 
 DEFAULT_INTERFACE_SETTINGS = default_interface_settings if isinstance(default_interface_settings, dict) else {}
 
+try:
+    UI_VISIBILITY = TypeAdapter(dict[str, StrictBool]).validate_json(os.getenv('UI_VISIBILITY', '{}'))
+except Exception as e:
+    log.exception(f'Error loading UI_VISIBILITY: {e}')
+    UI_VISIBILITY = {}
+
 DEFAULT_USER_ROLE = os.getenv('DEFAULT_USER_ROLE', 'pending')
 
 DEFAULT_GROUP_ID = os.getenv('DEFAULT_GROUP_ID', '')
@@ -1784,6 +1790,10 @@ USER_PERMISSIONS_WORKSPACE_MODELS_IMPORT = (
 
 USER_PERMISSIONS_WORKSPACE_MODELS_EXPORT = (
     os.getenv('USER_PERMISSIONS_WORKSPACE_MODELS_EXPORT', 'False').lower() == 'true'
+)
+
+USER_PERMISSIONS_WORKSPACE_MODELS_HIDDEN = (
+    os.getenv('USER_PERMISSIONS_WORKSPACE_MODELS_HIDDEN', 'False').lower() == 'true'
 )
 
 USER_PERMISSIONS_WORKSPACE_PROMPTS_IMPORT = (
@@ -1978,6 +1988,7 @@ DEFAULT_USER_PERMISSIONS = {
         'skills': USER_PERMISSIONS_WORKSPACE_SKILLS_ACCESS,
         'models_import': USER_PERMISSIONS_WORKSPACE_MODELS_IMPORT,
         'models_export': USER_PERMISSIONS_WORKSPACE_MODELS_EXPORT,
+        'models_hidden': USER_PERMISSIONS_WORKSPACE_MODELS_HIDDEN,
         'prompts_import': USER_PERMISSIONS_WORKSPACE_PROMPTS_IMPORT,
         'prompts_export': USER_PERMISSIONS_WORKSPACE_PROMPTS_EXPORT,
         'tools_import': USER_PERMISSIONS_WORKSPACE_TOOLS_IMPORT,
@@ -3186,6 +3197,7 @@ DEFAULT_CONFIG = {
     'ui.default_models': DEFAULT_MODELS,
     'ui.default_pinned_models': DEFAULT_PINNED_MODELS,
     'ui.default_interface_settings': DEFAULT_INTERFACE_SETTINGS,
+    'ui.visibility': UI_VISIBILITY,
     'ui.i18n': {},
     'ui.prompt_suggestions': DEFAULT_PROMPT_SUGGESTIONS,
     'ui.prompt_suggestions_i18n': DEFAULT_PROMPT_SUGGESTIONS_I18N,

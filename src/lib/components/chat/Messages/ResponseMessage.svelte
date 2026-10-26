@@ -13,6 +13,8 @@
 	import type { i18n as i18nType, t } from 'i18next';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
+	const contextCompactions =
+		getContext<Writable<Record<string, 'in_progress' | { error: string }>>>('contextCompactions');
 
 	const dispatch = createEventDispatcher();
 
@@ -27,7 +29,8 @@
 		settings,
 		temporaryChatEnabled,
 		TTSWorker,
-		user
+		user,
+		visibleControls
 	} from '$lib/stores';
 	import { synthesizeOpenAISpeech } from '$lib/apis/audio';
 	import { imageGenerations } from '$lib/apis/images';
@@ -60,6 +63,7 @@
 	import Citations from './Citations.svelte';
 	import CodeExecutions from './CodeExecutions.svelte';
 	import ContentRenderer from './ContentRenderer.svelte';
+	import ContextCompactionLabel from './ContextCompactionLabel.svelte';
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
 	import FileItem from '$lib/components/common/FileItem.svelte';
 	import FollowUps from './ResponseMessage/FollowUps.svelte';
@@ -77,6 +81,7 @@
 		model: string;
 		content: string;
 		output?: OutputItem[];
+		contextSummary?: string;
 		files?: { type: string; url: string }[];
 		timestamp: number;
 		role: string;
@@ -127,6 +132,7 @@
 	export let chatId = '';
 	export let history;
 	export let messageId;
+	$: compactionStatus = $contextCompactions?.[messageId];
 	export let selectedModels = [];
 
 	let messageSource = history.messages[messageId];
@@ -711,6 +717,10 @@
 				</Name>
 			{/if}
 
+			{#if message.contextSummary && !compactionStatus}
+				<ContextCompactionLabel summary={message.contextSummary} {compactPreview} />
+			{/if}
+
 			<div>
 				<div class="chat-{message.role} w-full min-w-full">
 					<div>
@@ -915,7 +925,11 @@
 								/>
 							{/if}
 
-							{#if !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
+							{#if compactionStatus}
+								<ContextCompactionLabel status={compactionStatus} {compactPreview} />
+							{/if}
+
+							{#if !compactionStatus && !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
 								<div class="text-[0.9375rem] leading-relaxed">
 									<span
 										class="inline-block w-[0.125rem] h-3.5 bg-gray-400 dark:bg-gray-500 ml-0.5 animate-cursor-pulse align-text-bottom"
@@ -1191,7 +1205,7 @@
 									</Tooltip>
 								{/if}
 
-								{#if message.usage}
+								{#if message.usage && $visibleControls['chat.usage']}
 									{@const usage = JSON.stringify(message.usage, null, 2)
 										.replace(/"([^(")"]+)":/g, '$1:')
 										.slice(1, -1)
@@ -1247,7 +1261,7 @@
 									</Tooltip>
 								{/if}
 
-								{#if $user && message.done && forkHandler && ($user?.role === 'admin' || ($user?.permissions?.chat?.import ?? true))}
+								{#if $user && message.done && forkHandler && ($user?.role === 'admin' || ($user?.permissions?.chat?.import ?? true)) && $visibleControls['chat.fork']}
 									<Tooltip content={$i18n.t('Fork chat')} placement="bottom">
 										<button
 											aria-label={$i18n.t('Fork chat')}

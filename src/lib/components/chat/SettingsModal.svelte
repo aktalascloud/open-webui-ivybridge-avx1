@@ -9,7 +9,7 @@
 	import { getContext, tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import { toast } from 'svelte-sonner';
-	import { config, mobile, models, settings, user } from '$lib/stores';
+	import { config, mobile, models, settings, user, visibleControls } from '$lib/stores';
 	import type { SettingsModalRequest } from '$lib/stores';
 	import { getUserSettings, updateUserSettings } from '$lib/apis/users';
 	import { getBackendConfig, getModels as _getModels } from '$lib/apis';
@@ -415,6 +415,10 @@
 					($user?.permissions?.chat?.tts ?? true) ||
 					($user?.permissions?.chat?.call ?? true)
 				);
+			}
+
+			if (tab.id === 'usage') {
+				return $visibleControls['settings.usage'];
 			}
 
 			if (tab.id === 'personalization') {
@@ -841,7 +845,10 @@
 	</nav>
 
 	<div class="flex-1 min-w-0 min-h-0 p-4 md:px-5 flex flex-col">
-		<div class="flex-1 min-h-0 overflow-hidden">
+		<div
+			class="flex-1 min-h-0 overflow-hidden"
+			id={isAdminTab(selectedTab) ? adminTabPanelId(selectedTab) : undefined}
+		>
 			{#if selectedTab === 'general'}
 				<General
 					{getModels}

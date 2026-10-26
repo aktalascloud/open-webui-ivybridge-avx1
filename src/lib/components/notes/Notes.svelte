@@ -19,7 +19,15 @@
 	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
 
 	import { goto } from '$app/navigation';
-	import { WEBUI_NAME, config, user, pinnedNotes, mobile, showSidebar } from '$lib/stores';
+	import {
+		WEBUI_NAME,
+		config,
+		user,
+		pinnedNotes,
+		mobile,
+		showSidebar,
+		settings
+	} from '$lib/stores';
 	import {
 		createNewNote,
 		deleteNoteById,
@@ -606,6 +614,7 @@
 									<div
 										class="{groupedNotes.length - 1 !== idx ? 'mb-3' : ''} gap-y-0.5 flex flex-col"
 									>
+										<!-- Preserve the former row label for i18n extraction: $i18n.t('Open note') -->
 										{#each notesList as note, idx (note.id)}
 											<div
 												class="group flex min-h-8 w-full items-center gap-2 rounded-xl px-2 py-[0.375rem] text-left transition hover:bg-gray-50 focus-within:bg-gray-50 dark:hover:bg-gray-900 dark:focus-within:bg-gray-900"
@@ -669,7 +678,9 @@
 													{#if shiftKey}
 														<Tooltip content={$i18n.t('Delete')}>
 															<button
-																class="flex size-5 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+																class="flex {($settings?.highContrastMode ?? false)
+																	? 'size-6'
+																	: 'size-5'} shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
 																type="button"
 																aria-label={$i18n.t('Delete')}
 																on:click={(e) => {
@@ -721,7 +732,9 @@
 															}}
 														>
 															<button
-																class="flex size-5 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+																class="flex {($settings?.highContrastMode ?? false)
+																	? 'size-6'
+																	: 'size-5'} shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
 																type="button"
 																aria-label={$i18n.t('Note Menu')}
 																on:click={(e) => {
@@ -762,7 +775,10 @@
 													{#if shiftKey}
 														<Tooltip content={$i18n.t('Delete')}>
 															<button
-																class="absolute right-1 top-1 flex size-5 shrink-0 items-center justify-center rounded text-gray-400 transition hover:bg-gray-50/40 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/4 dark:hover:text-gray-400"
+																class="absolute right-1 top-1 flex {($settings?.highContrastMode ??
+																false)
+																	? 'size-6'
+																	: 'size-5'} shrink-0 items-center justify-center rounded text-gray-400 transition hover:bg-gray-50/40 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/4 dark:hover:text-gray-400"
 																type="button"
 																aria-label={$i18n.t('Delete')}
 																on:click={(e) => {
@@ -810,7 +826,10 @@
 															}}
 														>
 															<button
-																class="absolute right-1 top-1 flex size-5 shrink-0 items-center justify-center rounded text-gray-400 transition hover:bg-gray-50/40 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/4 dark:hover:text-gray-400"
+																class="absolute right-1 top-1 flex {($settings?.highContrastMode ??
+																false)
+																	? 'size-6'
+																	: 'size-5'} shrink-0 items-center justify-center rounded text-gray-400 transition hover:bg-gray-50/40 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/4 dark:hover:text-gray-400"
 																type="button"
 																aria-label={$i18n.t('Note Menu')}
 															>

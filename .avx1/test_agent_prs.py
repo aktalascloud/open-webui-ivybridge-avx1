@@ -70,19 +70,57 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result,content)
         self.assertEqual(rpc.call_args.kwargs['read_timeout_seconds'],math.inf)
 
+    def sharing(self, permissions):
+        path=Path('utils/access_control/__init__.py')
+        tree=ast.parse((ROOT/path).read_text('utf-8'))
+        policy=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_SHARING_PERMISSION_KEYS' for t in n.targets))
+        class Denied(Exception):
+            def __init__(self,status_code,detail):self.status_code=status_code;super().__init__(detail)
+        space={'_SHARING_PERMISSION_KEYS':ast.literal_eval(policy),'normalize_access_grants':lambda grants:[dict(g) for g in grants],
+               'strip_anyone_access_grants':lambda grants:[g for g in grants if g['principal_type']!='anyone'],
+               'get_permissions':AsyncMock(return_value=permissions),'HTTPException':Denied}
+        call=function(path,'filter_allowed_access_grants',space)
+        return call,space,Denied
+
     async def test_api_sharing_permission_and_admin_behavior(self):
         grants=[{'principal_type':'user','principal_id':'synthetic-other','permission':'read'}]
         for role,allowed,expected in [('user',False,[]),('user',True,grants),('admin',False,grants)]:
-            permission=AsyncMock(side_effect=lambda uid,key,defaults,db=None:allowed if key=='sharing.tools' else True)
-            space={'has_anyone_read_access_grant':lambda _:False,'has_public_read_access_grant':lambda _:False,
-                   'has_public_write_access_grant':lambda _:False,'has_user_access_grant':lambda _:True,'has_permission':permission}
-            call=function(Path('utils/access_control/__init__.py'),'filter_allowed_access_grants',space)
-            result=await call({},'synthetic-user',role,grants,'sharing.public_tools',sharing_permission_key='sharing.tools')
-            self.assertEqual(result,expected)
-            if role=='admin':permission.assert_not_awaited()
+            call,space,_=self.sharing({'sharing':{'tools':allowed},'access_grants':{'allow_users':True}})
+            self.assertEqual(await call({},'synthetic-user',role,grants,resource_type='tool'),expected)
+            if role=='admin':space['get_permissions'].assert_not_awaited()
 
     async def test_legacy_positional_database_parameter_stays_compatible(self):
-        call=function(Path('utils/access_control/__init__.py'),'filter_allowed_access_grants',{})
-        self.assertEqual(await call({},'synthetic','user',[],'sharing.public_tools',None,object()),[])
+        call,space,_=self.sharing({'sharing':{'tools':True},'access_grants':{'allow_users':True}})
+        database=object();grants=[{'principal_type':'user','principal_id':'synthetic-other','permission':'read'}]
+        self.assertEqual(await call({},'synthetic','user',grants,'sharing.public_tools',None,database),grants)
+        self.assertIs(space['get_permissions'].call_args.kwargs['db'],database)
+
+    async def test_public_and_group_audiences_cannot_bypass_permissions(self):
+        grants=[{'principal_type':'user','principal_id':'*','permission':'read'},
+                {'principal_type':'group','principal_id':'group-1','permission':'write'},
+                {'principal_type':'user','principal_id':'user-1','permission':'read'}]
+        call,_,_=self.sharing({'sharing':{'tools':True,'public_tools':False},'access_grants':{'allow_users':True,'allow_groups':False}})
+        self.assertEqual(await call({},'synthetic','user',grants,'tool'),grants[2:])
+
+    async def test_resource_policy_rejects_mismatch_and_unknown_type(self):
+        call,_,_=self.sharing({})
+        for kind,sharing in [('unknown',None),('tool','sharing.models')]:
+            with self.assertRaises(ValueError):
+                await call({},'synthetic','admin',[],kind,sharing_permission_key=sharing)
+
+    async def test_unsupported_public_or_anonymous_audience_is_removed_even_for_admin(self):
+        call,_,_=self.sharing({})
+        grants=[{'principal_type':'anyone','principal_id':'*','permission':'read'},
+                {'principal_type':'user','principal_id':'*','permission':'read'},
+                {'principal_type':'user','principal_id':'user-1','permission':'read'}]
+        self.assertEqual(await call({},'synthetic','admin',grants,'folder'),grants[2:])
+
+    async def test_update_validation_denies_unauthorized_changes_instead_of_silently_stripping(self):
+        call,space,Denied=self.sharing({'sharing':{'tools':False},'access_grants':{'allow_users':True}})
+        validate=function(Path('utils/access_control/__init__.py'),'validate_access_grants',space)
+        grants=[{'principal_type':'user','principal_id':'other','permission':'read'}]
+        with self.assertRaises(Denied) as error:await validate({},'synthetic','user',grants,'tool')
+        self.assertEqual(error.exception.status_code,403)
+        self.assertEqual(grants[0]['principal_id'],'other')
 
 if __name__=='__main__':unittest.main()
