@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 import types
+import time
 import unittest
 from unittest.mock import AsyncMock
 ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
@@ -28,10 +29,10 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
         async def target(**kwargs):captured.append(kwargs);return 'ok'
         async def update(function,extra_params):return function
         space={'resolve_tool_call':lambda *_:None,'JSONCodec':json,'ast':ast,'log':types.SimpleNamespace(debug=lambda *_:None),
-               'is_saved_chat_id':lambda _:True,'get_updated_tool_function':update}
+               'is_saved_chat_id':lambda _:True,'get_updated_tool_function':update,'time':time}
         call=function(Path('utils/middleware.py'),'execute_tool_call',space)
         tool={'type':kind,'callable':target,'spec':{'parameters':spec}}
-        result=await call({'messages':[]},{'tools':{'demo':tool}},None,{'function':{'name':'demo','arguments':json.dumps(params)}})
+        result=await call({'messages':[]},{'tools':{'demo':tool}},None,{'type':'function_call','name':'demo','arguments':json.dumps(params),'call_id':'fixture-call'})
         self.assertEqual(result[1],'ok');return captured[0]
 
     async def test_native_mcp_alternative_schema_keeps_arguments(self):
@@ -60,6 +61,14 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
             session=types.SimpleNamespace(call_tool=AsyncMock(return_value=reply))
             call=function(Path('utils/mcp/client.py'),'call_tool',{'AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER':None,'JSONCodec':json,'math':math})
             with self.assertRaisesRegex(Exception,expected):await call(types.SimpleNamespace(client=session),'demo',{})
+
+    async def test_ephemeral_native_call_cannot_execute_without_explicit_approval(self):
+        target=AsyncMock(return_value='must not execute')
+        call=function(Path('utils/middleware.py'),'execute_tool_call',{'JSONCodec':json,'ast':ast,
+                      'is_saved_chat_id':lambda _:False,'log':types.SimpleNamespace(debug=lambda *_:None)})
+        metadata={'params':{'tool_approval_mode':'ask'},'tools':{'demo':{'type':'function','callable':target,'spec':{'parameters':{'properties':{}}}}}}
+        result=await call({'messages':[]},metadata,None,{'type':'function_call','name':'demo','arguments':'{}'})
+        self.assertIn('not approved',result[1]);target.assert_not_awaited()
 
     async def test_mcp_success_content_remains_unchanged(self):
         content=[{'type':'text','text':'[1, 2]'}]
