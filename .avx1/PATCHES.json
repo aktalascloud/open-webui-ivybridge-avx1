@@ -94,5 +94,10 @@
     "id": "WEB-016",
     "description": "Adapt real native/MCP regression tests to the upstream saved function_call item shape and retain explicit approval checks; translate new session analytics and controls into Russian.",
     "source": "Upstream 0.12.4 development plus local compatibility/translation maintenance; no unmeasured speed claim."
+  },
+  {
+    "id": "WEB-017",
+    "description": "Keep empty chat searches compatible with lightweight chat-list projections instead of dereferencing an absent full chat blob. Preserve nonempty content snippets and owner-scoped queries without fetching extra histories.",
+    "source": "Local regression found by the real Conduit SDK canary against WebUI 0.12.4; actual route tests cover lightweight and full-history rows."
   }
 ]

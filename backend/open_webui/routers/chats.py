@@ -965,7 +965,7 @@ async def search_user_chats(
                 updated_at=chat.updated_at,
                 created_at=chat.created_at,
                 last_read_at=chat.last_read_at,
-                snippet=chat_search_snippet(chat.chat, search_text),
+                snippet=chat_search_snippet(getattr(chat, 'chat', None) or {}, search_text),
                 archived=chat.archived,
             )
         )

@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
 
 def function(path,name,namespace,legacy=False):
     tree=ast.parse((ROOT/path).read_text('utf-8'))
-    node=copy.deepcopy(next(n for n in ast.walk(tree) if isinstance(n,ast.AsyncFunctionDef) and n.name==name))
+    node=copy.deepcopy(next(n for n in ast.walk(tree) if isinstance(n,(ast.AsyncFunctionDef,ast.FunctionDef)) and n.name==name))
     node.decorator_list=[];node.returns=None
     for arg in [*node.args.posonlyargs,*node.args.args,*node.args.kwonlyargs]:arg.annotation=None
     if legacy:
@@ -103,6 +103,29 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
             if not reply.get('truncated'):break
             self.assertEqual(reply['next_offset'],offset+reply['returned_chars']);offset=reply['next_offset']
         self.assertEqual(''.join(pieces),text)
+
+    async def search_row(self, text, raw_history=False):
+        fields={'id':'fixture-chat','title':'Fixture','created_at':1,'updated_at':2,'last_read_at':0,'archived':False}
+        if raw_history:fields['chat']={'messages':[{'content':'hello needle'}]}
+        model=types.SimpleNamespace(**fields)
+        query=AsyncMock(return_value=[model])
+        space={'Depends':lambda function:None,'get_verified_user':lambda:None,'get_async_session':lambda:None,
+               'Chats':types.SimpleNamespace(get_chats_by_user_id_and_search_text=query),
+               'chat_search_content_text':lambda value:value.strip(),'chat_search_terms':lambda value:[],
+               'ChatTitleIdResponse':lambda **value:value,'add_active_state_to_chat_list':AsyncMock(side_effect=lambda request,rows:rows)}
+        function(Path('routers/chats.py'),'chat_search_snippet',space)
+        call=function(Path('routers/chats.py'),'search_user_chats',space)
+        result=await call(object(),text,user=types.SimpleNamespace(id='fixture-user'),db=object())
+        self.assertEqual(query.call_args.args[0],'fixture-user')
+        return result
+
+    async def test_empty_chat_search_accepts_lightweight_rows_without_chat_blob(self):
+        result=await self.search_row('')
+        self.assertEqual(result[0]['id'],'fixture-chat');self.assertIsNone(result[0]['snippet'])
+
+    async def test_nonempty_chat_search_preserves_content_snippets(self):
+        result=await self.search_row('needle',raw_history=True)
+        self.assertIn('needle',result[0]['snippet'])
 
     def sharing(self, permissions):
         path=Path('utils/access_control/__init__.py')
