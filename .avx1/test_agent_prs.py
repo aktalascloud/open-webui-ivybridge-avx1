@@ -6,8 +6,9 @@ import math
 from pathlib import Path
 import types
 import time
+import sys
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
 
 def function(path,name,namespace,legacy=False):
@@ -78,6 +79,30 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
         result=await call(types.SimpleNamespace(client=types.SimpleNamespace(call_tool=rpc)),'demo',{})
         self.assertEqual(result,content)
         self.assertEqual(rpc.call_args.kwargs['read_timeout_seconds'],math.inf)
+
+    async def file_view(self, content, **options):
+        file=types.SimpleNamespace(id='fixture',filename='fixture.txt',data={'content':content},updated_at=0,created_at=0)
+        module=types.ModuleType('open_webui.models.files');module.Files=types.SimpleNamespace(get_file_by_id=AsyncMock(return_value=file))
+        space={'JSONCodec':json,'VIEW_FILE_DEFAULT_MAX_CHARS':50,'VIEW_FILE_MAX_CHARS':100,
+               '_has_read_access_to_file':AsyncMock(return_value=True),'log':types.SimpleNamespace(exception=lambda *_:None)}
+        call=function(Path('tools/builtin.py'),'view_file',space)
+        with patch.dict(sys.modules,{'open_webui.models.files':module}):
+            return json.loads(await call('fixture',__request__=object(),__user__={'id':'fixture-user'},**options))
+
+    async def test_file_end_line_without_start_is_respected(self):
+        reply=await self.file_view('first\nsecond\nthird',end_line=2)
+        self.assertEqual(reply['showing_lines'],'1-2');self.assertEqual(reply['next_start_line'],3)
+        self.assertNotIn('third',reply['content'])
+
+    async def test_numbered_file_pagination_does_not_skip_original_characters(self):
+        text='alpha\nbeta\ngamma\ndelta';offset=0;pieces=[]
+        while offset<len(text):
+            reply=await self.file_view(text,offset=offset,max_chars=5,line_numbers=True)
+            self.assertLessEqual(reply['returned_chars'],5)
+            pieces.append('\n'.join(line.partition(': ')[2] for line in reply['content'].split('\n')))
+            if not reply.get('truncated'):break
+            self.assertEqual(reply['next_offset'],offset+reply['returned_chars']);offset=reply['next_offset']
+        self.assertEqual(''.join(pieces),text)
 
     def sharing(self, permissions):
         path=Path('utils/access_control/__init__.py')

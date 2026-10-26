@@ -60,8 +60,8 @@
   },
   {
     "id": "WEB-012",
-    "description": "Enforce sharing permissions in backend APIs; retain the legacy positional database parameter and administrator behavior.",
-    "source": "reviewed upstream PR; adapted and regression-tested",
+    "description": "Use upstream resource-specific sharing policy and strict update validation, preserving the fork legacy positional database API; regression-check audience restrictions, admin behavior and unauthorized updates.",
+    "source": "Upstream 0.12.4 ACL redesign; local compatibility adapter retained after semantic conflict resolution.",
     "url": "https://github.com/open-webui/open-webui/pull/32991",
     "upstream_head": "ace8830529a88ba02d5a91e2b83e400df5e409cd"
   },
@@ -80,5 +80,19 @@
       "https://github.com/open-webui/open-webui/pull/32888",
       "https://github.com/open-webui/open-webui/pull/32872"
     ]
+  },
+  {
+    "id": "WEB-015",
+    "description": "Fix file viewing end-line ranges and line-numbered paging so agents do not miss requested text.",
+    "source": "Official upstream merges #33154 and #33155.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33154",
+      "https://github.com/open-webui/open-webui/pull/33155"
+    ]
+  },
+  {
+    "id": "WEB-016",
+    "description": "Adapt real native/MCP regression tests to the upstream saved function_call item shape and retain explicit approval checks; translate new session analytics and controls into Russian.",
+    "source": "Upstream 0.12.4 development plus local compatibility/translation maintenance; no unmeasured speed claim."
   }
 ]
