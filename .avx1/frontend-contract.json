@@ -9,14 +9,14 @@
   "helper_sha256": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
-    "src/lib/components/chat/MessageInput.svelte": "4fc2c1fcc03b06f82d0f977e01ff0086c9c538b3cc3c0c0280634e22ac2d5993",
-    "src/lib/components/chat/Chat.svelte": "71e3068bed3f481676dd61121c0bb80dc7d1800cc341f831995dd91cf7ff75c5",
+    "src/lib/components/chat/MessageInput.svelte": "548a35b0a622f23d1898b769180f30166622842d99eb496057144fa021374acb",
+    "src/lib/components/chat/Chat.svelte": "d57876f48e9340fc219d68881b106fb0f6cf413c87706615567a46a60388d7b0",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-    "src/lib/components/chat/Messages/ResponseMessage.svelte": "39bca3ae78072b36618155f15d99078598cceacb67a1c5123806fc5b615c9926",
+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "69bac85f076bef1be1034c0ca24595f22c19dd8e6fb33585760fe2b7c737dcd6",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
   },
   "reviewed_upstream_change": {
-    "upstream_commit": "f21eadbc1abcc1196c61cab4aaf6979a0c3a7635",
-    "scope": "Reviewed deferred terminal uploads and permission predicates in Chat/MessageInput, plus #33028 speech cancellation. Preserve microphone capture after the upload reentrancy guard, message-scoped voice budget, exact speech identity and bridge submission result. New terminal errors are localized. Assistant helper, audio API and call overlay remain unchanged."
+    "upstream_commit": "7b303cf496f22d665ff1f1013a2308de0d74a7a4",
+    "scope": "Reviewed upload-capability predicates and suggestion callbacks, message-scoped context-compaction store, confirmation interaction IDs and visible-control predicates. Existing microphone provenance, message-scoped voice budget, speech identity, helper/audio API/call overlay remain intact. Four real JavaScript helper/suggestion tests passed; packaged Chromium smoke remains mandatory."
   }
 }
