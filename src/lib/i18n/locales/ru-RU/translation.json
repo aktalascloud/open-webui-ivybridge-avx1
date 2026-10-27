@@ -4341,5 +4341,9 @@
 	"Text": "Текст",
 	"Audio": "Аудио",
 	"Video": "Видео",
-	"Embeddings": "Эмбеддинги"
+	"Embeddings": "Эмбеддинги",
+	"settings.admin.documents.embeddingQueryPrefix.label": "Префикс запроса",
+	"settings.admin.documents.embeddingQueryPrefix.description": "Добавляется перед поисковым запросом при создании эмбеддинга. Укажите необходимые пробелы в конце.",
+	"settings.admin.documents.embeddingContentPrefix.label": "Префикс содержимого",
+	"settings.admin.documents.embeddingContentPrefix.description": "Добавляется перед содержимым при создании эмбеддинга. Укажите необходимые пробелы в конце. После изменения переиндексируйте существующие данные."
 }
