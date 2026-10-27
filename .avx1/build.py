@@ -55,6 +55,8 @@ def build_python(project, package, manifest):
     environment = dict(os.environ, CYPRESS_INSTALL_BINARY="0", HUSKY="0", PIP_DISABLE_PIP_VERSION_CHECK="1")
     run(sys.executable, "-m", "pip", "install", "build", "hatchling", "wheel")
     if project == "webui":
+        run('node','--test',ROOT/'.avx1/test_strata_reasoning.mjs',env=environment)
+        run(sys.executable,ROOT/'.avx1/test_strata_reasoning.py')
         run("node", "--experimental-strip-types", "--test", ROOT / ".avx1/test_suggestions.mjs", env=environment)
         run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
         # The reviewed hatch hook uses npm ci and the checked-in lockfile.

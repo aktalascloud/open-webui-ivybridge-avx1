@@ -1,0 +1,17 @@
+{
+  "repository": "TheHubUser4860938/Strata-Mnemosyne",
+  "commit": "2ac28be317c8ecbabc935f6153333506fb80f3e2",
+  "source_path": "serve/server.py",
+  "source_sha256": "a9ec195f01963ba34dd511363f75452ec4bb9eac366afae0416e57923724676e",
+  "ported": [
+    "REASON_AUTO",
+    "reason_auto_pick"
+  ],
+  "license": "MIT",
+  "local_changes": [
+    "stable summation/ties",
+    "Russian keyword normalization in OWUI adapter",
+    "reasoning half of paired profiles; existing answer format retained"
+  ],
+  "memory_store_enabled": false
+}

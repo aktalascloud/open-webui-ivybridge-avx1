@@ -30,7 +30,11 @@ subprocess.run([sys.executable,'-m','playwright','install','chromium'],check=Tru
 from playwright.sync_api import sync_playwright
 with socket.socket() as probe:
     probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
+from strata_reasoning_browser import ReasoningProvider
+reasoning_provider=ReasoningProvider()
 environment=dict(os.environ,DATA_DIR=str(WORK/'browser-smoke-data'),WEBUI_SECRET_KEY='ci-local-browser-fixture-key',
+    OPENAI_API_BASE_URL=reasoning_provider.url,OPENAI_API_BASE_URLS=reasoning_provider.url,
+    OPENAI_API_KEY='ci-fixture-no-model',OPENAI_API_KEYS='ci-fixture-no-model',
     OFFLINE_MODE='true',HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',ENABLE_VERSION_UPDATE_CHECK='false',
     RAG_EMBEDDING_ENGINE='openai',RAG_OPENAI_API_BASE_URL='http://127.0.0.1:1/v1',
     RAG_OPENAI_API_KEY='ci-fixture-no-network',RAG_EMBEDDING_MODEL_AUTO_UPDATE='false',WHISPER_MODEL_AUTO_UPDATE='false')
@@ -59,6 +63,8 @@ try:
         if onboarding.is_visible():onboarding.click()
         form.wait_for(state='visible',timeout=45000)
         if errors:raise RuntimeError('Packaged frontend JavaScript failed: '+errors[0])
+        from strata_reasoning_browser import check_strata_reasoning
+        check_strata_reasoning(browser,f'http://127.0.0.1:{port}',WORK,reasoning_provider)
         browser.close()
     print('CHROMIUM_PACKAGED_LOGIN_RENDERED_NO_PAGE_ERRORS')
 except Exception:
@@ -66,6 +72,7 @@ except Exception:
     print((WORK/'browser-smoke-server.log').read_text('utf-8',errors='replace')[-6000:])
     raise
 finally:
+    reasoning_provider.close()
     process.terminate()
     try:process.wait(timeout=20)
     except subprocess.TimeoutExpired:process.kill();process.wait()

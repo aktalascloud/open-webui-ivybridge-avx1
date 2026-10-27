@@ -1,5 +1,7 @@
 # Open WebUI · Ivy Bridge AVX1
 
+Strata composer control: standard reasoning levels, separate Ultra, and task-based Adaptive using the pinned MIT Mnemosyne selector. It routes the reasoning half of paired profiles; existing answer formatting stays in place. Compatible author models opt in through model metadata; template text and shared memory are not bundled.
+
 [English](README.md) · [Русский](README.ru.md) · [Upstream](https://github.com/open-webui/open-webui) · [Releases](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest)
 
 Windows build for Ivy Bridge. Extended Russian UI and menus.

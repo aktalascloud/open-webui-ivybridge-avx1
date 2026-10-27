@@ -107,5 +107,15 @@
     "urls": [
       "https://github.com/open-webui/open-webui/pull/33218"
     ]
+  },
+  {
+    "id": "WEB-019",
+    "description": "Compact per-model Strata reasoning picker: standard levels, separate author Ultra, and Mnemosyne-based adaptive reasoning with Russian task vocabulary. Provider-boundary copy preserves original chat text, system/tool records, sampling and other models. High/XHigh do not silently activate author Ultra.",
+    "source": "Local user-requested UI/API integration; Mnemosyne selector ported from MIT source pinned in .avx1/mnemosyne-source.json. Existing author template is not redistributed; no Strata/model restart or shared memory store.",
+    "verification": [
+      "Node request/scoping tests",
+      "real OWUI converters and pinned Strata parser/template references, offline",
+      "packaged Chromium save/reload, mock-provider HTTP request, light/dark and mobile checks"
+    ]
   }
 ]

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
+	import { applyStrataReasoning } from '$lib/utils/strataReasoning';
 	import type { TerminalContext } from '$lib/types';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
@@ -4397,12 +4398,12 @@
 				stream: stream,
 				model: model.id,
 				...(messages.length > 0 ? { messages } : {}),
-				params: {
+				params: applyStrataReasoning({
 					...$settings?.params,
 					...Object.fromEntries(Object.entries(params).filter(([, value]) => value !== null)),
 					model_controls: $settings?.params?.model_controls ?? {},
 					stop: getStopTokens()
-				},
+				}, model, $settings.strataReasoningEfforts),
 
 				files: (files?.length ?? 0) > 0 ? files : undefined,
 

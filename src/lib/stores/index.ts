@@ -259,6 +259,7 @@ type OllamaModelDetails = {
 };
 
 type Settings = {
+  strataReasoningEfforts?: Record<string, string>;
 	pinnedModels?: string[];
 	toolServers?: never[];
 	detectArtifacts?: boolean;

@@ -4295,5 +4295,15 @@
 	"Text": "Text",
 	"Audio": "Audio",
 	"Video": "Video",
-	"Embeddings": "Embeddings"
+	"Embeddings": "Embeddings",
+	"Strata reasoning": "Reasoning",
+	"Strata reasoning description": "Per-model reasoning: standard levels, separate author Ultra, or Mnemosyne task-based adaptive reasoning. Explicit prompt tags take precedence.",
+	"Reasoning default": "Default",
+	"Reasoning off": "None",
+	"Reasoning low": "Low",
+	"Reasoning medium": "Medium",
+	"Reasoning high": "High",
+	"Reasoning xhigh": "XHigh",
+	"Reasoning ultra": "Ultra",
+	"Reasoning adaptive": "Adaptive"
 }

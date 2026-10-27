@@ -9,6 +9,7 @@ from urllib.parse import quote, urlparse
 
 import aiofiles
 import aiohttp
+from open_webui.utils.strata_reasoning import apply_strata_reasoning_profile
 from aiocache import cached
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import (
@@ -1478,6 +1479,11 @@ async def generate_chat_completion(
 
     prefix_id = api_config.get('prefix_id', None)
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
+
+    payload = apply_strata_reasoning_profile(
+        payload, author_template=(getattr(getattr(model_info, 'meta', None), 'strata_reasoning_profile', None) == 'davidau'),
+        supported_modes=getattr(getattr(model_info, 'meta', None), 'strata_reasoning_modes', None),
+    )
 
     # Add user info to the payload if the model is a pipeline
     if 'pipeline' in model and model.get('pipeline'):

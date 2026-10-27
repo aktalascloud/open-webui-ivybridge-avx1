@@ -49,6 +49,7 @@ jobs:
             .avx1-work/pip-audit.json
             .avx1-work/security-gate.json
             .avx1-work/browser-smoke-server.log
+            .avx1-work/strata-reasoning-*.png
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 3
