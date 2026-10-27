@@ -12,11 +12,11 @@
     "src/lib/components/chat/MessageInput.svelte": "548a35b0a622f23d1898b769180f30166622842d99eb496057144fa021374acb",
     "src/lib/components/chat/Chat.svelte": "d57876f48e9340fc219d68881b106fb0f6cf413c87706615567a46a60388d7b0",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-    "src/lib/components/chat/Messages/ResponseMessage.svelte": "69bac85f076bef1be1034c0ca24595f22c19dd8e6fb33585760fe2b7c737dcd6",
+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "518d64583aa680b353a44b43a87f573b1c57999da0f699cd1819e1f8132e7298",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
   },
   "reviewed_upstream_change": {
-    "upstream_commit": "7b303cf496f22d665ff1f1013a2308de0d74a7a4",
-    "scope": "Reviewed upload-capability predicates and suggestion callbacks, message-scoped context-compaction store, confirmation interaction IDs and visible-control predicates. Existing microphone provenance, message-scoped voice budget, speech identity, helper/audio API/call overlay remain intact. Four real JavaScript helper/suggestion tests passed; packaged Chromium smoke remains mandatory."
+    "upstream_commit": "83437197e",
+    "scope": "Reviewed two ResponseMessage changes: selected browser-kokoro speech engine and hiding empty usage controls. Local speech identity and voice budgets unchanged; packaged Chromium smoke remains required."
   }
 }

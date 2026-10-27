@@ -180,4 +180,36 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.status_code,403)
         self.assertEqual(grants[0]['principal_id'],'other')
 
+class UsageCompactionTests(unittest.TestCase):
+    def usage(self):
+        from numbers import Number
+        tree=ast.parse((ROOT/'utils/response.py').read_text('utf-8'))
+        nodes=[]
+        for node in tree.body:
+            if isinstance(node,(ast.FunctionDef,ast.Assign)):
+                nodes.append(node)
+            if isinstance(node,ast.FunctionDef) and node.name=='merge_usage':break
+        space={'Number':Number}
+        exec(compile(ast.Module(body=nodes,type_ignores=[]),'actual_response_usage','exec'),space)
+        return space['merge_usage']
+
+    def test_tool_loop_keeps_latest_context_size_and_cumulative_totals(self):
+        merge=self.usage()
+        value=merge({'prompt_tokens':100,'completion_tokens':8},
+                    {'prompt_tokens':120,'completion_tokens':12})
+        self.assertEqual((value['input_tokens'],value['output_tokens']),(220,20))
+        self.assertEqual((value['prompt_tokens'],value['completion_tokens']),(120,12))
+        value=merge(value,{'input_tokens':130,'output_tokens':4})
+        self.assertEqual((value['input_tokens'],value['prompt_tokens']),(350,130))
+
+    def test_measured_zero_is_latest_context_size(self):
+        value=self.usage()({'input_tokens':20,'output_tokens':5},
+                          {'input_tokens':0,'output_tokens':0})
+        self.assertEqual((value['input_tokens'],value['prompt_tokens']),(20,0))
+        self.assertEqual(value['completion_tokens'],0)
+
+    def test_missing_provider_usage_keeps_last_known_measurement(self):
+        value=self.usage()({'prompt_tokens':20,'completion_tokens':5},{})
+        self.assertEqual(value['prompt_tokens'],20)
+
 if __name__=='__main__':unittest.main()

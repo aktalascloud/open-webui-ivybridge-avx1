@@ -4326,5 +4326,20 @@
 	"Recorded sequence": "Записанная последовательность",
 	"Saved order": "Сохранённый порядок",
 	"Saved order only; spacing does not represent elapsed time.": "Только сохранённый порядок; расстояния не отражают прошедшее время.",
-	"Count": "Количество"
+	"Count": "Количество",
+	"Provider details": "Сведения о провайдере",
+	"Reported by the provider.": "Данные предоставлены провайдером.",
+	"Not provided": "Не указано",
+	"None reported": "Нет данных",
+	"Inputs": "Входные данные",
+	"Outputs": "Выходные данные",
+	"Context window": "Контекстное окно",
+	"Provider context": "Контекст провайдера",
+	"Max output": "Максимальный вывод",
+	"Supported parameters": "Поддерживаемые параметры",
+	"{{tokens}} tokens": "{{tokens}} токенов",
+	"Text": "Текст",
+	"Audio": "Аудио",
+	"Video": "Видео",
+	"Embeddings": "Эмбеддинги"
 }

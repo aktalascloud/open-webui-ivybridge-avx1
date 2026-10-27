@@ -99,5 +99,13 @@
     "id": "WEB-017",
     "description": "Keep empty chat searches compatible with lightweight chat-list projections instead of dereferencing an absent full chat blob. Preserve nonempty content snippets and owner-scoped queries without fetching extra histories.",
     "source": "Local regression found by the real Conduit SDK canary against WebUI 0.12.4; actual route tests cover lightweight and full-history rows."
+  },
+  {
+    "id": "WEB-018",
+    "description": "Keep per-call prompt/completion aliases separate from cumulative usage so tool loops do not compact context prematurely; retain local filter/bridge contract. Update generated-image terminal transfer and Russian provider information.",
+    "source": "Official upstream #33218 plus reviewed upstream development snapshot; local actual-function regression tests cover cumulative, latest-call and zero/missing counters.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33218"
+    ]
   }
 ]

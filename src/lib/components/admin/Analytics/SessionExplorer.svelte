@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { getContext, onMount, onDestroy, tick } from 'svelte';
 	import dayjs from 'dayjs';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import ProfilePreview from '$lib/components/channel/Messages/Message/ProfilePreview.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
@@ -64,7 +66,7 @@
 	let detailPanel: HTMLElement;
 	let selectedButton: HTMLElement | null = null;
 	async function selectSession(session: Session, event: MouseEvent) {
-		selectedButton = event.currentTarget as HTMLElement;
+		selectedButton = (event.currentTarget as HTMLTableRowElement).querySelector('button');
 		selected = session;
 		await tick();
 		detailPanel
@@ -289,15 +291,16 @@
 						</thead>
 						<tbody>
 							{#each items as session (session.id)}
+								<!-- The native title button provides keyboard activation; its click bubbles to the row. -->
 								<tr
-									class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+									on:click={(event) => selectSession(session, event)}
+									class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
 									class:bg-gray-50={selected?.id === session.id}
 									class:dark:bg-gray-850={selected?.id === session.id}
 								>
 									<td class="px-2.5 py-1.5">
 										<button
 											type="button"
-											on:click={(event) => selectSession(session, event)}
 											class="text-left block w-full max-w-[12rem] sm:max-w-80 rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-gray-400"
 										>
 											<span
@@ -321,7 +324,29 @@
 										</button>
 									</td>
 									<td class="px-2.5 py-1.5"
-										><span class="block max-w-28 truncate">{session.user_name || '-'}</span></td
+										>{#if session.user_id}
+											<ProfilePreview
+												user={{ id: session.user_id, name: session.user_name }}
+												side="right"
+												align="center"
+												sideOffset={6}
+												className="gap-1.75"
+											>
+												<img
+													src={`${WEBUI_API_BASE_URL}/users/${session.user_id}/profile/image`}
+													alt=""
+													class="size-4 rounded-full object-cover shrink-0"
+													loading="lazy"
+													on:error={(event) => {
+														const image = event.currentTarget as HTMLImageElement;
+														if (!image.src.endsWith('/user.png')) image.src = '/user.png';
+													}}
+												/>
+												<span class="block max-w-28 truncate"
+													>{session.user_name || $i18n.t('User')}</span
+												>
+											</ProfilePreview>
+										{:else}<span>{session.user_name || '-'}</span>{/if}</td
 									>
 									<td
 										class="px-2.5 py-1.5"
