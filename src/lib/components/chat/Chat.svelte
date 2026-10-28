@@ -153,6 +153,9 @@
 	export let embeddedDraftKey = '';
 	export let suggestedPrompts = [];
 	export let selectedText = '';
+	export let notePageId = '';
+	export let noteFiles = [];
+	export let onBeforeNoteSubmit: (() => Promise<void>) | null = null;
 	export let onInsertToNote: ((content: string) => void) | null = null;
 	export let onCloseEmbedded: (() => void) | null = null;
 	export let onNewEmbeddedChat: (() => void | Promise<void>) | null = null;
@@ -259,6 +262,7 @@
 			const fallbackModels = normalizeSelectedModels(selectedModels);
 			if (!equal(fallbackModels, selectedModels)) {
 				selectedModels = fallbackModels;
+				if (!loading && !modelDefaults) setDefaults();
 			}
 		}
 	}
@@ -355,7 +359,8 @@
 	let selectedToolIds: string[] = [];
 	let selectedSkillIds: string[] = [];
 	let selectedFilterIds: string[] = [];
-	let pendingOAuthTools = [];
+	let pendingOAuthTools: { id: string; name: string; serverId: string; authType: string | null }[] =
+		[];
 
 	let imageGenerationEnabled = false;
 	let webSearchEnabled = false;
@@ -822,16 +827,6 @@
 		}
 	};
 
-	let oldSelectedModelIds = [''];
-	$: if (!equal(selectedModelIds, oldSelectedModelIds)) {
-		onSelectedModelIdsChange();
-	}
-
-	const onSelectedModelIdsChange = () => {
-		resetInput();
-		oldSelectedModelIds = structuredClone(selectedModelIds);
-	};
-
 	const mergeFiles = (current, incoming) => {
 		const seen = new Set();
 		return [...(incoming ?? []), ...(current ?? [])].filter((file) => {
@@ -866,10 +861,16 @@
 		}
 	};
 
-	const withSelectedText = (text: string) =>
-		embedded && selectedText?.trim()
-			? `${text}\n\nSelected note text for replace_note_content operations:\n${selectedText.trim()}`
-			: text;
+	const withSelectedText = (text: string) => {
+		if (!embedded) return text;
+		return (
+			text +
+			(notePageId ? `\n\nActive note page_id: ${notePageId}` : '') +
+			(selectedText?.trim()
+				? `\n\nSelected note text for replace_note_content operations:\n${selectedText.trim()}`
+				: '')
+		);
+	};
 	const noteChatDebug = (message: string, data: Record<string, unknown> = {}) => {
 		if (!embedded) return;
 		console.info('[note-chat]', message, {
@@ -895,12 +896,13 @@
 	}
 
 	let saveControlsTimer;
-	$: if (!loading && !$temporaryChatEnabled && $chatId && chatFiles) {
+	$: if (!loading && !$temporaryChatEnabled && $chatId && chatFiles && selectedModels) {
 		clearTimeout(saveControlsTimer);
 		saveControlsTimer = setTimeout(saveControls, 400);
 	}
 
 	const navigateHandler = async () => {
+		modelDefaults = null;
 		cancelBrowserInteractions();
 		bridge?.end();
 		noteChatDebug('navigateHandler start');
@@ -952,9 +954,7 @@
 				await processNextInQueue(chatIdProp);
 			}
 
-			if (!(await restoreChatInput(storageChatInput))) {
-				await setDefaults();
-			}
+			await setDefaults(await restoreChatInput(storageChatInput));
 
 			messageInput?.focus({ preventScroll: true });
 		} else if (!embedded) {
@@ -969,6 +969,7 @@
 	};
 
 	const initEmbeddedDraft = async () => {
+		modelDefaults = null;
 		terminalContext = null;
 		clearTimeout(saveControlsTimer);
 		await saveControls();
@@ -1100,153 +1101,151 @@
 		lastTerminalSkillSelector = $selectedTerminalId;
 	}
 
+	let defaultsModelIds: string[] = [];
+	let modelDefaults: Record<string, any> | null = null;
 	let settingDefaults: Promise<void> | null = null;
-	const setDefaults = async () => {
-		// Concurrent callers must wait, or the earlier run overwrites what they write afterwards
-		if (settingDefaults) return settingDefaults;
+
+	$: if (!loading && modelDefaults && !equal(selectedModelIds, defaultsModelIds)) {
+		setDefaults(true);
+	}
+
+	const setDefaults = async (preserveSelections = false) => {
+		const modelIds = atSelectedModel ? [atSelectedModel.id] : [...selectedModels];
+		const id = $chatId;
+		while (settingDefaults) await settingDefaults;
 		let resolveDefaults = () => {};
 		settingDefaults = new Promise<void>((resolve) => (resolveDefaults = resolve));
 
 		try {
-			if (!$tools) {
-				tools.set(await getTools(localStorage.token));
-			}
-			if (!$functions) {
-				functions.set(await getFunctions(localStorage.token));
-			}
-			if (!$skills) {
-				skills.set(await getSkills(localStorage.token));
-			}
-			if (selectedModels.length !== 1 && !atSelectedModel) {
-				const comparedModels = selectedModels
-					.filter((id) => id)
-					.map((id) => $models.find((m) => m.id === id));
-				const isSharedDefaultFeature = (feature) =>
-					comparedModels.length > 0 &&
-					comparedModels.every(
-						(model) =>
-							model?.info?.meta?.capabilities?.[feature] &&
-							model?.info?.meta?.defaultFeatureIds?.includes(feature)
-					);
-
-				if (
-					isSharedDefaultFeature('image_generation') &&
-					$config?.features?.enable_image_generation &&
-					($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
-				) {
-					imageGenerationEnabled = true;
-				}
-
-				if (
-					isSharedDefaultFeature('web_search') &&
-					$config?.features?.enable_web_search &&
-					($user?.role === 'admin' || $user?.permissions?.features?.web_search)
-				) {
-					webSearchEnabled = true;
-				}
-
-				if (
-					isSharedDefaultFeature('code_interpreter') &&
-					$config?.features?.enable_code_interpreter &&
-					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-				) {
-					codeInterpreterEnabled = true;
-				}
-
+			if (!$tools) tools.set(await getTools(localStorage.token));
+			if (!$functions) functions.set(await getFunctions(localStorage.token));
+			if (!$skills) skills.set(await getSkills(localStorage.token));
+			if ($tools === null || $functions === null || $skills === null) return;
+			if (
+				id !== $chatId ||
+				!equal(modelIds, atSelectedModel ? [atSelectedModel.id] : selectedModels)
+			)
 				return;
+
+			const currentModels: any[] = modelIds.map((id) => $models.find((model) => model.id === id));
+			if (!currentModels.length || currentModels.some((model) => !model)) return;
+			const supports = (feature: string) =>
+				currentModels.every((model) => model.info?.meta?.capabilities?.[feature] ?? true);
+			const featureAvailable = (feature: 'web_search' | 'image_generation' | 'code_interpreter') =>
+				supports(feature) &&
+				$config?.features?.[`enable_${feature}`] &&
+				($user?.role === 'admin' || $user?.permissions?.features?.[feature]);
+			const defaultFeature = (feature: 'web_search' | 'image_generation' | 'code_interpreter') =>
+				featureAvailable(feature) &&
+				currentModels.every((model) => model.info?.meta?.defaultFeatureIds?.includes(feature));
+			const terminalId = currentModels[0]?.info?.meta?.terminalId;
+			const defaults: Record<string, any> = {
+				selectedToolIds: [
+					...new Set(
+						currentModels.flatMap(
+							(model) =>
+								model.info?.meta?.toolIds?.filter(
+									(id: string) =>
+										selectedToolIds.includes(id) || ($tools as any[]).some((tool) => tool.id === id)
+								) ??
+								($settings as any)?.tools ??
+								[]
+						)
+					)
+				],
+				selectedSkillIds: [
+					...new Set(currentModels.flatMap((model) => model.info?.meta?.skillIds ?? []))
+				].filter(
+					(id) =>
+						selectedSkillIds.includes(id) ||
+						$skills.some((skill) => skill.id === id && skill.is_active)
+				),
+				selectedFilterIds: [
+					...new Set(currentModels.flatMap((model) => model.info?.meta?.defaultFilterIds ?? []))
+				],
+				webSearchEnabled: !!defaultFeature('web_search'),
+				imageGenerationEnabled: !!defaultFeature('image_generation'),
+				codeInterpreterEnabled: !!defaultFeature('code_interpreter'),
+				terminalId:
+					terminalId &&
+					isTerminalAvailable(terminalId) &&
+					currentModels.every((model) => model.info?.meta?.terminalId === terminalId)
+						? terminalId
+						: preserveSelections
+							? null
+							: $selectedTerminalId
+			};
+
+			if (preserveSelections) {
+				const current: Record<string, any> = {
+					selectedToolIds: [...selectedToolIds, ...pendingOAuthTools.map((tool) => tool.id)],
+					selectedSkillIds,
+					selectedFilterIds,
+					webSearchEnabled,
+					imageGenerationEnabled,
+					codeInterpreterEnabled,
+					terminalId: $selectedTerminalId
+				};
+				modelDefaults ??= structuredClone(defaults);
+				for (const key of Object.keys(defaults)) {
+					const previous = modelDefaults[key];
+					if (Array.isArray(previous)) {
+						const added = current[key].filter((id: string) => !previous.includes(id));
+						const removed = previous.filter((id: string) => !current[key].includes(id));
+						// Keep deselected defaults in the baseline so later presets cannot re-enable them.
+						modelDefaults[key] = [
+							...new Set([...removed, ...defaults[key].filter((id: string) => !added.includes(id))])
+						];
+						defaults[key] = [
+							...new Set([...defaults[key].filter((id: string) => !removed.includes(id)), ...added])
+						];
+					} else if (current[key] !== previous) {
+						defaults[key] = current[key];
+					} else {
+						modelDefaults[key] = defaults[key];
+					}
+				}
+			} else {
+				modelDefaults = structuredClone(defaults);
 			}
 
-			const model = atSelectedModel ?? $models.find((m) => m.id === selectedModels[0]);
-			if (model) {
-				// Set Default Tools
-				if (model?.info?.meta?.toolIds) {
-					const defaultIds = [
-						...new Set(
-							[...(model?.info?.meta?.toolIds ?? [])].filter((id) =>
-								$tools.find((t) => t.id === id)
-							)
-						)
-					];
-
-					// Separate unauthenticated OAuth tools
-					const unauthed = [];
-					const authed = [];
-					for (const id of defaultIds) {
-						const tool = $tools.find((t) => t.id === id);
-						if (tool && tool.authenticated === false) {
-							const parts = id.split(':');
-							const serverId = parts.at(-1) ?? id;
-							const authType =
-								parts.length > 1 ? (parts[0] === 'server' ? parts[1] : parts[0]) : null;
-							unauthed.push({ id, name: tool.name ?? id, serverId, authType });
-						} else {
-							authed.push(id);
-						}
-					}
-					selectedToolIds = authed;
-					pendingOAuthTools = unauthed;
-					await continueOAuthRedirect();
-				} else if ($settings?.tools) {
-					selectedToolIds = $settings.tools;
-				} else {
-					selectedToolIds = selectedToolIds.filter((id) => !id.startsWith('direct_server:'));
-				}
-
-				// Set Default Skills
-				if (model?.info?.meta?.skillIds) {
-					selectedSkillIds = [
-						...new Set(
-							[...(model?.info?.meta?.skillIds ?? [])].filter((id) =>
-								($skills ?? []).find((s) => s.id === id && s.is_active)
-							)
-						)
-					];
-				} else {
-					selectedSkillIds = [];
-				}
-
-				// Set Default Filters (Toggleable only)
-				if (model?.info?.meta?.defaultFilterIds) {
-					selectedFilterIds = model.info.meta.defaultFilterIds.filter((id) =>
-						model?.filters?.find((f) => f.id === id)
-					);
-				}
-
-				// Set Default Features
-				if (model?.info?.meta?.defaultFeatureIds) {
-					if (
-						model.info?.meta?.capabilities?.['image_generation'] &&
-						$config?.features?.enable_image_generation &&
-						($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
-					) {
-						imageGenerationEnabled = model.info.meta.defaultFeatureIds.includes('image_generation');
-					}
-
-					if (
-						model.info?.meta?.capabilities?.['web_search'] &&
-						$config?.features?.enable_web_search &&
-						($user?.role === 'admin' || $user?.permissions?.features?.web_search)
-					) {
-						webSearchEnabled = model.info.meta.defaultFeatureIds.includes('web_search');
-					}
-
-					if (
-						model.info?.meta?.capabilities?.['code_interpreter'] &&
-						$config?.features?.enable_code_interpreter &&
-						($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-					) {
-						codeInterpreterEnabled = model.info.meta.defaultFeatureIds.includes('code_interpreter');
-					}
-				}
-
-				// Set Default Terminal — only if the referenced terminal actually exists
-				if (model?.info?.meta?.terminalId) {
-					const tid = model.info.meta.terminalId;
-					if (isTerminalAvailable(tid)) {
-						selectedTerminalId.set(tid);
-					}
-				}
+			defaults.selectedFilterIds = defaults.selectedFilterIds.filter((id: string) =>
+				currentModels.every((model) =>
+					model.filters?.some((filter: { id: string }) => filter.id === id)
+				)
+			);
+			defaults.webSearchEnabled &&= !!featureAvailable('web_search');
+			defaults.imageGenerationEnabled &&= !!featureAvailable('image_generation');
+			defaults.codeInterpreterEnabled &&= !!featureAvailable('code_interpreter');
+			if (!currentModels.some((model) => model.info?.meta?.capabilities?.terminal ?? true)) {
+				defaults.terminalId = null;
 			}
+			if (defaults.terminalId) defaults.codeInterpreterEnabled = false;
+			defaultsModelIds = modelIds;
+			({
+				selectedToolIds,
+				selectedSkillIds,
+				selectedFilterIds,
+				webSearchEnabled,
+				imageGenerationEnabled,
+				codeInterpreterEnabled
+			} = defaults);
+			selectedTerminalId.set(defaults.terminalId);
+
+			pendingOAuthTools = [];
+			selectedToolIds = selectedToolIds.filter((id) => {
+				const tool = ($tools as any[]).find((tool) => tool.id === id);
+				if (tool?.authenticated !== false) return true;
+				const parts = id.split(':');
+				pendingOAuthTools.push({
+					id,
+					name: tool.name ?? id,
+					serverId: parts.at(-1) ?? id,
+					authType: parts.length > 1 ? (parts[0] === 'server' ? parts[1] : parts[0]) : null
+				});
+				return false;
+			});
+			await continueOAuthRedirect();
 		} finally {
 			settingDefaults = null;
 			resolveDefaults();
@@ -2631,6 +2630,9 @@
 	};
 
 	const initNewChat = async () => {
+		modelDefaults = null;
+		clearTimeout(saveControlsTimer);
+		await saveControls();
 		if ($chatId) terminalContext = null;
 		cancelBrowserInteractions();
 		bridge?.end();
@@ -2960,8 +2962,6 @@
 					noteChatDebug('normalized empty selected models after load', { selectedModels });
 				}
 
-				oldSelectedModelIds = structuredClone(selectedModels);
-
 				chatContent.history ??= convertMessagesToHistory(chatContent.messages);
 				// Keep live updates received while the chat and tags were loading.
 				for (const [id, message] of Object.entries(history.messages)) {
@@ -3147,7 +3147,11 @@
 			entry.files.some((file: any) => file.type === 'filesystem')
 		);
 		const queuedMessages =
-			boundary === 0 ? queue.slice(0, 1) : boundary < 0 ? [...queue] : queue.slice(0, boundary);
+			embedded || boundary === 0
+				? queue.slice(0, 1)
+				: boundary < 0
+					? [...queue]
+					: queue.slice(0, boundary);
 		const queuedMessageIds = new Set(queuedMessages.map((m) => m.id));
 		try {
 			const combinedPrompt = queuedMessages.map((m) => m.prompt).join('\n\n');
@@ -3853,6 +3857,14 @@
 			bridge: bridgeRequest = null
 		}: { _raw?: boolean; bridge?: { userMessageId: string; modelId: string } | null } = {}
 	): Promise<BridgeSubmission> => {
+		if (embedded && onBeforeNoteSubmit) {
+			try {
+				await onBeforeNoteSubmit();
+			} catch (error) {
+				toast.error(String(error));
+				return { status: 'rejected' };
+			}
+		}
 		if (processing === 'uploading') return { status: 'deferred' };
 		const microphoneMeta = __assistantMicOrigin.peek(userPrompt);
 		emitTyping(false);
@@ -4056,12 +4068,11 @@
 		_history = structuredClone(_history);
 
 		const responseMessageIds: Record<PropertyKey, string> = {};
-		// If modelId is provided, use it, else use selected model
-		let selectedModelIds = modelId
-			? [modelId]
-			: atSelectedModel !== undefined
-				? [atSelectedModel.id]
-				: selectedModels;
+		if (!modelId && atSelectedModel) {
+			selectedModels = [atSelectedModel.id];
+			atSelectedModel = undefined;
+		}
+		const selectedModelIds = modelId ? [modelId] : selectedModels;
 		if (!modelId && history.messages[parentId]) {
 			history.messages[parentId].models = [...selectedModelIds];
 		}
@@ -4405,7 +4416,11 @@
 					stop: getStopTokens()
 				}, model, $settings.strataReasoningEfforts),
 
-				files: (files?.length ?? 0) > 0 ? files : undefined,
+				files: embedded
+					? [...(files ?? []), ...noteFiles]
+					: (files?.length ?? 0) > 0
+						? files
+						: undefined,
 
 				filter_ids:
 					$config?.features?.enable_functions && selectedFilterIds.length > 0
@@ -4692,7 +4707,8 @@
 				scrollToBottom();
 			}
 
-			await sendMessage(history, userMessage.id, {
+			const currentModels = atSelectedModel ? [atSelectedModel.id] : selectedModels;
+			const options = {
 				...(suggestionPrompt
 					? {
 							messages: createMessagesList(history, message.id),
@@ -4700,14 +4716,16 @@
 							regenerationMessageId: message.id
 						}
 					: {}),
-				...((userMessage?.models ?? [...selectedModels]).length > 1
+				...((userMessage.models ?? currentModels).length > 1 && currentModels.length > 1
 					? {
-							// If multiple models are selected, use the model from the message
-							modelId: message.model,
+							// Regenerate the selected column with its current model.
+							modelId: currentModels[message.modelIdx ?? 0] ?? message.model,
 							modelIdx: message.modelIdx
 						}
 					: {})
-			});
+			};
+			userMessage.models = [...currentModels];
+			await sendMessage(history, userMessage.id, options);
 		}
 	};
 
@@ -4865,18 +4883,20 @@
 
 	const saveControls = async () => {
 		if (isShared) return;
-		if (!$chatId || $temporaryChatEnabled) return;
+		if (!$chatId || $temporaryChatEnabled || chat?.id !== $chatId) return;
 		const loaded = chat?.chat ?? {};
-		if (equal(chatFiles, loaded.files ?? [])) return;
+		if (equal(chatFiles, loaded.files ?? []) && equal(selectedModels, loaded.models ?? [])) return;
+		const id = $chatId;
 
-		const res = await updateChatById(localStorage.token, $chatId, {
-			files: chatFiles
+		const res = await updateChatById(localStorage.token, id, {
+			files: chatFiles,
+			...(selectedModels.length && selectedModels.every(Boolean) ? { models: selectedModels } : {})
 		}).catch((err) => {
 			console.error('[controls autosave]', err);
 			return null;
 		});
 		// Refresh the dedupe baseline so a later revert still saves.
-		if (res) chat = res;
+		if (res && $chatId === id) chat = res;
 	};
 
 	const MAX_DRAFT_LENGTH = 5000;
