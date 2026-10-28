@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock,patch
 
 _auth_directory=tempfile.TemporaryDirectory(prefix='owui-provider-auth-fixture-')
 os.environ['DATA_DIR']=_auth_directory.name
+os.environ['STATIC_DIR']=str(Path(_auth_directory.name)/'static')
 os.environ.setdefault('WEBUI_SECRET_KEY','fixture-'+'x'*32)
 os.environ.setdefault('OFFLINE_MODE','true')
 os.environ.setdefault('HF_HUB_OFFLINE','1')
@@ -179,8 +180,9 @@ class ProviderGates(unittest.TestCase):
             async def receive():return {'type':'http.request','body':b'fixture-private-account','more_body':False}
             async def send(message):sent.append(message)
             scope={'type':'http','http_version':'1.1','method':'POST','scheme':'http','path':path,'root_path':'','query_string':b'',
-                   'headers':[(b'host',b'127.0.0.1:8080')],'client':('127.0.0.1',50000),'server':('127.0.0.1',8080),'state':{}}
-            with patch.object(middleware,'_audit_context',context),patch.object(middleware,'_capture_request',AsyncMock()) as request_capture,patch.object(middleware,'_capture_response',AsyncMock()) as response_capture:
+                   'headers':[(b'host',b'127.0.0.1:8080')],'client':('127.0.0.1',50000),'server':('127.0.0.1',8080),'state':{'token':'fixture-only'}}
+            audit_module=importlib.import_module('open_webui.utils.audit')
+            with patch.object(audit_module,'AUDIT_LOG_LEVEL','REQUEST_RESPONSE'),patch.object(middleware,'_audit_context',context),patch.object(middleware,'_capture_request',AsyncMock()) as request_capture,patch.object(middleware,'_capture_response',AsyncMock()) as response_capture:
                 await middleware(scope,receive,send)
                 request_capture.assert_not_awaited()
                 self.assertEqual([c.args[0]['type'] for c in response_capture.await_args_list],['http.response.start'])
