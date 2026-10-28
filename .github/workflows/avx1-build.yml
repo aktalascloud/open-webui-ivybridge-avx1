@@ -26,11 +26,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Build, test, audit and package
         env:
           BUILD_CHANNEL: latest
           BUILD_DAY: ${{ inputs.day }}
+          NPM_CONFIG_FETCH_TIMEOUT: '60000'
+          NPM_CONFIG_FETCH_RETRIES: '2'
+          NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: '1000'
+          NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '5000'
 
         run: python .avx1/build.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
