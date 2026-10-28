@@ -14,6 +14,9 @@ from unittest.mock import AsyncMock,patch
 _auth_directory=tempfile.TemporaryDirectory(prefix='owui-provider-auth-fixture-')
 os.environ['DATA_DIR']=_auth_directory.name
 os.environ['STATIC_DIR']=str(Path(_auth_directory.name)/'static')
+# Unit tests load the wheel from pip --target. Its installed BASE_DIR does
+# not contain the repository's frontend assets; use the real fixture source.
+os.environ['FRONTEND_BUILD_DIR']=str(Path(__file__).resolve().parents[1]/'static')
 os.environ.setdefault('WEBUI_SECRET_KEY','fixture-'+'x'*32)
 os.environ.setdefault('OFFLINE_MODE','true')
 os.environ.setdefault('HF_HUB_OFFLINE','1')
