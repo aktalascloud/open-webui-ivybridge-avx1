@@ -81,7 +81,7 @@ class ProviderManager:
             data=json.loads(path.read_text('utf-8'))
             flow={'stage':data.get('stage'),'expires':data.get('expires'),'browser':data.get('browser')}
         return {'provider':'dsw2api','installed':config is not None,'connected':connected,'accounts':accounts,
-                'model':{'id':MODEL_ID,'name':MODEL_NAME},'browser_consent':bool(config and config.get('browser_consent')),
+                'model':{'id':MODEL_ID,'name':MODEL_NAME},'browser_consent':bool(config and config.get('browser_consent') and config.get('browser_consent_scope')=='shared-native-v1'),
                 'login':flow,'local_usage_quotas':False,'upstream_limits':'controlled by DeepSeek; no bypass or older-model fallback'}
 
     def setup(self):
@@ -98,7 +98,8 @@ class ProviderManager:
     def begin_login(self,user_id,port,*,consent=False):
         with self.lock:
             self.initialize();config=self.config()
-            if not consent and not config.get('browser_consent'):raise PermissionError('Explicit browser connector consent required')
+            if not consent and not (config.get('browser_consent') and config.get('browser_consent_scope')=='shared-native-v1'):
+                raise PermissionError('Explicit shared browser connector consent required')
             from .browser_bridge import install
             install()
             nonce=secrets.token_hex(32)
@@ -109,7 +110,8 @@ class ProviderManager:
             try:browser=open_login(self.root,nonce,int(port),consent=True)
             except Exception:
                 flow['stage']='browser_unavailable';atomic_json(self.root/'login-flow.json',flow);raise
-            config['browser_consent']=True;write_private(self.root/'service-config.dpapi',config)
+            config['browser_consent']=True;config['browser_consent_scope']='shared-native-v1'
+            write_private(self.root/'service-config.dpapi',config)
             flow.update(stage='awaiting_login',browser=browser['browser'],pid=browser['pid'])
             atomic_json(self.root/'login-flow.json',flow)
             return self.status()

@@ -4335,8 +4335,9 @@
   "DeepSeek — latest web model": "",
   "One model, no older-model fallback or local usage quota.": "",
   "DeepSeek account connected": "",
-  "Allow OWUI to receive only your DeepSeek session in a separate profile of your installed browser. Passwords and Google cookies are not read.": "",
   "Preparing…": "",
   "Sign in to DeepSeek in browser": "",
-  "Waiting for normal DeepSeek sign-in. The session connects automatically.": ""
+  "Waiting for normal DeepSeek sign-in. The session connects automatically.": "",
+  "Allow the shared Cline + OWUI extension to send only your DeepSeek session to OWUI from your existing browser profile. Passwords and Google cookies are not read.": "Allow the shared Cline + OWUI extension to send only your DeepSeek session to OWUI from your existing browser profile. Passwords and Google cookies are not read.",
+  "Load the shared extension once from this folder:": "Load the shared extension once from this folder:"
 }

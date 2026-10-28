@@ -127,6 +127,13 @@ class ProviderGates(unittest.TestCase):
             response=self.client.post('/api/v1/local-providers/dsw2api/browser/login',json={'consent':False})
             self.assertEqual(response.status_code,403);launch.assert_not_called()
 
+    def test_old_isolated_profile_consent_cannot_authorize_regular_profile(self):
+        config=self.instance.config();config['browser_consent']=True;config.pop('browser_consent_scope',None)
+        managed.write_private(self.instance.root/'service-config.dpapi',config)
+        with patch.object(browser,'open_login') as launch:
+            with self.assertRaises(PermissionError):self.instance.begin_login('fixture-admin',8080,consent=False)
+            launch.assert_not_called()
+
     def test_explicit_login_keeps_only_hash_and_uses_installed_browser(self):
         state=self.begin();flow=(self.instance.root/'login-flow.json').read_text('utf-8')
         self.assertNotIn(state,flow);self.assertEqual(self.instance.status()['login']['browser'],'Brave')

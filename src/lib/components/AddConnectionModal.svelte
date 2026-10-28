@@ -419,7 +419,9 @@
 										{#if localProviderStatus?.connected}
 											<div class="mt-3 flex items-center gap-2"><span class="size-2 rounded-full bg-emerald-500"></span>{$i18n.t('DeepSeek account connected')}</div>
 										{:else}
-											<p class="text-xs text-gray-500 mt-3">{$i18n.t('Allow OWUI to receive only your DeepSeek session in a separate profile of your installed browser. Passwords and Google cookies are not read.')}</p>
+											<p class="text-xs text-gray-500 mt-3">{$i18n.t('Allow the shared Cline + OWUI extension to send only your DeepSeek session to OWUI from your existing browser profile. Passwords and Google cookies are not read.')}</p>
+											<p class="mt-2 text-xs">{$i18n.t('Load the shared extension once from this folder:')}</p>
+											<p class="text-xs break-all">%LOCALAPPDATA%\OWUI DeepSeek Browser Bridge\extension</p>
 											<button type="button" on:click={loginDeepSeek} disabled={providerPreparing}
 												class="mt-3 rounded-lg px-3 py-2 bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">
 												{providerPreparing ? $i18n.t('Preparing…') : $i18n.t('Sign in to DeepSeek in browser')}

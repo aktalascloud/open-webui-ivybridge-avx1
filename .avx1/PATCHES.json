@@ -183,7 +183,8 @@
       "Shared-extension target isolation, forged/expired/revoked nonce and scope checks",
       "Production native host origin/framing/port limits; fixture callback transport",
       "Real browser invocation arguments; provider thinking/search defaults and request isolation",
-      "Four public-installer ownership/scope regressions; host registration automatic from normal DSW2API setup/login"
+      "Four public-installer ownership/scope regressions; host registration automatic from normal DSW2API setup/login",
+      "Fresh shared-profile consent required; old isolated-profile consent cannot authorize access"
     ]
   }
 ]
