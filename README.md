@@ -1,12 +1,20 @@
 # Open WebUI · Ivy Bridge AVX1
 
-Strata composer control: standard reasoning levels, separate Ultra, and task-based Adaptive using the pinned MIT Mnemosyne selector. It routes the reasoning half of paired profiles; the second answer-style block is not injected. Compatible author models opt in through model metadata; template text and shared memory are not bundled.
+Strata composer control: standard reasoning levels, separate Ultra, and task-based Adaptive using the pinned MIT Mnemosyne selector. It routes the reasoning half of paired profiles; the second answer-style block is not injected. Only enrolled DavidAU Qwen3.8-Next aliases opt in; Swift is excluded. Standard sampling stays available for other models; template text and shared memory are not bundled.
 
 [English](README.md) · [Русский](README.ru.md) · [Upstream](https://github.com/open-webui/open-webui) · [Releases](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest)
 
 Windows build for Ivy Bridge. Extended Russian UI and menus.
 
 Download the latest ZIP, extract it and run `Install.cmd`.
+
+## DSW2API · DeepSeek latest
+
+Choose **DSW2API** from the normal provider list under Admin Settings → Connections. Sign in through the installed system browser; the scoped connector uses its own profile, reads only the DeepSeek session after consent, and never reads passwords or Google cookies. No token copying or debugging port is needed.
+
+The separate OpenAI-compatible endpoint is `/dsw2api/v1`, model `deepseek-latest`. Use the local gateway key shown in the connection, never a DeepSeek cookie as an API key. There are no local RPM/daily quotas or older-model fallbacks. This is an unofficial web integration: DeepSeek controls availability, account rules and upstream throttling. No unlimited-service guarantee or paid-API fallback is implied.
+
+Dependencies are included in the package metadata. The current web model follows DeepSeek's latest web deployment; the provider does not pretend that a different or older model is the latest.
 
 ## Changes
 

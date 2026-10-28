@@ -166,6 +166,7 @@ from open_webui.routers import (
     groups,
     images,
     knowledge,
+    local_providers,
     memories,
     mfa,
     models,
@@ -875,6 +876,9 @@ app.mount('/ws', socket_app)
 
 app.include_router(ollama.router, prefix='/ollama', tags=['ollama'])
 app.include_router(openai.router, prefix='/openai', tags=['openai'])
+app.include_router(local_providers.router, prefix='/api/v1/local-providers', tags=['local-providers'])
+from open_webui.providers.manager import inference_app as dsw2api_inference_app
+app.mount('/dsw2api', dsw2api_inference_app)
 
 
 app.include_router(pipelines.router, prefix='/api/v1/pipelines', tags=['pipelines'])
@@ -1755,15 +1759,6 @@ async def chat_completion(
             # Clean up MCP clients.  Each client is isolated so one
             # failure doesn't skip the rest.
             #
-            # NOTE: asyncio.wait_for() / asyncio.shield() must NOT be used
-            # here — they create new asyncio Tasks, which violate anyio
-            # cancel-scope task-ownership rules when the MCPClient's
-            # exit_stack contains anyio transport resources (streamable_http).
-            # Exiting those cancel scopes from the wrong task raises
-            # "Attempted to exit a cancel scope that isn't the current
-            # task's current cancel scope", which propagates as a
-            # BaseException through the finally block, discards the response
-            # return value, and surfaces as a 500 "No response returned."
             # MCPClient.disconnect() suppresses known transport teardown errors
             # while still propagating real task cancellation.
             try:

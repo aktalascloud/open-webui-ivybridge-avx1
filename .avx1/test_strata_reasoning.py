@@ -33,7 +33,7 @@ functions(ROOT/'backend/open_webui/utils/misc.py',['deep_update'],namespace)
 functions(ROOT/'backend/open_webui/utils/payload.py',
           ['apply_params_to_form_data','apply_model_params_to_body','remove_open_webui_params','apply_model_params_to_body_openai'],namespace)
 script="""import {applyStrataReasoning} from './src/lib/utils/strataReasoning.js';
-const model={id:'strata.fixture',info:{meta:{strata_reasoning_profile:'davidau'}}};
+const model={id:'strata.fixture',name:'DavidAU Qwen3.8-Flash-Next',info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:'strata.fixture'}}};
 console.log(JSON.stringify(['none','low','medium','high','xhigh','ultra'].map(level=>({level,
 params:applyStrataReasoning({temperature:.7,custom_params:{min_p:.05}},model,{[model.id]:level})}))));"""
 vectors=json.loads(subprocess.check_output([args.node,'--input-type=module','-e',script],cwd=ROOT,text=True))
@@ -43,6 +43,14 @@ sys.modules[package.__name__]=package
 module=runpy.run_path(str(ROOT/'backend/open_webui/utils/strata_reasoning.py'),run_name='strata_reasoning_fixture.strata_reasoning')
 adapter=module['apply_strata_reasoning_profile']
 picker=module['adaptive_reasoning_mode']
+meta=types.SimpleNamespace(strata_reasoning_profile='davidau',strata_reasoning_family='qwen3.8-next',strata_reasoning_model_id='strata.davidau-qwen3.8-next',strata_reasoning_base_model_id=None)
+info=types.SimpleNamespace(id=meta.strata_reasoning_model_id,name='DavidAU Qwen3.8-Next',base_model_id=None,meta=meta)
+assert module['has_strata_author_template'](info)
+info.name='Swift DavidAU Qwen3.8-Next'
+assert not module['has_strata_author_template'](info)
+info.name='DavidAU Qwen3.8-Next';info.base_model_id='swift-qwen'
+assert not module['has_strata_author_template'](info)
+
 supported=['coder','comedy','vader','spoon','ultra','curie','teacher','off','low','medium','xhigh']
 adaptive_vectors=[]
 for text,expected in [('fix the python bug and refactor the parser module','coder'),

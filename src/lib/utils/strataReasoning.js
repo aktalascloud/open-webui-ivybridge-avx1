@@ -16,7 +16,14 @@ export function selectedStrataReasoning(model, preferences = {}) {
 }
 
 export function hasStrataAuthorTemplate(model) {
-  return isStrataModel(model) && model.info?.meta?.strata_reasoning_profile === 'davidau';
+  const info = model?.info;
+  const meta = info?.meta;
+  const identity = [model?.id, model?.name, info?.id, info?.name, info?.base_model_id].filter(Boolean).join(' ').toLowerCase();
+  return isStrataModel(model) && /david[._ -]?au/.test(identity) && /qwen[._ -]?3[._ -]?8/.test(identity) &&
+    /next/.test(identity) && !/swift/.test(identity) && meta?.strata_reasoning_profile === 'davidau' &&
+    meta.strata_reasoning_family === 'qwen3.8-next' &&
+    meta.strata_reasoning_model_id === model.id &&
+    (meta.strata_reasoning_base_model_id ?? null) === (info.base_model_id ?? null);
 }
 
 export function hasStrataAdaptiveProfile(model) {

@@ -21,6 +21,8 @@ dependencies = [
     "argon2-cffi==25.1.0",
     "PyJWT[crypto]==2.15.1",
     "authlib==1.9.1",
+    "curl-cffi==0.17.0",
+    "wasmtime==50.0.1",
     "joserfc==1.7.4",
 
     "requests==2.34.2",

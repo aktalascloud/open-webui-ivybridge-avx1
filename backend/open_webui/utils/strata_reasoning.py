@@ -7,6 +7,18 @@ import re
 from .mnemosyne_reasoning import reason_auto_pick
 
 
+def has_strata_author_template(model_info) -> bool:
+    """Only the explicitly enrolled Qwen3.8-Next alias may use author modes."""
+    meta = getattr(model_info, 'meta', None)
+    identity = ' '.join(str(getattr(model_info, key, '') or '') for key in ('id', 'name', 'base_model_id')).lower()
+    return bool(meta and re.search(r'david[._ -]?au', identity) and re.search(r'qwen[._ -]?3[._ -]?8', identity)
+        and 'next' in identity and 'swift' not in identity
+        and getattr(meta, 'strata_reasoning_profile', None) == 'davidau'
+        and getattr(meta, 'strata_reasoning_family', None) == 'qwen3.8-next'
+        and getattr(meta, 'strata_reasoning_model_id', None) == getattr(model_info, 'id', None)
+        and getattr(meta, 'strata_reasoning_base_model_id', None) == getattr(model_info, 'base_model_id', None))
+
+
 def adaptive_reasoning_mode(text: str, supported_modes) -> str | None:
     # Normalize domain words for the English upstream task map. The user's text
     # is never translated or changed by this normalization; only the score input.

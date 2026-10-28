@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import secrets
+import hashlib
 import logging
 import re
 from typing import Optional
@@ -9,7 +11,7 @@ from urllib.parse import quote, urlparse
 
 import aiofiles
 import aiohttp
-from open_webui.utils.strata_reasoning import apply_strata_reasoning_profile
+from open_webui.utils.strata_reasoning import apply_strata_reasoning_profile, has_strata_author_template
 from aiocache import cached
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import (
@@ -396,6 +398,15 @@ async def get_anthropic_request_target(request: Request, form_data: dict, user: 
     url, key, api_config = await get_openai_connection(model['urlIdx'])
     prefix_id = api_config.get('prefix_id')
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
+
+    if api_config.get('provider') == 'dsw2api':
+        # Namespace conversation reuse to the verified OWUI actor and chat.
+        # Do not forward personal user objects to a shared web account.
+        conversation = (metadata if isinstance(metadata, dict) else {}).get('chat_id') or payload.get('user') or secrets.token_hex(16)
+        if not isinstance(conversation, str):
+            conversation = secrets.token_hex(16)
+        payload['user'] = hashlib.sha256((user.id + '\0' + conversation).encode()).hexdigest()
+
 
     headers, cookies = await get_headers_and_cookies(request, url, key, api_config, user=user)
 
@@ -1481,7 +1492,7 @@ async def generate_chat_completion(
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
 
     payload = apply_strata_reasoning_profile(
-        payload, author_template=(getattr(getattr(model_info, 'meta', None), 'strata_reasoning_profile', None) == 'davidau'),
+        payload, author_template=(api_config.get('provider') != 'dsw2api' and has_strata_author_template(model_info)),
         supported_modes=getattr(getattr(model_info, 'meta', None), 'strata_reasoning_modes', None),
     )
 

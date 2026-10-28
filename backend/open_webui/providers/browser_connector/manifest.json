@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "OWUI DeepSeek account connector",
+  "version": "1.0.0",
+  "description": "Connect your DeepSeek session to your own local OWUI after explicit consent. Does not read passwords.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2lkdoQjhD9dXVheE8RSj/21+gc+jyNR7D7HDoPMkM99g5hbWAFEWKVot516Zx6z69SyRI2CAqiFUrfzw5CxE1z8hZBQd3wLeW8fJeNbdLY2dM0zeG7n6PWnA3IvgBP8nL4GPatD5QvWLNuX87QL6bTZO6Un//kmaIedkoEOdloPn4qGC8T9ZfKcjx0td3xEZRmA7VRsaXRUBPYE7HFHgoHlV35UhE2JIo8WHYt/84GoXn3YSExn3jrID7mU0Gu/KUOd4RAxrbtTERqA5RWUnCImVTHaLqDor/flsWmHLgoWQb/tJbUF/i/KuY9wTxnnHEHaBRxJnLVTF53honWRPQwIDAQAB",
+  "permissions": [
+    "cookies",
+    "webRequest",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://chat.deepseek.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.deepseek.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

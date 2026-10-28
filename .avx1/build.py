@@ -56,6 +56,7 @@ def build_python(project, package, manifest):
     run(sys.executable, "-m", "pip", "install", "build", "hatchling", "wheel")
     if project == "webui":
         run('node','--test',ROOT/'.avx1/test_strata_reasoning.mjs',env=environment)
+        run('node','--test',ROOT/'.avx1/test_browser_connector.mjs',env=environment)
         run(sys.executable,ROOT/'.avx1/test_strata_reasoning.py')
         run("node", "--experimental-strip-types", "--test", ROOT / ".avx1/test_suggestions.mjs", env=environment)
         run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
@@ -86,6 +87,7 @@ def build_python(project, package, manifest):
     else:
         checked_script(ROOT / '.avx1/test_upstream_daily.py')
         checked_script(ROOT / '.avx1/test_authlib_security.py')
+        checked_script(ROOT / '.avx1/test_local_providers.py')
         checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
         checked_script(ROOT / ".avx1/test_mcp_protocol.py")
         checked_script(ROOT / ".avx1/bench_json.py")

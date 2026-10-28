@@ -40,9 +40,9 @@ def check_strata_reasoning(browser, base, work, provider):
     if not response.ok:raise RuntimeError('Disposable reasoning user could not be created')
     token=response.json()['token']
     headers={'Authorization':'Bearer '+token}
-    for mid,name,profile in [('strata.fixture','Strata fixture','davidau'),('other.fixture','Other fixture',None)]:
+    for mid,name,profile in [('strata.fixture','Strata DavidAU Qwen3.8-Flash-Next','davidau'),('other.fixture','Other fixture',None)]:
         meta={'capabilities':{'vision':False}}
-        if profile:meta.update(strata_reasoning_profile=profile,strata_adaptive_enabled=True,
+        if profile:meta.update(strata_reasoning_profile=profile,strata_reasoning_family='qwen3.8-next',strata_reasoning_model_id=mid,strata_reasoning_base_model_id='fixture-base',strata_adaptive_enabled=True,
                                strata_reasoning_modes=['off','ultra','coder','spoon','low','medium','xhigh'])
         result=context.request.post(base+'/api/v1/models/create',headers=headers,
             data={'id':mid,'base_model_id':'fixture-base' if profile else 'other-base','name':name,'params':{},'meta':meta,'access_grants':[]})

@@ -149,5 +149,29 @@
       "https://github.com/authlib/authlib/security/advisories/GHSA-6v38-4h7w-rj9h",
       "https://github.com/authlib/authlib/security/advisories/GHSA-8m4g-j4wp-wgcg"
     ]
+  },
+  {
+    "id": "WEB-022",
+    "description": "Upstream #33272: isolate MCP session lifetime from chat tasks; transport EOF cannot cancel the owning chat. Preserve real user cancellation and same-task cleanup; no uncertain tool replay.",
+    "source": "Official PR33272 head7aec718abe6d08cbbbc53a72b372014745e1bba7; seven actual SDK/lifecycle regression tests.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33272"
+    ]
+  },
+  {
+    "id": "WEB-023",
+    "description": "Restrict author Ultra/Adaptive to explicitly enrolled DavidAU Qwen3.8-Next alias/base identity; reject Swift even with copied metadata. Preserve standard model controls and sampling.",
+    "source": "User-requested family/alias guard, Node and actual Python boundary regressions."
+  },
+  {
+    "id": "WEB-024",
+    "description": "One DSW2API provider in normal Connections; one deepseek-latest web-model alias with no older-model fallback. Account sign-in uses the installed system browser and a consented profile-scoped connector, not WebDriver or an open debugging port. DPAPI/Fernet private credentials, inference-only API mount, per-user/chat isolation and metadata-only credential auditing.",
+    "source": "Pinned Unlicense deepseek-web2api-free protocol; DSH/WhaleGate reviewed as references. No paid provider, pooled credential or client/tool fingerprint injection; upstream limits are not bypassed.",
+    "verification": [
+      "Latest-only/auth/data/crypto/environment and nonce/cancellation guards",
+      "Scoped browser connector transport tests",
+      "Actual packaged browser/provider-list and ordinary API checks"
+    ],
+    "provider_sources": "backend/open_webui/providers/sources.json"
   }
 ]

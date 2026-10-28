@@ -4379,5 +4379,14 @@
   "Rename page": "Переименовать страницу",
   "This page no longer exists": "Эта страница больше не существует",
   "Toggle pages": "Показать или скрыть страницы",
-  "Top level": "Верхний уровень"
+  "Top level": "Верхний уровень",
+  "Unable to prepare DSW2API": "Не удалось подготовить DSW2API",
+  "Unable to open the system browser": "Не удалось открыть системный браузер",
+  "DeepSeek — latest web model": "DeepSeek — последняя веб-модель",
+  "One model, no older-model fallback or local usage quota.": "Одна модель, без подмены старой версией и локальных квот использования.",
+  "DeepSeek account connected": "Аккаунт DeepSeek подключён",
+  "Allow OWUI to receive only your DeepSeek session in a separate profile of your installed browser. Passwords and Google cookies are not read.": "Разрешите OWUI получить сессию DeepSeek в отдельном профиле установленного браузера. Пароли и cookies Google не читаются.",
+  "Preparing…": "Подготовка…",
+  "Sign in to DeepSeek in browser": "Войти в DeepSeek через браузер",
+  "Waiting for normal DeepSeek sign-in. The session connects automatically.": "Ожидается обычный вход в DeepSeek. Сессия подключится автоматически."
 }
