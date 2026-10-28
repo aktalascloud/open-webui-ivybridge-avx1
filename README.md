@@ -10,6 +10,8 @@ Download the latest ZIP, extract it and run `Install.cmd`.
 
 ## Changes
 
+Upstream fixes: sub-agent partial output (#33269), photo delegation (#33244), safer remote fetch (#33271), ComfyUI failures (#33237), IME input (#33245), accessible messages and note pages. Added Russian page menus and targeted migration/permission checks.
+
 - Current upstream: MCP protocol 2026-07-28 [#33087](https://github.com/open-webui/open-webui/pull/33087), deterministic tool schemas [#33000](https://github.com/open-webui/open-webui/pull/33000), batched chat-access checks [#32888](https://github.com/open-webui/open-webui/pull/32888). Real SDK tests cover discovery and legacy HTTP.
 - MCP arguments with alternative schemas: [#32903](https://github.com/open-webui/open-webui/pull/32903). Readable errors: [#32942](https://github.com/open-webui/open-webui/pull/32942).
 - Backend sharing permissions: [#32991](https://github.com/open-webui/open-webui/pull/32991), adapted without changing positional database arguments.

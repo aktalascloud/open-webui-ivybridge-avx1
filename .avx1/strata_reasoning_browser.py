@@ -51,7 +51,7 @@ def check_strata_reasoning(browser, base, work, provider):
         'theme':'dark','showChangelog':False,'showUpdateToast':False,'models':['strata.fixture'],
         'params':{'stream_response':False}}})
     if not result.ok:raise RuntimeError('Disposable reasoning settings failed')
-    context.add_init_script('localStorage.setItem("token",'+json.dumps(token)+');localStorage.setItem("locale","en-US");')
+    context.add_init_script('localStorage.setItem("token",'+json.dumps(token)+');localStorage.setItem("locale","en-US");localStorage.setItem("theme","dark");')
     page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
     captured=[]
     def outgoing(request):
@@ -73,6 +73,8 @@ def check_strata_reasoning(browser, base, work, provider):
         page.locator('[data-reasoning-effort="ultra"]').click()
     page.wait_for_function('!document.querySelector("[data-strata-reasoning]").disabled')
     button.click();page.locator('[data-reasoning-effort="ultra"]').wait_for(state='visible')
+    page.wait_for_timeout(350)
+    assert page.locator('html').evaluate('(e)=>e.classList.contains("dark")')
     page.screenshot(path=str(work/'strata-reasoning-dark.png'))
     page.keyboard.press('Escape')
     page.locator('#chat-input').fill('Reasoning integration fixture.')
@@ -103,6 +105,8 @@ def check_strata_reasoning(browser, base, work, provider):
     if not any(adaptive_wire(b) for b in provider.captured):raise RuntimeError('Mnemosyne did not steer the actual provider request')
     page.evaluate('document.documentElement.classList.remove("dark")')
     button.click();page.locator('[data-reasoning-effort="ultra"]').wait_for(state='visible')
+    page.wait_for_timeout(350)
+    assert not page.locator('html').evaluate('(e)=>e.classList.contains("dark")')
     page.screenshot(path=str(work/'strata-reasoning-light.png'))
     page.keyboard.press('Escape');page.set_viewport_size({'width':360,'height':800})
     button.click();menu=page.locator('[role="menu"]:visible').last;box=menu.bounding_box()

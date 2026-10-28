@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import uuid
 from common import ROOT,WORK
 
 parser=argparse.ArgumentParser()
@@ -32,7 +33,7 @@ with socket.socket() as probe:
     probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
 from strata_reasoning_browser import ReasoningProvider
 reasoning_provider=ReasoningProvider()
-environment=dict(os.environ,DATA_DIR=str(WORK/'browser-smoke-data'),WEBUI_SECRET_KEY='ci-local-browser-fixture-key',
+environment=dict(os.environ,DATA_DIR=str(WORK/('browser-smoke-data-'+uuid.uuid4().hex[:12])),WEBUI_SECRET_KEY='ci-local-browser-fixture-key',
     OPENAI_API_BASE_URL=reasoning_provider.url,OPENAI_API_BASE_URLS=reasoning_provider.url,
     OPENAI_API_KEY='ci-fixture-no-model',OPENAI_API_KEYS='ci-fixture-no-model',
     OFFLINE_MODE='true',HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',ENABLE_VERSION_UPDATE_CHECK='false',

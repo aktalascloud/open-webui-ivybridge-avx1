@@ -117,5 +117,19 @@
       "real OWUI converters and pinned Strata parser/template references, offline",
       "packaged Chromium save/reload, mock-provider HTTP request, light/dark and mobile checks"
     ]
+  },
+  {
+    "id": "WEB-020",
+    "description": "Upstream agent partial output and photo delegation, compressed remote-response rejection, ComfyUI error propagation, IME composition and accessible messages; note pages with attachment permissions and revision/generation guards. Preserve existing Strata controls and Russian UI.",
+    "source": "Official upstream development b34885efc639c10cbf06c35cd2d4ff6055e36b45; seven targeted actual-function note/ACL/fetch regressions added locally. Browser theme fixtures now assert actual light/dark state and use a fresh isolated database.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33269",
+      "https://github.com/open-webui/open-webui/pull/33244",
+      "https://github.com/open-webui/open-webui/pull/33271",
+      "https://github.com/open-webui/open-webui/pull/33237",
+      "https://github.com/open-webui/open-webui/pull/33245",
+      "https://github.com/open-webui/open-webui/pull/33261",
+      "https://github.com/open-webui/open-webui/pull/33255"
+    ]
   }
 ]

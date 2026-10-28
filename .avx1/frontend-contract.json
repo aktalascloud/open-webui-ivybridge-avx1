@@ -9,15 +9,15 @@
   "helper_sha256": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
-    "src/lib/components/chat/MessageInput.svelte": "09d90fcfbd872628fb31757431946d0cd3b35702c65fbfecc5490e84746a4c59",
-    "src/lib/components/chat/Chat.svelte": "7e871f0004b7c965b9cfefd65ebb81a880dc5645fd9b0f4855d456254da3f9eb",
+    "src/lib/components/chat/MessageInput.svelte": "ddb77a91db774f2da5f1da3bd12264cd6e179d528134ce24c98581f898ec8dd8",
+    "src/lib/components/chat/Chat.svelte": "f53bbe2340b88944d5470c04c2bfe971718ef385ade48575bfc28569678304a8",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
     "src/lib/components/chat/Messages/ResponseMessage.svelte": "518d64583aa680b353a44b43a87f573b1c57999da0f699cd1819e1f8132e7298",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
   },
   "reviewed_upstream_change": {
-    "upstream_commit": "83437197e",
-    "scope": "Reviewed two ResponseMessage changes: selected browser-kokoro speech engine and hiding empty usage controls. Local speech identity and voice budgets unchanged; packaged Chromium smoke remains required."
+    "upstream_commit": "b34885efc639c10cbf06c35cd2d4ff6055e36b45",
+    "scope": "Chat note page routing and screen-reader message semantics; IME composition guard. Strata picker and microphone/voice hooks retained."
   },
   "reviewed_local_change": "Strata-only per-model reasoning preference and composer picker. Existing microphone/voice/approval hooks unchanged; focused request and browser UI checks required."
 }
