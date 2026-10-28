@@ -85,6 +85,7 @@ def build_python(project, package, manifest):
         if measurement.exists():manifest['context_guard']=json.loads(measurement.read_text('utf-8'))
     else:
         checked_script(ROOT / '.avx1/test_upstream_daily.py')
+        checked_script(ROOT / '.avx1/test_authlib_security.py')
         checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
         checked_script(ROOT / ".avx1/test_mcp_protocol.py")
         checked_script(ROOT / ".avx1/bench_json.py")

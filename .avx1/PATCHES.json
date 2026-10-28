@@ -131,5 +131,23 @@
       "https://github.com/open-webui/open-webui/pull/33261",
       "https://github.com/open-webui/open-webui/pull/33255"
     ]
+  },
+  {
+    "id": "WEB-021",
+    "description": "Upgrade Authlib1.7.2 to fixed1.9.1; retain OAuth client behavior and reject bad signatures, wrong audiences and disallowed signing algorithms. Five offline signature/claims/OAuth request gates supplement the actual packaged login and authenticated API canary.",
+    "source": "Official Authlib1.9.1 package and maintainer advisories; no security allowlist exemption.",
+    "advisories": [
+      "CVE-2026-96760",
+      "CVE-2026-114618",
+      "CVE-2026-114615",
+      "CVE-2026-114617",
+      "CVE-2026-114620",
+      "CVE-2026-114614",
+      "CVE-2026-114616"
+    ],
+    "urls": [
+      "https://github.com/authlib/authlib/security/advisories/GHSA-6v38-4h7w-rj9h",
+      "https://github.com/authlib/authlib/security/advisories/GHSA-8m4g-j4wp-wgcg"
+    ]
   }
 ]
