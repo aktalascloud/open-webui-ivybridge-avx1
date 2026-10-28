@@ -75,6 +75,14 @@ def build_python(project, package, manifest):
     else:
         run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
     wheel_paths = list(wheels.glob("*.whl"))
+    if project=='webui':
+        application=next(p for p in wheel_paths if p.name.startswith('open_webui-'))
+        with zipfile.ZipFile(application) as contents:
+            entry='open_webui/providers/browser_connector/native/owui-native-host.exe'
+            if contents.namelist().count(entry)!=1:raise RuntimeError('Shared native host missing or duplicated')
+            import hashlib
+            if hashlib.sha256(contents.read(entry)).hexdigest()!=sha256(ROOT/'backend'/entry):
+                raise RuntimeError('Packaged native host differs from the compiled candidate')
     for path in wheel_paths:
         verify_archive(path)
     audit_target = audit_python(wheel_paths, manifest)
