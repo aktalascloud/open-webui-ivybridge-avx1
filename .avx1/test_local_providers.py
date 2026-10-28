@@ -33,6 +33,8 @@ class ProviderGates(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.directory=tempfile.TemporaryDirectory(prefix='owui-provider-fixture-')
+        cls.bridge_patch=patch('open_webui.providers.browser_bridge.install',return_value={'status':'fixture','extension_id':'jaljomgoclehkemckjhifflhmlllfopc'})
+        cls.bridge_patch.start()
         cls.instance=managed.ProviderManager(cls.directory.name)
         before=dict(os.environ)
         cls.service=cls.instance.initialize()
@@ -54,6 +56,7 @@ class ProviderGates(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.bridge_patch.stop()
         cls.client.close();cls.directory.cleanup()
 
     def tearDown(self):

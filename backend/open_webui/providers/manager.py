@@ -89,13 +89,18 @@ class ProviderManager:
 
     def connection(self,port):
         self.initialize();config=self.config()
+        from .browser_bridge import install
+        bridge=install()
         return {'url':f'http://127.0.0.1:{int(port)}/dsw2api/v1','key':config['api_key'],
-                'provider':'dsw2api','prefix_id':'DSW2API','model_ids':[], 'status':self.status()}
+                'provider':'dsw2api','prefix_id':'DSW2API','model_ids':[], 'status':self.status(),
+                'browser_extension':bridge}
 
     def begin_login(self,user_id,port,*,consent=False):
         with self.lock:
             self.initialize();config=self.config()
             if not consent and not config.get('browser_consent'):raise PermissionError('Explicit browser connector consent required')
+            from .browser_bridge import install
+            install()
             nonce=secrets.token_hex(32)
             flow={'hash':hashlib.sha256(nonce.encode()).hexdigest(),'user_id':user_id,
                   'expires':time.time()+600,'stage':'opening_browser'}
