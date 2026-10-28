@@ -174,5 +174,15 @@
       "Actual packaged browser/provider-list and ordinary API checks"
     ],
     "provider_sources": "backend/open_webui/providers/sources.json"
+  },
+  {
+    "id": "WEB-025",
+    "description": "One shared Cline + OWUI DeepSeek extension in the existing browser profile. Stable Cline extension ID and native-host protocol retained; separate nonce-authorized OWUI Native Messaging channel, no new browser profile, webRequest capture, localhost browser permission or debugging. Native deep thinking/search default on with explicit per-request off preserved.",
+    "source": "Cline extension Apache-2.0 attribution retained; own bounded Windows CLR native host and account-preflight route.",
+    "verification": [
+      "Shared-extension target isolation, forged/expired/revoked nonce and scope checks",
+      "Production native host origin/framing/port limits; fixture callback transport",
+      "Real browser invocation arguments; provider thinking/search defaults and request isolation"
+    ]
   }
 ]

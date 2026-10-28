@@ -1,20 +1,33 @@
 {
   "manifest_version": 3,
-  "name": "OWUI DeepSeek account connector",
-  "version": "1.0.0",
-  "description": "Connect your DeepSeek session to your own local OWUI after explicit consent. Does not read passwords.",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2lkdoQjhD9dXVheE8RSj/21+gc+jyNR7D7HDoPMkM99g5hbWAFEWKVot516Zx6z69SyRI2CAqiFUrfzw5CxE1z8hZBQd3wLeW8fJeNbdLY2dM0zeG7n6PWnA3IvgBP8nL4GPatD5QvWLNuX87QL6bTZO6Un//kmaIedkoEOdloPn4qGC8T9ZfKcjx0td3xEZRmA7VRsaXRUBPYE7HFHgoHlV35UhE2JIo8WHYt/84GoXn3YSExn3jrID7mU0Gu/KUOd4RAxrbtTERqA5RWUnCImVTHaLqDor/flsWmHLgoWQb/tJbUF/i/KuY9wTxnnHEHaBRxJnLVTF53honWRPQwIDAQAB",
+  "name": "DeepSeek Session Bridge — Cline + OWUI",
+  "version": "1.1.0",
+  "description": "Explicit DeepSeek session connection for Cline and OWUI in your existing browser profile.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvaYx2Krb6Edzj2HYxheMu4MG4c0Z9vOmUqs85wVRvxOlswgVJXzhk0O2JwtcvEfQ/G1Yysfgd8hUVGWGLgfryH+RIcF6oYBggsXbKg+yc16gEPdKYISKU8Dw1ZLCdR3OHDY9xOVN7h4duvLxDTWfwIG9TkkWF58X4OpiG6RemhTUvV45QNbc0ETNw/qZz+o+z63Fjy8Qx+/bdSgxmsR+HjNxUlEUu10ArsMQZEXcM7YPrs0d6XuE3lm1hsbyXCn804SagVzvcb63wPhO2cqrAn+l7Js4RX9wvvuje4kvyY45NuE/O33AgJsW1qG43j7oWXyKExNllzB5T9ppUfI7zQIDAQAB",
   "permissions": [
     "cookies",
-    "webRequest",
+    "scripting",
+    "nativeMessaging",
+    "alarms",
     "storage"
   ],
   "host_permissions": [
     "https://chat.deepseek.com/*",
-    "http://127.0.0.1/*"
+    "https://deepseek.com/*"
   ],
+  "action": {
+    "default_popup": "connect.html",
+    "default_icon": {
+      "16": "icons/disconnected-16.png",
+      "32": "icons/disconnected-32.png"
+    }
+  },
   "background": {
     "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/disconnected-16.png",
+    "32": "icons/disconnected-32.png"
   },
   "content_scripts": [
     {

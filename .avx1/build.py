@@ -55,6 +55,9 @@ def build_python(project, package, manifest):
     environment = dict(os.environ, CYPRESS_INSTALL_BINARY="0", HUSKY="0", PIP_DISABLE_PIP_VERSION_CHECK="1")
     run(sys.executable, "-m", "pip", "install", "build", "hatchling", "wheel")
     if project == "webui":
+        from build_browser_bridge import build as build_browser_bridge
+        build_browser_bridge()
+        run(sys.executable,ROOT/'.avx1/test_native_browser_bridge.py')
         run('node','--test',ROOT/'.avx1/test_strata_reasoning.mjs',env=environment)
         run('node','--test',ROOT/'.avx1/test_browser_connector.mjs',env=environment)
         run(sys.executable,ROOT/'.avx1/test_strata_reasoning.py')

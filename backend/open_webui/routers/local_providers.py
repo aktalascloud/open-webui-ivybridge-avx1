@@ -42,6 +42,18 @@ def connector_origin(request):
     if origin is not None and origin!='chrome-extension://'+identity:raise HTTPException(403,'Unexpected account connector origin')
     if request.headers.get('x-owui-connector')!=identity:raise HTTPException(403,'Account connector identity required')
 
+class BrowserState(BaseModel):
+    state:str=Field(min_length=64,max_length=64)
+
+@router.post('/dsw2api/browser/check')
+async def browser_check(form:BrowserState,request:Request):
+    connector_origin(request)
+    try:flow=manager().validate_login_state(form.state)
+    except PermissionError:raise HTTPException(401,'Invalid or expired account handoff')
+    actor=await Users.get_user_by_id(flow['user_id'])
+    if actor is None or actor.role!='admin':raise HTTPException(401,'Account handoff is no longer authorized')
+    return {'ok':True,'expires':flow['expires']}
+
 @router.post('/dsw2api/browser/callback')
 async def browser_callback(form:BrowserSession,request:Request):
     connector_origin(request)

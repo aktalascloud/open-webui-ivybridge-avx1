@@ -1,6 +1,6 @@
-"""Installed system browser plus an explicitly consented, isolated login connector.
+"""The user's existing browser profile and shared Cline/OWUI extension.
 
-No WebDriver, remote debugging, disabled TLS checks or ordinary-profile scraping.
+No alternate browser profile, WebDriver, debugging or disabled TLS checks.
 """
 import ctypes
 from ctypes import wintypes
@@ -33,10 +33,9 @@ def open_login(root,nonce,port,*,consent):
     if len(nonce)!=64 or any(c not in '0123456789abcdef' for c in nonce):raise ValueError('Invalid login state')
     if not 1<=port<=65535:raise ValueError('Invalid callback port')
     executable=default_browser();root=Path(root).resolve()
-    extension=root/'browser-connector'
-    if not (extension/'manifest.json').is_file():raise RuntimeError('The account connector is not installed')
     url='https://chat.deepseek.com/#owui-dsw2api='+quote(nonce+'.'+str(port),safe='.')
-    process=subprocess.Popen([str(executable),'--user-data-dir='+str(root/'browser-profile-system'),
-        '--load-extension='+str(extension),'--no-first-run','--no-default-browser-check',url],
+    process=subprocess.Popen([str(executable),url],
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    return {'browser':executable.stem,'pid':process.pid}
+    # The ordinary browser belongs to the user; never track it as an owned
+    # process that maintenance may terminate.
+    return {'browser':executable.stem,'pid':None}

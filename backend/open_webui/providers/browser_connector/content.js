@@ -1,9 +1,6 @@
-// Reads only the one-time login handoff, never page passwords or Google data.
+// Pass only the handoff nonce; no credentials are read here.
 (() => {
-  const params=new URLSearchParams(location.hash.slice(1));
-  const value=params.get('owui-dsw2api');
-  if(!value || !/^[a-f0-9]{64}\.\d{1,5}$/.test(value))return;
-  const [state,port]=value.split('.');
-  if(Number(port)<1 || Number(port)>65535)return;
-  chrome.runtime.sendMessage({type:'owui-login',state,port:Number(port)});
+ const value=new URLSearchParams(location.hash.slice(1)).get('owui-dsw2api');
+ if(!value||!/^[a-f0-9]{64}\.8080$/.test(value))return;
+ chrome.runtime.sendMessage({action:'owui-flow',state:value.split('.')[0],port:8080});
 })();

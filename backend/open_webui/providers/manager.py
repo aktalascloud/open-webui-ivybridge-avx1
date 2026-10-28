@@ -12,7 +12,6 @@ import json
 import os
 from pathlib import Path
 import secrets
-import shutil
 import subprocess
 import threading
 import time
@@ -97,10 +96,6 @@ class ProviderManager:
         with self.lock:
             self.initialize();config=self.config()
             if not consent and not config.get('browser_consent'):raise PermissionError('Explicit browser connector consent required')
-            connector=PACKAGE/'browser_connector';target=self.root/'browser-connector'
-            target.mkdir(exist_ok=True)
-            for source in connector.iterdir():
-                if source.is_file():shutil.copyfile(source,target/source.name)
             nonce=secrets.token_hex(32)
             flow={'hash':hashlib.sha256(nonce.encode()).hexdigest(),'user_id':user_id,
                   'expires':time.time()+600,'stage':'opening_browser'}
@@ -113,6 +108,16 @@ class ProviderManager:
             flow.update(stage='awaiting_login',browser=browser['browser'],pid=browser['pid'])
             atomic_json(self.root/'login-flow.json',flow)
             return self.status()
+
+    def validate_login_state(self,state):
+        if not isinstance(state,str) or len(state)!=64:raise PermissionError('Invalid account handoff')
+        with self.lock:
+            path=self.root/'login-flow.json'
+            flow=json.loads(path.read_text('utf-8')) if path.exists() else {}
+            if (flow.get('expires',0)<time.time() or flow.get('stage') not in {'opening_browser','awaiting_login'}
+                or not hmac.compare_digest(flow.get('hash',''),hashlib.sha256(state.encode()).hexdigest())):
+                raise PermissionError('Expired or consumed account handoff')
+            return {'user_id':flow['user_id'],'expires':flow['expires']}
 
     def complete_login(self,state,token,cookies):
         if not isinstance(state,str) or len(state)!=64 or not isinstance(token,str) or not 20<=len(token)<=16384 or '\r' in token or '\n' in token:
@@ -195,14 +200,19 @@ class InferenceApplication:
                 return await JSONResponse({'error':{'message':'Unsupported reasoning control for DeepSeek web'}},status_code=400)(scope,receive,send)
             from .vendor.dsw2api import managed_env
             thinking=effort not in {'none','disabled','off'}
+            if 'search_enabled' in payload and type(payload['search_enabled']) is not bool:
+                return await JSONResponse({'error':{'message':'search_enabled must be a boolean'}},status_code=400)(scope,receive,send)
             context_token=managed_env.request_thinking.set(thinking)
+            search_token=managed_env.request_search.set(payload.get('search_enabled',True))
             first=True
             async def replay():
                 nonlocal first
                 if first:first=False;return {'type':'http.request','body':bytes(body),'more_body':False}
                 return await receive()
             try:return await service.app({**scope,'root_path':'','path':path},replay,send)
-            finally:managed_env.request_thinking.reset(context_token)
+            finally:
+                managed_env.request_thinking.reset(context_token)
+                managed_env.request_search.reset(search_token)
         return await service.app({**scope,'root_path':'','path':path},receive,send)
 
 inference_app=InferenceApplication()

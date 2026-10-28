@@ -2,6 +2,7 @@
 from contextvars import ContextVar
 _values={}
 request_thinking=ContextVar('owui_deepseek_request_thinking',default=True)
+request_search=ContextVar('owui_deepseek_request_search',default=True)
 
 def configure(values):
     _values.clear();_values.update({str(key):str(value) for key,value in values.items()})

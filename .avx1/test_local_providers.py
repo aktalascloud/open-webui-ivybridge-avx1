@@ -128,13 +128,16 @@ class ProviderGates(unittest.TestCase):
         state=self.begin();flow=(self.instance.root/'login-flow.json').read_text('utf-8')
         self.assertNotIn(state,flow);self.assertEqual(self.instance.status()['login']['browser'],'Brave')
 
-    def test_browser_arguments_have_no_debugger_webdriver_or_default_profile_access(self):
+    def test_browser_uses_existing_default_profile_without_automation_flags(self):
         (self.instance.root/'browser-connector').mkdir(exist_ok=True)
         (self.instance.root/'browser-connector/manifest.json').write_text('{}')
         with patch.object(browser,'default_browser',return_value=Path('C:/fixture/brave.exe')),patch.object(browser.subprocess,'Popen',return_value=SimpleNamespace(pid=99)) as start:
             browser.open_login(self.instance.root,'a'*64,8080,consent=True)
             args=start.call_args.args[0]
-            self.assertTrue(any('browser-profile-system' in value for value in args))
+            self.assertEqual(len(args),2)
+            self.assertEqual(Path(args[0]),Path('C:/fixture/brave.exe'))
+            self.assertTrue(args[1].startswith('https://chat.deepseek.com/#owui-dsw2api='))
+            self.assertFalse(any('user-data-dir' in value or 'load-extension' in value for value in args))
             self.assertFalse(any('remote-debugging' in value or 'enable-automation' in value or 'ignore-certificate' in value for value in args))
 
     def test_wrong_origin_never_imports_an_account(self):
@@ -143,6 +146,32 @@ class ProviderGates(unittest.TestCase):
             response=self.client.post('/api/v1/local-providers/dsw2api/browser/callback',headers=self.headers(Origin='https://evil.invalid'),json=self.payload(state))
             self.assertEqual(response.status_code,403);validate.assert_not_called()
 
+    def test_shared_extension_checks_permission_before_session_capture(self):
+        state=self.begin()
+        with patch.object(routes.Users,'get_user_by_id',AsyncMock(return_value=SimpleNamespace(role='admin'))):
+            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json={'state':state})
+            self.assertEqual(result.status_code,200);self.assertTrue(result.json()['ok'])
+            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json={'state':'f'*64})
+            self.assertEqual(result.status_code,401)
+        with patch.object(routes.Users,'get_user_by_id',AsyncMock(return_value=SimpleNamespace(role='user'))):
+            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json={'state':state})
+            self.assertEqual(result.status_code,401)
+
+    def test_native_thinking_and_search_defaults_and_explicit_overrides(self):
+        from open_webui.providers.vendor.dsw2api.model_router import RouteDecision
+        self.assertEqual(self.service.resolve_model_controls(RouteDecision()),('default',True,True))
+        self.assertEqual(self.service.resolve_model_controls(RouteDecision(),False,False),('default',False,False))
+        async def echo(scope,receive,send):
+            from starlette.responses import JSONResponse
+            decision=self.service.resolve_model_controls(RouteDecision())
+            await JSONResponse({'thinking':decision[1],'search':decision[2]})(scope,receive,send)
+        headers={'Authorization':'Bearer '+self.instance.config()['api_key']}
+        with patch.object(self.service,'app',echo):
+            for payload,expected in [({'model':'deepseek-latest'},{'thinking':True,'search':True}),
+                                     ({'model':'deepseek-latest','reasoning_effort':'none','search_enabled':False},{'thinking':False,'search':False}),
+                                     ({'model':'deepseek-latest'},{'thinking':True,'search':True})]:
+                result=self.client.post('/dsw2api/v1/chat/completions',headers=headers,json=payload)
+                self.assertEqual(result.json(),expected)
     def test_nonce_expiry_and_revoked_actor_block_handoff(self):
         state=self.begin();path=self.instance.root/'login-flow.json';flow=json.loads(path.read_text());flow['expires']=time.time()-1;managed.atomic_json(path,flow)
         with patch.object(routes.Users,'get_user_by_id',AsyncMock(return_value=SimpleNamespace(role='admin'))),patch.object(self.service.DeepSeekAdapter,'create_session') as validate:

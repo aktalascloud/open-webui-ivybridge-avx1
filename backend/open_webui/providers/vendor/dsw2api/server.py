@@ -122,7 +122,7 @@ def _legacy_mode_thinking() -> bool | None:
 
 
 def resolve_model_controls(decision, req_thinking: bool | None = None,
-                           req_search: bool = False) -> tuple[str, bool, bool]:
+                           req_search: bool | None = None) -> tuple[str, bool, bool]:
     """Resolve ``(model_type, thinking_enabled, search_enabled)`` for a request.
 
     Precedence, highest first:
@@ -162,7 +162,7 @@ def resolve_model_controls(decision, req_thinking: bool | None = None,
     elif SEARCH == "disabled":
         search = False
     else:
-        search = bool(req_search)
+        search = managed_env.request_search.get() if req_search is None else bool(req_search)
 
     return model_type, thinking, search
 
@@ -392,7 +392,7 @@ class ChatCompletionRequest(BaseModel):
     # Capability switches (NOT a model selector): thinking_mode → upstream
     # thinking_enabled, search_enabled → upstream search_enabled.
     thinking_mode: Optional[bool] = None
-    search_enabled: Optional[bool] = False
+    search_enabled: Optional[bool] = None
 
 
 class ModelInfo(BaseModel):
@@ -788,7 +788,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
     # "default"; the capabilities live in thinking_enabled / search_enabled.
     decision = MODEL_ROUTER.route_for(req.model)
     model_type, thinking, search = resolve_model_controls(
-        decision, req_thinking=req.thinking_mode, req_search=bool(req.search_enabled)
+        decision, req_thinking=req.thinking_mode, req_search=req.search_enabled
     )
 
     # One cache namespace per conversation: switching stream mode mid-thread must
@@ -835,7 +835,7 @@ async def messages(req: AnthropicRequest, request: Request):
     decision = MODEL_ROUTER.route_for(req.model)
     req_thinking = (req.thinking.type == "enabled") if req.thinking is not None else None
     model_type, thinking, search = resolve_model_controls(
-        decision, req_thinking=req_thinking, req_search=False
+        decision, req_thinking=req_thinking, req_search=None
     )
 
     tool_names = []

@@ -198,7 +198,7 @@ exclude = [
     "webui.db",
     "chroma.sqlite3",
 ]
-force-include = { "CHANGELOG.md" = "open_webui/CHANGELOG.md", build = "open_webui/frontend" }
+force-include = { "CHANGELOG.md" = "open_webui/CHANGELOG.md", build = "open_webui/frontend", "backend/open_webui/providers/browser_connector" = "open_webui/providers/browser_connector" }
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
