@@ -98,6 +98,14 @@ class ProviderGates(unittest.TestCase):
             json={'model':'deepseek-v3','messages':[{'role':'user','content':'fixture'}]})
         self.assertEqual(response.status_code,400)
 
+    def test_full_thinking_is_default_and_request_hint_does_not_leak(self):
+        module=importlib.import_module('open_webui.providers.vendor.dsw2api.managed_env')
+        self.assertTrue(self.service._responses_controls('deepseek-latest')['thinking_enabled'])
+        token=module.request_thinking.set(False)
+        try:self.assertFalse(self.service._responses_controls('deepseek-latest')['thinking_enabled'])
+        finally:module.request_thinking.reset(token)
+        self.assertTrue(self.service._responses_controls('deepseek-latest')['thinking_enabled'])
+
     def test_regular_user_cannot_provision_or_get_local_key(self):
         response=self.client.post('/api/v1/local-providers/dsw2api/setup',headers={'X-Fixture-Role':'user'})
         self.assertIn(response.status_code,[401,403])

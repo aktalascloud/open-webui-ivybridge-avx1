@@ -264,6 +264,7 @@
 									on:click={() => {
 										showAddOpenAIConnectionModal = true;
 									}}
+									data-add-openai-connection
 									type="button"
 								>
 									<Plus />

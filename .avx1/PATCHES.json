@@ -155,7 +155,8 @@
     "description": "Upstream #33272: isolate MCP session lifetime from chat tasks; transport EOF cannot cancel the owning chat. Preserve real user cancellation and same-task cleanup; no uncertain tool replay.",
     "source": "Official PR33272 head7aec718abe6d08cbbbc53a72b372014745e1bba7; seven actual SDK/lifecycle regression tests.",
     "urls": [
-      "https://github.com/open-webui/open-webui/pull/33272"
+      "https://github.com/open-webui/open-webui/pull/33272",
+      "https://github.com/open-webui/open-webui/pull/33275"
     ]
   },
   {

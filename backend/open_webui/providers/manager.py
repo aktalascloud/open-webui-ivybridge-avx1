@@ -185,14 +185,24 @@ class InferenceApplication:
                 if not message.get('more_body'):break
             try:payload=json.loads(body)
             except Exception:return await JSONResponse({'error':{'message':'Invalid JSON'}},status_code=400)(scope,receive,send)
+            if not isinstance(payload,dict):
+                return await JSONResponse({'error':{'message':'A JSON object is required'}},status_code=400)(scope,receive,send)
             if payload.get('model') not in (None,MODEL_ID):
                 return await JSONResponse({'error':{'message':'Only deepseek-latest is available; no model fallback','type':'invalid_request_error'}},status_code=400)(scope,receive,send)
+            effort=payload.get('reasoning_effort')
+            if effort is None and isinstance(payload.get('reasoning'),dict):effort=payload['reasoning'].get('effort')
+            if effort is not None and (not isinstance(effort,str) or effort not in {'none','disabled','off','minimal','low','medium','high','xhigh','max'}):
+                return await JSONResponse({'error':{'message':'Unsupported reasoning control for DeepSeek web'}},status_code=400)(scope,receive,send)
+            from .vendor.dsw2api import managed_env
+            thinking=effort not in {'none','disabled','off'}
+            context_token=managed_env.request_thinking.set(thinking)
             first=True
             async def replay():
                 nonlocal first
                 if first:first=False;return {'type':'http.request','body':bytes(body),'more_body':False}
                 return await receive()
-            return await service.app({**scope,'root_path':'','path':path},replay,send)
+            try:return await service.app({**scope,'root_path':'','path':path},replay,send)
+            finally:managed_env.request_thinking.reset(context_token)
         return await service.app({**scope,'root_path':'','path':path},receive,send)
 
 inference_app=InferenceApplication()

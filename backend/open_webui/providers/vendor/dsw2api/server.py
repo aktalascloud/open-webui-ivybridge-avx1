@@ -121,7 +121,7 @@ def _legacy_mode_thinking() -> bool | None:
     return None
 
 
-def resolve_model_controls(decision, req_thinking: bool = False,
+def resolve_model_controls(decision, req_thinking: bool | None = None,
                            req_search: bool = False) -> tuple[str, bool, bool]:
     """Resolve ``(model_type, thinking_enabled, search_enabled)`` for a request.
 
@@ -153,7 +153,7 @@ def resolve_model_controls(decision, req_thinking: bool = False,
             # keep behaving as they did, but THINKING= is the supported knob.
             thinking = legacy
         else:
-            thinking = bool(req_thinking)
+            thinking = managed_env.request_thinking.get() if req_thinking is None else bool(req_thinking)
 
     if decision.search is not None:
         search = decision.search
@@ -391,7 +391,7 @@ class ChatCompletionRequest(BaseModel):
     user: Optional[str] = None
     # Capability switches (NOT a model selector): thinking_mode → upstream
     # thinking_enabled, search_enabled → upstream search_enabled.
-    thinking_mode: Optional[bool] = False
+    thinking_mode: Optional[bool] = None
     search_enabled: Optional[bool] = False
 
 
@@ -788,7 +788,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
     # "default"; the capabilities live in thinking_enabled / search_enabled.
     decision = MODEL_ROUTER.route_for(req.model)
     model_type, thinking, search = resolve_model_controls(
-        decision, req_thinking=bool(req.thinking_mode), req_search=bool(req.search_enabled)
+        decision, req_thinking=req.thinking_mode, req_search=bool(req.search_enabled)
     )
 
     # One cache namespace per conversation: switching stream mode mid-thread must
@@ -833,7 +833,7 @@ async def messages(req: AnthropicRequest, request: Request):
     # Resolve model_type / thinking / search — same rules as the OpenAI endpoint
     # (Anthropic's thinking block is the request-level thinking signal).
     decision = MODEL_ROUTER.route_for(req.model)
-    req_thinking = bool(req.thinking is not None and req.thinking.type == "enabled")
+    req_thinking = (req.thinking.type == "enabled") if req.thinking is not None else None
     model_type, thinking, search = resolve_model_controls(
         decision, req_thinking=req_thinking, req_search=False
     )
