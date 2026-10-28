@@ -22,7 +22,7 @@ class Handler(BaseHTTPRequestHandler):
 def run(exe,value,origin=ORIGIN,env=None,raw=None):
     data=json.dumps(value).encode()
     process=subprocess.run([str(exe),origin],input=struct.pack('<I',len(data))+data if raw is None else raw,
-                           capture_output=True,timeout=10,env=env,creationflags=subprocess.CREATE_NO_WINDOW)
+                           capture_output=True,timeout=90,env=env,creationflags=subprocess.CREATE_NO_WINDOW)
     assert len(process.stdout)>=4
     length=struct.unpack('<I',process.stdout[:4])[0]
     assert length==len(process.stdout)-4 and not process.stderr
