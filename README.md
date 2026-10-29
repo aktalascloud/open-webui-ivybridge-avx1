@@ -35,6 +35,8 @@ Upstream fixes: sub-agent partial output (#33269), photo delegation (#33244), sa
 
 Four explicit `ivybridge` profiles were tested: SSE4.2/AVX/F16C/POPCNT, O2/O3, Fat/ThinLTO and codegen units 1/8. AVX2/FMA/PGO/fast-math stay disabled. Best mixed JSON CPU result: **+0.40%**, with a **−5.42%** tool-schema serialization regression. Stock `orjson` remains the default. All 23 compatibility vectors match. These are JSON CPU tests, not LLM tokens/s. [Raw samples and flags](.avx1/measurements/ivy-flags-20261024.json).
 
+KB metadata query on this CPU: **94.76% fewer process CPU cycles**, median **94.1 → 4.96 ms**, on an in-memory SQLite fixture of160files ×128KiB extracted text. Full text materialized:20MiB →0. Query/DTO workload only, not LLM tokens/s. [Raw samples and exact methods](.avx1/measurements/kb-projection-20261029.json).
+
 [Hardware profile](.avx1/hardware-profile.json): installed PyTorch 2.14 is a CPU wheel. The separate source-build profile uses CUDA 12.9 and `sm_61`; it does not rebuild a vendor wheel.
 
 Original licenses/notices and source history are preserved. Exact corresponding source is linked from each release. Credentials, logs, models and private filter/bridge code stay outside the public packages.
