@@ -4378,5 +4378,9 @@
   "Sign in to DeepSeek in browser": "",
   "Waiting for normal DeepSeek sign-in. The session connects automatically.": "",
   "Allow the shared Cline + OWUI extension to send only your DeepSeek session to OWUI from your existing browser profile. Passwords and Google cookies are not read.": "Allow the shared Cline + OWUI extension to send only your DeepSeek session to OWUI from your existing browser profile. Passwords and Google cookies are not read.",
-  "Load the shared extension once from this folder:": "Load the shared extension once from this folder:"
+  "Load the shared extension once from this folder:": "Load the shared extension once from this folder:",
+  "DeepSeek has restricted this account. Reconnecting does not remove the provider restriction.": "DeepSeek has restricted this account. Reconnecting does not remove the provider restriction.",
+  "Browser session saved; inference availability is not verified.": "Browser session saved; inference availability is not verified.",
+  "DeepSeek session expired. Reconnect the current browser session.": "DeepSeek session expired. Reconnect the current browser session.",
+  "Open the shared extension and choose Cline + OWUI. The existing browser login is reused.": "Open the shared extension and choose Cline + OWUI. The existing browser login is reused."
 }

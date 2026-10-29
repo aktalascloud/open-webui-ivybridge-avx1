@@ -74,6 +74,12 @@ class WAFChallengeError(Exception):
         self.body = body
 
 
+class SessionAuthorizationError(RuntimeError):
+    """Rejected browser session; no automatic reauthentication or request replay."""
+    def __init__(self):
+        super().__init__('DeepSeek session expired. Reconnect the current browser session in Connections.')
+
+
 class UpstreamEmptyError(RuntimeError):
     """Raised when the upstream returned a 200 with an empty body (no SSE
     data lines at all). This is typically a transient throttle/WAF state;
@@ -398,8 +404,10 @@ class DeepSeekAdapter:
         kind = self._detect_waf_challenge(resp.status_code, resp.headers)
         if kind:
             raise WAFChallengeError(kind, resp.status_code, resp.text)
+        if resp.status_code == 401: raise SessionAuthorizationError()
         resp.raise_for_status()
         data = resp.json()
+        if isinstance(data, dict) and data.get('code') == 40003: raise SessionAuthorizationError()
         try:
             return data["data"]["biz_data"]["challenge"]
         except (KeyError, TypeError) as e:
@@ -446,8 +454,10 @@ class DeepSeekAdapter:
         kind = self._detect_waf_challenge(resp.status_code, resp.headers)
         if kind:
             raise WAFChallengeError(kind, resp.status_code, resp.text)
+        if resp.status_code == 401: raise SessionAuthorizationError()
         resp.raise_for_status()
         data = resp.json()
+        if isinstance(data, dict) and data.get('code') == 40003: raise SessionAuthorizationError()
         if data.get("code") != 0:
             raise RuntimeError(f"Session creation failed: {data}")
         biz = data["data"]["biz_data"]

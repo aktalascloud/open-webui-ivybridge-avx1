@@ -416,9 +416,15 @@
 									<div data-dsw2api-connection class="rounded-xl border border-gray-200 dark:border-gray-800 p-3 mb-3 text-sm">
 										<div class="font-medium">{$i18n.t('DeepSeek — latest web model')}</div>
 										<p class="text-xs text-gray-500 mt-1">{$i18n.t('One model, no older-model fallback or local usage quota.')}</p>
-										{#if localProviderStatus?.connected}
-											<div class="mt-3 flex items-center gap-2"><span class="size-2 rounded-full bg-emerald-500"></span>{$i18n.t('DeepSeek account connected')}</div>
-										{:else}
+										{#if localProviderStatus?.vendor_blocked}
+                                            <div class="mt-3 text-amber-700 dark:text-amber-300">{$i18n.t('DeepSeek has restricted this account. Reconnecting does not remove the provider restriction.')}</div>
+                                            {#if localProviderStatus?.restriction_until}<p class="text-xs mt-1">{localProviderStatus.restriction_until}</p>{/if}
+                                        {:else}
+                                            {#if localProviderStatus?.connected}
+                                                <div class="mt-3 flex items-center gap-2"><span class="size-2 rounded-full bg-amber-500"></span>{$i18n.t('Browser session saved; inference availability is not verified.')}</div>
+                                            {/if}
+                                            {#if !localProviderStatus?.connected || localProviderStatus?.authorization_required}
+                                                {#if localProviderStatus?.authorization_required}<p class="text-xs mt-2">{$i18n.t('DeepSeek session expired. Reconnect the current browser session.')}</p>{/if}
 											<p class="text-xs text-gray-500 mt-3">{$i18n.t('Allow the shared Cline + OWUI extension to send only your DeepSeek session to OWUI from your existing browser profile. Passwords and Google cookies are not read.')}</p>
 											<p class="mt-2 text-xs">{$i18n.t('Load the shared extension once from this folder:')}</p>
 											<p class="text-xs break-all">%LOCALAPPDATA%\OWUI DeepSeek Browser Bridge\extension</p>
@@ -426,7 +432,8 @@
 												class="mt-3 rounded-lg px-3 py-2 bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">
 												{providerPreparing ? $i18n.t('Preparing…') : $i18n.t('Sign in to DeepSeek in browser')}
 											</button>
-											{#if localProviderStatus?.login?.stage === 'awaiting_login'}<p class="text-xs mt-2">{$i18n.t('Waiting for normal DeepSeek sign-in. The session connects automatically.')}</p>{/if}
+											{#if localProviderStatus?.login?.stage === 'awaiting_login'}<p class="text-xs mt-2">{$i18n.t('Open the shared extension and choose Cline + OWUI. The existing browser login is reused.')}</p>{/if}
+                                            {/if}
 										{/if}
 									</div>
 								{/if}

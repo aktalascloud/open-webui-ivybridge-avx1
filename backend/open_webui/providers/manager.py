@@ -57,7 +57,9 @@ class ProviderManager:
                 'DEEPSEEK_ADMIN_PASSWORD':config['admin_password'],'API_KEYS':config['api_key'],
                 'ACCOUNT_STORE_PATH':str(self.root/'accounts.json'),'API_KEY_STORE_PATH':str(self.root/'api-keys.sqlite3'),
                 'DEEPSEEK_ENCRYPTION_KEY':config['encryption_key'],'DEEPSEEK_JITTER_SECS':'0','LOG_LEVEL':'WARNING',
-                'LOG_FORMAT':'json','ALLOWED_ORIGINS':'','DISABLE_AUTO_RECOVER':'true'})
+                'LOG_FORMAT':'json','ALLOWED_ORIGINS':'','DISABLE_AUTO_RECOVER':'true',
+                'DEEPSEEK_MAX_CONCURRENCY':'1','DEEPSEEK_SHARED_BROWSER_LEASE':'1',
+                'RECOVER_MANAGED_REQUEST_FAILURES':'1'})
             # The embedded protocol has no reason to retain a standalone stats
             # sampler. No account discovery, model probes or remote login runs.
             from .vendor.dsw2api import stats_history
@@ -80,7 +82,13 @@ class ProviderManager:
         if path.exists():
             data=json.loads(path.read_text('utf-8'))
             flow={'stage':data.get('stage'),'expires':data.get('expires'),'browser':data.get('browser')}
-        return {'provider':'dsw2api','installed':config is not None,'connected':connected,'accounts':accounts,
+        restriction = (config or {}).get('vendor_restriction') or {}
+        restricted = bool(restriction.get('active')) and (not restriction.get('until_utc') or time.time()<restriction['until_utc'])
+        rows = self.protocol.get_pool().get_all() if self.protocol is not None else []
+        return {'provider':'dsw2api','installed':config is not None,'connected':bool(accounts),'accounts':accounts,
+                'inference_verified':False,'vendor_blocked':restricted or any(row.get('vendor_blocked') for row in rows),
+                'restriction_until':restriction.get('display_until') if restricted else None,
+                'authorization_required':any(row.get('authorization_required') or '40003' in row.get('last_error','') for row in rows),
                 'model':{'id':MODEL_ID,'name':MODEL_NAME},'browser_consent':bool(config and config.get('browser_consent') and config.get('browser_consent_scope')=='shared-native-v1'),
                 'login':flow,'local_usage_quotas':False,'upstream_limits':'controlled by DeepSeek; no bypass or older-model fallback'}
 
@@ -98,6 +106,8 @@ class ProviderManager:
     def begin_login(self,user_id,port,*,consent=False):
         with self.lock:
             self.initialize();config=self.config()
+            if self.status().get('vendor_blocked'):
+                raise PermissionError('DeepSeek restricted this account; reconnecting does not remove the restriction')
             if not consent and not (config.get('browser_consent') and config.get('browser_consent_scope')=='shared-native-v1'):
                 raise PermissionError('Explicit shared browser connector consent required')
             from .browser_bridge import install
@@ -132,6 +142,8 @@ class ProviderManager:
         if not isinstance(cookies,str) or not cookies or len(cookies)>65536 or '\r' in cookies or '\n' in cookies:
             raise PermissionError('Invalid account handoff')
         with self.lock:
+            if self.status().get('vendor_blocked'):
+                raise PermissionError('DeepSeek restricted this account; no authentication probe was sent')
             path=self.root/'login-flow.json';flow=json.loads(path.read_text('utf-8')) if path.exists() else {}
             if flow.get('expires',0)<time.time() or not hmac.compare_digest(flow.get('hash',''),hashlib.sha256(state.encode()).hexdigest()):
                 raise PermissionError('Expired or invalid account handoff')
@@ -143,9 +155,12 @@ class ProviderManager:
             # Validate the captured session through the provider's real session
             # endpoint, not merely the presence of an Authorization header.
             adapter=service.DeepSeekAdapter(token=token,cookies=cookies)
-            adapter.create_session()
+            from .vendor.dsw2api.browser_session_lease import acquire_browser_session_lease
+            with_lease=acquire_browser_session_lease(enabled=True)
+            try: adapter.create_session()
+            finally: with_lease.release()
             if pool.stats().get('busy',0):raise RuntimeError('Wait for the active provider request before changing account')
-            account=pool.add(token=token,cookies=cookies,email='DeepSeek')
+            account=pool.reconnect_verified(token,cookies) or pool.add(token=token,cookies=cookies,email='DeepSeek')
             for previous in pool.get_all():
                 if previous['id']!=account.id:pool.remove_by_id(previous['id'])
             flow.update(stage='connected',credential_hash=credential_hash,account_id=account.id)
@@ -180,6 +195,10 @@ class InferenceApplication:
         authorization=dict(scope.get('headers',[])).get(b'authorization',b'')
         if not hmac.compare_digest(authorization,('Bearer '+config['api_key']).encode()):
             return await JSONResponse({'error':{'message':'Unauthorized','type':'authentication_error'}},status_code=401)(scope,receive,send)
+        restriction=config.get('vendor_restriction') or {}
+        if scope['method']=='POST' and path in {'/v1/chat/completions','/v1/messages','/v1/responses'} and restriction.get('active') and (not restriction.get('until_utc') or time.time()<restriction['until_utc']):
+            return await JSONResponse({'error':{'message':'DeepSeek restricted the account; reconnecting does not remove the provider restriction.',
+                'type':'permission_error','code':'deepseek_account_restricted'}},status_code=403)(scope,receive,send)
         try:service=await asyncio.to_thread(instance.initialize)
         except Exception:return await JSONResponse({'error':{'message':'DSW2API is not ready','type':'provider_unavailable'}},status_code=503)(scope,receive,send)
         if scope['method']=='GET' and path=='/v1/models':
@@ -211,13 +230,28 @@ class InferenceApplication:
                 return await JSONResponse({'error':{'message':'search_enabled must be a boolean'}},status_code=400)(scope,receive,send)
             context_token=managed_env.request_thinking.set(thinking)
             search_token=managed_env.request_search.set(payload.get('search_enabled',True))
+            from .vendor.dsw2api.chat_runtime import REQUEST_CANCEL
+            cancelled=threading.Event()
+            cancel_token=REQUEST_CANCEL.set(cancelled)
+            incoming=asyncio.Queue(maxsize=2)
+            async def monitor_disconnect():
+                while True:
+                    message=await receive()
+                    if message['type']=='http.disconnect':cancelled.set()
+                    await incoming.put(message)
+                    if message['type']=='http.disconnect':return
+                    await asyncio.sleep(0)
+            monitor=asyncio.create_task(monitor_disconnect())
             first=True
             async def replay():
                 nonlocal first
                 if first:first=False;return {'type':'http.request','body':bytes(body),'more_body':False}
-                return await receive()
+                return await incoming.get()
             try:return await service.app({**scope,'root_path':'','path':path},replay,send)
             finally:
+                cancelled.set();monitor.cancel()
+                await asyncio.gather(monitor,return_exceptions=True)
+                REQUEST_CANCEL.reset(cancel_token)
                 managed_env.request_thinking.reset(context_token)
                 managed_env.request_search.reset(search_token)
         return await service.app({**scope,'root_path':'','path':path},receive,send)

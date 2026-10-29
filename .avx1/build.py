@@ -102,6 +102,7 @@ def build_python(project, package, manifest):
         checked_script(ROOT / '.avx1/test_daily_20261029.py')
         checked_script(ROOT / '.avx1/test_authlib_security.py')
         checked_script(ROOT / '.avx1/test_local_providers.py')
+        checked_script(ROOT / '.avx1/test_browser_session_lease.py')
         checked_script(ROOT / '.avx1/test_bridge_installer.py')
         checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
         checked_script(ROOT / ".avx1/test_mcp_protocol.py")

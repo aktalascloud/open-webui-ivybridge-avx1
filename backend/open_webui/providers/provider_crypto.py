@@ -3,6 +3,8 @@ import ctypes
 from ctypes import wintypes
 import json
 import os
+import base64
+import hmac
 from pathlib import Path
 
 class _Blob(ctypes.Structure):
@@ -20,6 +22,22 @@ def transform(value,*,decrypt=False):
         kernel.LocalFree(ctypes.cast(target.data,wintypes.HLOCAL))
 
 def read_private(path):return json.loads(transform(Path(path).read_bytes(),decrypt=True))
+
+
+def seal_browser_payload(value, purpose, state):
+    data={**value,'purpose':purpose,'state':state}
+    return base64.b64encode(transform(json.dumps(data,separators=(',',':')).encode())).decode('ascii')
+
+
+def open_browser_payload(value, purpose, state):
+    try:
+        raw=base64.b64decode(value,validate=True)
+        data=json.loads(transform(raw,decrypt=True))
+        if not isinstance(data,dict) or data.get('purpose')!=purpose or not isinstance(data.get('state'),str) or not hmac.compare_digest(data['state'],state):
+            raise ValueError()
+        return data
+    except Exception:
+        raise PermissionError('Invalid protected browser handoff') from None
 def write_private(path,value):
     path=Path(path);temporary=path.with_suffix('.tmp')
     temporary.write_bytes(transform(json.dumps(value,ensure_ascii=False).encode()))

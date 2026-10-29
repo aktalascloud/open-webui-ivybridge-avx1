@@ -1,21 +1,27 @@
 """Shared cancellation-safe worker and response lifetimes."""
 import asyncio
 import threading
+from contextvars import ContextVar
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 from .image_inputs import ImageError
+
+REQUEST_CANCEL = ContextVar('owui_dsw_request_cancel', default=None)
 
 
 async def prepare_account(acquire, prepare_turn, mark_error, runner=run_in_threadpool):
     # Raw Task.cancel can interrupt an await while its worker keeps running.
     # The worker owns cleanup until it atomically hands off a finished result.
     lock = threading.Lock()
-    cancelled = threading.Event()
+    cancelled = REQUEST_CANCEL.get() or threading.Event()
     completed = []
     def prepare():
-        acquired = acquire()
+        acquired = None
         handed_off = False
+        context = REQUEST_CANCEL.set(cancelled)
         try:
+            if cancelled.is_set(): raise asyncio.CancelledError()
+            acquired = acquire()
             if cancelled.is_set():
                 return None
             turn = prepare_turn(acquired)
@@ -25,12 +31,13 @@ async def prepare_account(acquire, prepare_turn, mark_error, runner=run_in_threa
                     handed_off = True
             return acquired, turn
         except Exception as error:
-            if not isinstance(error, ImageError):
+            if acquired is not None and not isinstance(error, ImageError):
                 mark_error(acquired, error)
             raise
         finally:
-            if not handed_off:
-                acquired.release()
+            try:
+                if acquired is not None and not handed_off: acquired.release()
+            finally: REQUEST_CANCEL.reset(context)
     try:
         return await runner(prepare)
     except BaseException:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Pass only the handoff nonce; no credentials are read here.
 (() => {
  const value=new URLSearchParams(location.hash.slice(1)).get('owui-dsw2api');

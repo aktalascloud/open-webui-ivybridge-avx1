@@ -12,7 +12,7 @@ def build(destination=None,*,test=False):
     target.parent.mkdir(parents=True,exist_ok=True)
     compiler=Path(os.environ.get('SystemRoot','C:/Windows'))/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
     args=[str(compiler),'/nologo','/target:exe','/platform:x64','/optimize+','/debug-',
-          '/reference:System.Web.Extensions.dll','/out:'+str(target),str(source)]
+          '/reference:System.Web.Extensions.dll','/reference:System.Security.dll','/out:'+str(target),str(source)]
     if test:args.insert(1,'/define:BRIDGE_TEST')
     subprocess.run(args,check=True,creationflags=subprocess.CREATE_NO_WINDOW)
     return target

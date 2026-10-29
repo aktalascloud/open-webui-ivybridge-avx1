@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock,patch
 
 _auth_directory=tempfile.TemporaryDirectory(prefix='owui-provider-auth-fixture-')
 os.environ['DATA_DIR']=_auth_directory.name
+os.environ['LOCALAPPDATA']=_auth_directory.name
 os.environ['STATIC_DIR']=str(Path(_auth_directory.name)/'static')
 # Unit tests load the wheel from pip --target. Its installed BASE_DIR does
 # not contain the repository's frontend assets; use the real fixture source.
@@ -63,6 +64,7 @@ class ProviderGates(unittest.TestCase):
         for account in self.service.get_pool().get_all():self.service.get_pool().remove_by_id(account['id'])
         (self.instance.root/'login-flow.json').unlink(missing_ok=True)
         config=self.instance.config();config['browser_consent']=False
+        config.pop('vendor_restriction',None)
         managed.write_private(self.instance.root/'service-config.dpapi',config)
 
     def begin(self):
@@ -73,7 +75,18 @@ class ProviderGates(unittest.TestCase):
     def headers(self,**more):
         return {'X-OWUI-Connector':self.identity,'Origin':'chrome-extension://'+self.identity,**more}
 
-    def payload(self,state):return {'state':state,'token':'synthetic-token-'+'x'*32,'cookies':'fixture_session='+'y'*24}
+    def plaintext(self,state):return {'state':state,'token':'synthetic-token-'+'x'*32,'cookies':'fixture_session='+'y'*24}
+
+    def payload(self,state):
+        import base64
+        from open_webui.providers.provider_crypto import seal_browser_payload
+        data={**self.plaintext(state),'origin':'https://chat.deepseek.com','nonce':base64.b64encode(b'c'*32).decode()}
+        return {'state':state,'protected_session':seal_browser_payload(data,'owui-dsw-session-v2',state)}
+
+    def check_payload(self,state):
+        import base64
+        from open_webui.providers.provider_crypto import seal_browser_payload
+        return {'state':state,'challenge':seal_browser_payload({'nonce':base64.b64encode(b'p'*32).decode()},'owui-dsw-check-v2',state)}
 
     def test_status_has_no_credentials_and_no_local_usage_quota(self):
         config=self.instance.config();body=json.dumps(self.instance.status())
@@ -159,12 +172,12 @@ class ProviderGates(unittest.TestCase):
     def test_shared_extension_checks_permission_before_session_capture(self):
         state=self.begin()
         with patch.object(routes.Users,'get_user_by_id',AsyncMock(return_value=SimpleNamespace(role='admin'))):
-            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json={'state':state})
+            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json=self.check_payload(state))
             self.assertEqual(result.status_code,200);self.assertTrue(result.json()['ok'])
-            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json={'state':'f'*64})
+            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json=self.check_payload('f'*64))
             self.assertEqual(result.status_code,401)
         with patch.object(routes.Users,'get_user_by_id',AsyncMock(return_value=SimpleNamespace(role='user'))):
-            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json={'state':state})
+            result=self.client.post('/api/v1/local-providers/dsw2api/browser/check',headers=self.headers(),json=self.check_payload(state))
             self.assertEqual(result.status_code,401)
 
     def test_native_thinking_and_search_defaults_and_explicit_overrides(self):
@@ -201,14 +214,14 @@ class ProviderGates(unittest.TestCase):
             self.assertEqual(validate.call_count,1)
         self.assertEqual(len(self.service.get_pool().get_all()),1)
         stored=(self.instance.root/'accounts.json').read_text('utf-8')
-        self.assertNotIn(payload['token'],stored);self.assertNotIn(payload['cookies'],stored)
-        altered={**payload,'token':'different-token-'+'z'*32}
+        self.assertNotIn(self.plaintext(state)['token'],stored);self.assertNotIn(self.plaintext(state)['cookies'],stored)
+        altered={**self.plaintext(state),'token':'different-token-'+'z'*32}
         with self.assertRaises(PermissionError):self.instance.complete_login(**altered)
 
     def test_failed_session_validation_does_not_persist_credentials(self):
         state=self.begin()
         with patch.object(self.service.DeepSeekAdapter,'create_session',side_effect=RuntimeError('fixture failed')):
-            with self.assertRaises(RuntimeError):self.instance.complete_login(**self.payload(state))
+            with self.assertRaises(RuntimeError):self.instance.complete_login(**self.plaintext(state))
         self.assertEqual(self.service.get_pool().get_all(),[])
 
     def test_pow_jit_uses_the_runtime_cpu_without_serializing_native_code(self):
@@ -240,5 +253,127 @@ class ProviderGates(unittest.TestCase):
         for path in ['/api/v1/local-providers/dsw2api/setup','/api/v1/local-providers/dsw2api/browser/callback',
                      '/api/v1/users/fixture-user/api_key/rotate','/api/v1/users/fixture-user/api_key']:
             asyncio.run(exercise(path))
+
+    def test_rejected_pow_challenge_is_typed_auth_error(self):
+        adapter_module=importlib.import_module('open_webui.providers.vendor.dsw2api.adapter')
+        response=SimpleNamespace(status_code=200,headers={},json=lambda:{'code':40003},raise_for_status=lambda:None)
+        fake=SimpleNamespace(_client=SimpleNamespace(post=lambda *args,**kwargs:response),_base_headers={},_detect_waf_challenge=lambda *args:None)
+        with self.assertRaises(adapter_module.SessionAuthorizationError):adapter_module.DeepSeekAdapter._get_challenge(fake)
+
+    def test_managed_transient_and_auth_states_are_distinct_without_replay(self):
+        auth=importlib.import_module('open_webui.providers.vendor.dsw2api.adapter').SessionAuthorizationError
+        pool=self.service.get_pool();acct=pool.add('fixture-token-'+'t'*32,'session=fixture-state','fixture')
+        pool.mark_request_error(acct,RuntimeError('fixture transport failure'))
+        self.assertEqual(acct.state,'idle')
+        pool.mark_request_error(acct,auth())
+        self.assertTrue(acct.authorization_required);self.assertEqual(acct.state,'error')
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as caught:self.service._acquire()
+        self.assertEqual(caught.exception.status_code,401)
+        self.assertEqual(caught.exception.detail['code'],'deepseek_session_expired')
+        same=pool.reconnect_verified(acct.token,acct.cookies)
+        self.assertIs(same,acct);self.assertFalse(acct.authorization_required);self.assertEqual(acct.state,'idle')
+
+    def test_provider_restriction_cannot_be_cleared_by_reconnect(self):
+        adapter_module=importlib.import_module('open_webui.providers.vendor.dsw2api.adapter')
+        pool=self.service.get_pool();acct=pool.add('fixture-token-'+'b'*32,'session=fixture-blocked','fixture')
+        pool.mark_request_error(acct,adapter_module.UserMutedError('fixture account restricted'))
+        self.assertTrue(acct.vendor_blocked)
+        with self.assertRaises(PermissionError):pool.reconnect_verified(acct.token,acct.cookies)
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as caught:self.service._acquire()
+        self.assertEqual(caught.exception.status_code,403)
+
+    def test_reported_vendor_block_gates_inference_and_login_without_probes(self):
+        pool=self.service.get_pool();pool.add('fixture-token-'+'g'*32,'session=fixture-guard','fixture')
+        config=self.instance.config();config['vendor_restriction']={'active':True,'until_utc':time.time()+3600,'display_until':'fixture deadline'}
+        managed.write_private(self.instance.root/'service-config.dpapi',config)
+        with patch.object(self.service.DeepSeekAdapter,'create_session',side_effect=AssertionError('No vendor calls')) as create:
+            status=self.instance.status();self.assertTrue(status['connected']);self.assertTrue(status['vendor_blocked']);self.assertFalse(status['inference_verified'])
+            r=self.client.post('/dsw2api/v1/chat/completions',headers={'Authorization':'Bearer '+config['api_key']},json={'model':'deepseek-latest','messages':[{'role':'user','content':'fixture only'}]})
+            self.assertEqual(r.status_code,403);self.assertEqual(r.json()['error']['code'],'deepseek_account_restricted')
+            r=self.client.post('/api/v1/local-providers/dsw2api/browser/login',json={'consent':True})
+            self.assertEqual(r.status_code,403);create.assert_not_called()
+
+    def test_queued_client_disconnect_sends_no_vendor_post(self):
+        import subprocess,sys
+        module=managed.PACKAGE/'vendor/dsw2api/browser_session_lease.py'
+        child=subprocess.Popen([sys.executable,'-B','-c',"import runpy,sys;d=runpy.run_path(sys.argv[1]);h=d['acquire_browser_session_lease'](enabled=True);print('acquired',flush=True);sys.stdin.readline();h.release()",str(module)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+        try:
+            self.assertEqual(child.stdout.readline().strip(),'acquired')
+            pool=self.service.get_pool();acct=pool.add('fixture-token-'+'q'*32,'session=fixture-queued','fixture')
+            config=self.instance.config()
+            async def run():
+                incoming=asyncio.Queue();sent=[]
+                await incoming.put({'type':'http.request','body':json.dumps({'model':'deepseek-latest','messages':[{'role':'user','content':'fixture queued'}],'stream':True}).encode(),'more_body':False})
+                async def receive():return await incoming.get()
+                async def send(m):sent.append(m)
+                scope={'type':'http','http_version':'1.1','method':'POST','scheme':'http','path':'/v1/chat/completions','root_path':'','query_string':b'','headers':[(b'host',b'127.0.0.1:8080'),(b'authorization',('Bearer '+config['api_key']).encode())],'client':('127.0.0.1',50000),'server':('127.0.0.1',8080)}
+                request=asyncio.create_task(managed.inference_app(scope,receive,send))
+                await asyncio.sleep(.2)
+                await incoming.put({'type':'http.disconnect'})
+                try:await asyncio.wait_for(request,15)
+                except asyncio.CancelledError:pass
+            with patch.object(self.service.DeepSeekAdapter,'create_session',side_effect=AssertionError('Queued request must not send')) as create:
+                asyncio.run(run());create.assert_not_called()
+            self.assertEqual(acct.state,'idle')
+        finally:
+            if child.poll() is None:
+                child.stdin.write('\n');child.stdin.flush()
+            child.communicate(timeout=10)
+
+    def test_response_continuation_holds_and_releases_shared_lease_once(self):
+        from unittest.mock import Mock
+        pool=self.service.get_pool();acct=pool.add('fixture-token-'+'r'*32,'session=fixture-responses','fixture');acct._adapter=SimpleNamespace()
+        lease=SimpleNamespace(release=Mock())
+        with patch.object(self.service,'acquire_browser_session_lease',return_value=lease):
+            acquired=self.service._acquire_response({'account_id':acct.id})
+            self.assertEqual(acct.state,'busy');lease.release.assert_not_called()
+            acquired.release();acquired.release()
+        self.assertEqual(acct.state,'idle');lease.release.assert_called_once()
+
+    def test_response_constructor_failure_releases_account_and_queue(self):
+        from unittest.mock import Mock
+        pool=self.service.get_pool();acct=pool.add('fixture-token-'+'f'*32,'session=fixture-failure','fixture')
+        lease=SimpleNamespace(release=Mock())
+        with patch.object(self.service,'acquire_browser_session_lease',return_value=lease),patch.object(self.service,'AcquiredAccount',side_effect=RuntimeError('fixture constructor')):
+            with self.assertRaises(RuntimeError):self.service._acquire_response({'account_id':acct.id})
+        self.assertEqual(acct.state,'idle');lease.release.assert_called_once()
+
+    def test_stream_closes_before_account_lease_is_released(self):
+        async def run():
+            events=[];started=asyncio.Event()
+            async def stream():
+                try:
+                    yield b'data: fixture\n\n'
+                    await asyncio.sleep(10)
+                finally:events.append('closed')
+            acquired=SimpleNamespace(release=lambda:events.append('released'))
+            response=self.service._AccountStreamingResponse(acquired,stream(),media_type='text/event-stream')
+            async def receive():await started.wait();return {'type':'http.disconnect'}
+            async def send(message):
+                if message['type']=='http.response.body':started.set();await asyncio.sleep(.2)
+            scope={'type':'http','http_version':'1.1','method':'POST','path':'/fixture','headers':[],'asgi':{'version':'3.0','spec_version':'2.3'}}
+            await asyncio.wait_for(response(scope,receive,send),3)
+            self.assertEqual(events,['closed','released'])
+        asyncio.run(run())
+
+    def test_plaintext_handoff_is_rejected_before_vendor_validation(self):
+        state=self.begin()
+        with patch.object(routes.Users,'get_user_by_id',AsyncMock(return_value=SimpleNamespace(role='admin'))),patch.object(self.service.DeepSeekAdapter,'create_session') as create:
+            result=self.client.post('/api/v1/local-providers/dsw2api/browser/callback',headers=self.headers(),json=self.plaintext(state))
+            self.assertEqual(result.status_code,422);create.assert_not_called()
+
+    def test_protected_handoff_is_bound_to_nonce_and_purpose(self):
+        from open_webui.providers.provider_crypto import seal_browser_payload
+        import base64
+        state=self.begin()
+        data={'nonce':base64.b64encode(b'n'*32).decode(),'origin':'https://chat.deepseek.com','token':self.plaintext(state)['token'],'cookies':self.plaintext(state)['cookies']}
+        with patch.object(routes.Users,'get_user_by_id',AsyncMock(return_value=SimpleNamespace(role='admin'))),patch.object(self.service.DeepSeekAdapter,'create_session') as create:
+            for purpose,binding in [('wrong-purpose',state),('owui-dsw-session-v2','f'*64)]:
+                payload={'state':state,'protected_session':seal_browser_payload(data,purpose,binding)}
+                result=self.client.post('/api/v1/local-providers/dsw2api/browser/callback',headers=self.headers(),json=payload)
+                self.assertEqual(result.status_code,401)
+            create.assert_not_called()
 
 if __name__=='__main__':unittest.main()

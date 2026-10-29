@@ -96,6 +96,8 @@ class Account:
     state: str = "idle"        # idle | busy | error
     error_count: int = 0
     last_error: str = ""
+    authorization_required: bool = False
+    vendor_blocked: bool = False
     last_used: float = 0.0
     _adapter: Optional[DeepSeekAdapter] = field(default=None, repr=False)
 
@@ -121,6 +123,8 @@ class Account:
             "state": self.state,
             "error_count": self.error_count,
             "last_error": self.last_error,
+            "authorization_required": self.authorization_required,
+            "vendor_blocked": self.vendor_blocked,
             "last_used": int(self.last_used),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -399,6 +403,32 @@ class AccountPool:
                 daemon=True,
             )
             t.start()
+
+    def mark_request_error(self, acct, error):
+        """Classify a finished managed request, never resend it or probe DS."""
+        from .adapter import SessionAuthorizationError, UserMutedError
+        managed = managed_env.get('RECOVER_MANAGED_REQUEST_FAILURES') == '1'
+        if not managed:
+            return self.mark_error(acct, str(error))
+        with self._lock:
+            acct.authorization_required = isinstance(error, SessionAuthorizationError)
+            acct.vendor_blocked = isinstance(error, UserMutedError)
+            acct.state = 'error' if acct.authorization_required or acct.vendor_blocked else 'idle'
+            acct.error_count += 1
+            acct.last_error = str(error)
+
+    def reconnect_verified(self, token, cookies):
+        """Reset only an explicitly verified matching session, including same credentials."""
+        fp = _credential_fingerprint(token.strip(), cookies.strip())
+        with self._lock:
+            acct = next((a for a in self._accounts if a.fingerprint == fp), None)
+            if acct is None: return None
+            if acct.state == 'busy': raise RuntimeError('Provider request is active')
+            if acct.vendor_blocked: raise PermissionError('DeepSeek account is restricted by the provider')
+            acct.state = 'idle'; acct.error_count = 0; acct.last_error = ''
+            acct.authorization_required = False; acct._adapter = None
+            self._save_persisted_accounts_locked()
+            return acct
 
     def _background_recover(self, acct: Account) -> None:
         try:

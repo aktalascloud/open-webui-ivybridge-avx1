@@ -208,5 +208,17 @@
     "id": "WEB-028",
     "description": "Native orjson compilation cache validates exact source, hosted linker/SDK image, Rust/Python/packaging toolchain, flags, recipes and wheel hashes; unknown/custom toolchains or corrupt cache rebuild. Stock orjson remains default.",
     "source": "Local build optimization; no new LLM throughput claim."
+  },
+  {
+    "id": "WEB-029",
+    "description": "Shared existing-browser session handoff for Cline + OWUI with separate nonce/role consent; one managed per-user cross-process DeepSeek request lease. Typed expired-session401, vendor-restriction403, transient request recovery without replay, same-credential explicit reconnect, cancellation before vendor POST and SSE-close-before-release. Session saved is distinct from inference readiness; no automatic browser reconnect loops. OWUI Native Messaging authenticates its loopback peer with a DPAPI CurrentUser challenge/proof and encrypts callback credentials end-to-end with a bound acknowledgment; spoofed listeners see no plaintext secrets.",
+    "source": "Independent Apache-2.0 shared bridge additions and Cline neutral lease92526d83; original vendored gateway notices preserved. No vendor restriction bypass.",
+    "verification": [
+      "28 embedded provider fixtures",
+      "10 shared-extension cases",
+      "Real independent-process lease/cancel/process-death/unsafe-ACL test",
+      "Native Messaging origin/framing/port HTTP fixture",
+      "No real vendor inference/auth probes while user-reported account restriction applies"
+    ]
   }
 ]

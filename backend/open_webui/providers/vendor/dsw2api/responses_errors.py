@@ -38,11 +38,15 @@ def validation_error(error: ValidationError) -> ResponseError:
 def classify_error(error: Exception) -> ResponseError:
     # HTTP/upstream classification is an adapter; importing the error type alone
     # keeps schema policy independent of HTTP and upstream transports.
-    from .adapter import RateLimitError
+    from .adapter import RateLimitError, SessionAuthorizationError, UserMutedError
     from fastapi import HTTPException
     from pydantic import ValidationError
     if isinstance(error, ResponseError): return error
     if isinstance(error, ValidationError): return validation_error(error)
+    if isinstance(error, SessionAuthorizationError):
+        return ResponseError(str(error),401,'deepseek_session_expired')
+    if isinstance(error, UserMutedError):
+        return ResponseError('DeepSeek restricted this account',403,'deepseek_account_restricted')
     if isinstance(error, RateLimitError):
         return ResponseError('Upstream rate limited the request', 429, 'rate_limit_exceeded')
     if isinstance(error, ImageError):

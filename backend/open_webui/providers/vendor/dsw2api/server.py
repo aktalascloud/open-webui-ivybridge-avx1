@@ -35,6 +35,8 @@ from .turn_preparation import prepare_turn
 from .chat_service import ChatService
 from .chat_runtime import (prepare_account, thread_step as _thread_step,
     iterate_upstream as _iterate_upstream, AccountStreamingResponse as _AccountStreamingResponse)
+from .chat_runtime import REQUEST_CANCEL
+from .browser_session_lease import acquire_browser_session_lease
 
 from .adapter import (
     DeepSeekAdapter,
@@ -42,6 +44,7 @@ from .adapter import (
     UpstreamHintError,
     RateLimitError,
     UserMutedError,
+    SessionAuthorizationError,
 )
 from .admin import (
     router as admin_router,
@@ -218,6 +221,11 @@ def _check_rate_limit(request: Request) -> dict:
 
 
 app = FastAPI(title="DeepSeek Chat API", version="4.1.5")
+
+@app.exception_handler(SessionAuthorizationError)
+async def session_expired_response(request, error):
+    return JSONResponse({'error':{'type':'authentication_error',
+        'code':'deepseek_session_expired','message':str(error)}},status_code=401)
 app.add_middleware(ImageBodyLimit)
 
 
@@ -411,7 +419,8 @@ class ModelList(BaseModel):
 
 class AcquiredAccount:
     """Context manager wrapping an acquired pool account."""
-    def __init__(self, acct, cache_key: str | None = None):
+    def __init__(self, acct, cache_key: str | None = None, browser_lease=None):
+        self._browser_lease = browser_lease
         self.acct = acct
         self.adapter = acct.adapter
         self._session_id: str | None = None
@@ -574,15 +583,45 @@ class AcquiredAccount:
         if self._released:
             return
         self._released = True
-        pool.release(self.acct)
+        try:
+            pool.release(self.acct)
+        finally:
+            try:
+                if self._browser_lease is not None: self._browser_lease.release()
+            finally:
+                _UPSTREAM_LIMITER.release()
+
+
+def _claim_request_slot():
+    cancelled = REQUEST_CANCEL.get()
+    while True:
+        if cancelled is not None and cancelled.is_set(): raise asyncio.CancelledError()
+        if _UPSTREAM_LIMITER.acquire(timeout=.1): break
+    try:
+        return acquire_browser_session_lease(cancelled,
+            enabled=managed_env.get('DEEPSEEK_SHARED_BROWSER_LEASE') == '1')
+    except BaseException:
         _UPSTREAM_LIMITER.release()
+        raise
+
+
+def _unavailable_account_error(default=None):
+    rows = pool.get_all()
+    if any(row.get('vendor_blocked') for row in rows):
+        return HTTPException(403, {'code':'deepseek_account_restricted','message':'DeepSeek restricted the account; reconnecting does not remove provider restrictions.'})
+    if any(row.get('authorization_required') or ('40003' in row.get('last_error','')) for row in rows):
+        return HTTPException(401, {'code':'deepseek_session_expired','message':'Reconnect the current browser session in Connections.'})
+    if rows and all(row.get('state') == 'error' for row in rows):
+        return HTTPException(502, {'code':'deepseek_upstream_unavailable','message':'The previous request failed; no automatic replay was made.'})
+    return default or HTTPException(503, 'All accounts busy, try again later')
 
 
 def _acquire(cache_key: str | None = None) -> AcquiredAccount:
     # Global upstream concurrency cap (e.g. coding agents spawning parallel
     # sub-agents). Wait for a slot before grabbing a pool account so queued
     # requests don't hold accounts busy.
-    _UPSTREAM_LIMITER.acquire()
+    browser_lease = _claim_request_slot()
+    acct = None
     try:
         cached = SESSION_CACHE.get(cache_key) if cache_key else None
         # Keep a cached conversation on its creating account whenever it is
@@ -591,13 +630,12 @@ def _acquire(cache_key: str | None = None) -> AcquiredAccount:
         acct = pool.acquire_by_id(cached.account_id) if cached and cached.account_id else None
         if acct is None:
             acct = pool.acquire()
-    except Exception:
-        _UPSTREAM_LIMITER.release()
+        if acct is None: raise _unavailable_account_error()
+        return AcquiredAccount(acct, cache_key=cache_key, browser_lease=browser_lease)
+    except BaseException:
+        if acct is not None: pool.release(acct)
+        browser_lease.release(); _UPSTREAM_LIMITER.release()
         raise
-    if acct is None:
-        _UPSTREAM_LIMITER.release()
-        raise HTTPException(status_code=503, detail="All accounts busy, try again later")
-    return AcquiredAccount(acct, cache_key=cache_key)
 
 
 def _upstream_limit_from_env() -> int:
@@ -863,7 +901,7 @@ async def _prepare_stream_account(prompt, attachments, cache_key, thinking, mode
     return await prepare_account(lambda: _acquire(cache_key=cache_key),
         lambda acquired: prepare_turn(acquired, prompt, attachments, thinking=thinking,
                                       model_type=model_type or DEFAULT_MODEL_TYPE),
-        lambda acquired, error: pool.mark_error(acquired.acct, str(error)), runner=run_in_threadpool)
+        lambda acquired, error: pool.mark_request_error(acquired.acct, error), runner=run_in_threadpool)
 
 
 def _anthropic_nonstream(msg_id: str, prompt: str, tool_names: list[str],
@@ -889,6 +927,9 @@ def _anthropic_nonstream(msg_id: str, prompt: str, tool_names: list[str],
         get_stats().record(MODEL_NAME, 0, success=False)
         raise
     except RateLimitError as e:
+        if isinstance(e, UserMutedError) and managed_env.get('RECOVER_MANAGED_REQUEST_FAILURES') == '1':
+            pool.mark_request_error(acq.acct, e)
+            raise HTTPException(403, {'code':'deepseek_account_restricted','message':str(e)})
         # Match the OpenAI endpoint: upstream throttling is a client-visible
         # 429, not an opaque Anthropic 500. This includes account mute errors
         # because UserMutedError derives from RateLimitError.
@@ -901,7 +942,7 @@ def _anthropic_nonstream(msg_id: str, prompt: str, tool_names: list[str],
         )
     except UpstreamHintError as e:
         get_stats().record(MODEL_NAME, 0, success=False)
-        pool.mark_error(acq.acct, str(e))
+        pool.mark_request_error(acq.acct, e)
         raise HTTPException(status_code=502, detail=str(e))
     except UpstreamEmptyError:
         # Empty upstream bodies are transient and should not poison the
@@ -912,7 +953,7 @@ def _anthropic_nonstream(msg_id: str, prompt: str, tool_names: list[str],
         raise HTTPException(status_code=502, detail="上游返回空响应（可能触发限流），请稍后重试")
     except Exception as e:
         get_stats().record(MODEL_NAME, 0, success=False)
-        pool.mark_error(acq.acct, str(e))
+        pool.mark_request_error(acq.acct, e)
         raise
     finally:
         acq.release()
@@ -957,11 +998,13 @@ async def _anthropic_stream(msg_id: str, prompt: str, tool_names: list[str],
             get_stats().record(MODEL_NAME, (time.time() - t0) * 1000)
         except Exception as e:
             get_stats().record(MODEL_NAME, (time.time() - t0) * 1000, success=False)
-            if isinstance(e, (RateLimitError, UpstreamEmptyError)):
+            if isinstance(e, UserMutedError):
+                pool.mark_request_error(acq.acct, e)
+            elif isinstance(e, (RateLimitError, UpstreamEmptyError)):
                 if cache_key:
                     SESSION_CACHE.invalidate(cache_key)
             else:
-                pool.mark_error(acq.acct, str(e))
+                pool.mark_request_error(acq.acct, e)
             raise
         finally:
             acq.release()
@@ -1007,6 +1050,9 @@ def _handle_nonstream(proxy_id: str, prompt: str, tools: list[ToolDef] | None = 
         get_stats().record(MODEL_NAME, 0, success=False)
         raise
     except RateLimitError as e:
+        if isinstance(e, UserMutedError) and managed_env.get('RECOVER_MANAGED_REQUEST_FAILURES') == '1':
+            pool.mark_request_error(acq.acct, e)
+            raise HTTPException(403, {'code':'deepseek_account_restricted','message':str(e)})
         # Rate limiting is a transient upstream state, not a credential
         # problem — do NOT mark the account as errored, or the pool would
         # drain to 503 once the limiter cools down. Invalidate the cached
@@ -1017,7 +1063,7 @@ def _handle_nonstream(proxy_id: str, prompt: str, tools: list[ToolDef] | None = 
         raise HTTPException(status_code=429, detail=f"上游限流：{e.args[0] if e.args else '请求过于频繁'}，请稍后重试")
     except UpstreamHintError as e:
         get_stats().record(MODEL_NAME, 0, success=False)
-        pool.mark_error(acq.acct, str(e))
+        pool.mark_request_error(acq.acct, e)
         raise HTTPException(status_code=502, detail=str(e))
     except UpstreamEmptyError as e:
         # Transient empty responses (stale pooled connection / upstream
@@ -1028,7 +1074,7 @@ def _handle_nonstream(proxy_id: str, prompt: str, tools: list[ToolDef] | None = 
         raise HTTPException(status_code=502, detail="上游返回空响应（可能触发限流），请稍后重试")
     except Exception as e:
         get_stats().record(MODEL_NAME, 0, success=False)
-        pool.mark_error(acq.acct, str(e))
+        pool.mark_request_error(acq.acct, e)
         raise
     finally:
         acq.release()
@@ -1214,11 +1260,13 @@ async def _handle_stream(proxy_id: str, prompt: str, tools: list[ToolDef] | None
                                prompt_tokens=prompt_tokens)
             # Rate limit / transient empty responses are not credential
             # failures — keep the account usable instead of draining the pool.
-            if isinstance(e, (RateLimitError, UpstreamEmptyError)):
+            if isinstance(e, UserMutedError):
+                pool.mark_request_error(acq.acct, e)
+            elif isinstance(e, (RateLimitError, UpstreamEmptyError)):
                 if cache_key:
                     SESSION_CACHE.invalidate(cache_key)
             else:
-                pool.mark_error(acq.acct, str(e))
+                pool.mark_request_error(acq.acct, e)
             log.exception("openai_stream_failed")
             # Emit a uniform error frame to the client, then [DONE] so the
             # client SDK doesn't see a truncated stream.
@@ -1233,7 +1281,8 @@ async def _handle_stream(proxy_id: str, prompt: str, tools: list[ToolDef] | None
                     "finish_reason": "error",
                 }],
                 "error": {
-                    "type": "upstream_error",
+                    "type": "authentication_error" if isinstance(e, SessionAuthorizationError) else "upstream_error",
+                    "code": "deepseek_session_expired" if isinstance(e, SessionAuthorizationError) else "deepseek_account_restricted" if isinstance(e, UserMutedError) else "deepseek_upstream_error",
                     "message": str(e)[:500],
                 },
             }
@@ -1288,17 +1337,17 @@ RESPONSE_STORE = ResponseStore()
 def _acquire_response(parent):
     if parent is None:
         return _acquire()
-    _UPSTREAM_LIMITER.acquire()
+    browser_lease = _claim_request_slot()
+    account = None
     try:
         account = pool.acquire_by_id(parent['account_id'])
+        if account is None: raise _unavailable_account_error(ResponseError(
+            'Response account is busy or unavailable; retry or resend complete input',503,'response_context_unavailable'))
+        return AcquiredAccount(account, browser_lease=browser_lease)
     except BaseException:
-        _UPSTREAM_LIMITER.release()
+        if account is not None: pool.release(account)
+        browser_lease.release(); _UPSTREAM_LIMITER.release()
         raise
-    if account is None:
-        _UPSTREAM_LIMITER.release()
-        raise ResponseError('Response account is busy or unavailable; retry or resend complete input',
-                            503, 'response_context_unavailable')
-    return AcquiredAccount(account)
 
 
 def _responses_auth(request):
@@ -1314,7 +1363,7 @@ def _responses_controls(model):
 app.include_router(create_responses_router(
     store=lambda: RESPONSE_STORE, acquire=lambda parent: _acquire_response(parent),
     authenticate=_responses_auth, scope=_cache_scope, controls=_responses_controls, model=lambda: MODEL_NAME,
-    mark_error=lambda acquired, error: pool.mark_error(acquired.acct, str(error)),
+    mark_error=lambda acquired, error: pool.mark_request_error(acquired.acct, error),
     record=lambda elapsed, success: get_stats().record(MODEL_NAME, elapsed, success=success)))
 
 

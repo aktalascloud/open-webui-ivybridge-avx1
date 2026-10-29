@@ -4428,5 +4428,9 @@
   "Shared snapshot": "Общий снимок",
   "Show preview": "Показать предпросмотр",
   "This skill has a newer version. Your draft is preserved.": "У этого навыка есть новая версия. Ваш черновик сохранён.",
-  "This will replace the current API key. Integrations using the old key will stop working.": "Текущий API-ключ будет заменён. Интеграции со старым ключом перестанут работать."
+  "This will replace the current API key. Integrations using the old key will stop working.": "Текущий API-ключ будет заменён. Интеграции со старым ключом перестанут работать.",
+  "DeepSeek has restricted this account. Reconnecting does not remove the provider restriction.": "DeepSeek ограничил этот аккаунт. Переподключение не снимает ограничение провайдера.",
+  "Browser session saved; inference availability is not verified.": "Сессия браузера сохранена; доступность генерации не подтверждена.",
+  "DeepSeek session expired. Reconnect the current browser session.": "Сессия DeepSeek истекла. Подключите текущую сессию браузера повторно.",
+  "Open the shared extension and choose Cline + OWUI. The existing browser login is reused.": "Откройте общее расширение и выберите Cline + OWUI. Используется существующий вход в браузере."
 }
