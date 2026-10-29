@@ -9,15 +9,15 @@
   "helper_sha256": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
-    "src/lib/components/chat/MessageInput.svelte": "ddb77a91db774f2da5f1da3bd12264cd6e179d528134ce24c98581f898ec8dd8",
-    "src/lib/components/chat/Chat.svelte": "259c0694bfd974ae1f4d2a07534c742bea78e64284d0255839a0ba3651fc15cd",
+    "src/lib/components/chat/MessageInput.svelte": "95b2a8f422bcad25659a7692e30dbef3226ef8437ebb72c17c0ff4091f2c2b3d",
+    "src/lib/components/chat/Chat.svelte": "879bdbff64da361b6e5fd84caa9ec43981e4c8e1973bbd81193a364618553cfb",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
     "src/lib/components/chat/Messages/ResponseMessage.svelte": "518d64583aa680b353a44b43a87f573b1c57999da0f699cd1819e1f8132e7298",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
   },
   "reviewed_upstream_change": {
-    "upstream_commit": "7f03b6e77",
-    "scope": "Official MCP session task isolation and model-switch Web Search defaults; reviewed note collaboration/file attachment refactor. Existing local speech hooks preserved."
+    "upstream_commit": "3b8205505b871b92dd23e010b61f51a02d515a92",
+    "scope": "Selected control visibility only in MessageInput; completed task recovery/folder metadata in Chat. Mic provenance, voice budget and speech identity hooks unchanged; existing helper tests and actual saveControls callback regressions pass."
   },
-  "reviewed_local_change": "Strata-only per-model reasoning preference and composer picker. Existing microphone/voice/approval hooks unchanged; focused request and browser UI checks required."
+  "reviewed_local_change": "PR33311 saved-model outage guard; per-model reasoning serialization unchanged; packaged Chromium remains mandatory."
 }
