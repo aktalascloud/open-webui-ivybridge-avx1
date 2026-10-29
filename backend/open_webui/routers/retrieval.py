@@ -7,6 +7,7 @@ import mimetypes
 import os
 import re
 import shutil
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -49,6 +50,7 @@ from open_webui.env import (
     AIOHTTP_CLIENT_SESSION_SSL,
     DEVICE_TYPE,
     DOCKER,
+    RAG_EMBEDDING_BUFFER_SIZE,
     RAG_EMBEDDING_TIMEOUT,
     SENTENCE_TRANSFORMERS_BACKEND,
     SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND,
@@ -326,6 +328,7 @@ RETRIEVAL_CONFIG_KEYS = {
     'MICROSOFT_WEB_IQ_LANGUAGE': 'web.search.microsoft_web_iq_language',
     'MISTRAL_OCR_API_BASE_URL': 'rag.mistral_ocr_api_base_url',
     'MISTRAL_OCR_API_KEY': 'rag.mistral_ocr_api_key',
+    'MISTRAL_OCR_PARAMS': 'rag.mistral_ocr_params',
     'MISTRAL_OCR_USE_BASE64': 'rag.mistral_ocr_use_base64',
     'MOJEEK_SEARCH_API_KEY': 'web.search.mojeek_search_api_key',
     'OLLAMA_CLOUD_WEB_SEARCH_API_KEY': 'web.search.ollama_cloud_api_key',
@@ -521,7 +524,7 @@ async def update_embedding_config(request: Request, form_data: EmbeddingModelUpd
         updates = {
             'rag.embedding_engine': form_data.RAG_EMBEDDING_ENGINE,
             'rag.embedding_model': form_data.RAG_EMBEDDING_MODEL.strip(),
-            'rag.embedding_batch_size': form_data.RAG_EMBEDDING_BATCH_SIZE,
+            'rag.embedding_batch_size': form_data.RAG_EMBEDDING_BATCH_SIZE or 1,
             'rag.enable_async_embedding': form_data.ENABLE_ASYNC_EMBEDDING,
             'rag.embedding_concurrent_requests': form_data.RAG_EMBEDDING_CONCURRENT_REQUESTS,
         }
@@ -654,6 +657,7 @@ async def get_rag_config(request: Request, user=Depends(get_admin_user)):
         'MISTRAL_OCR_API_BASE_URL': config['rag.mistral_ocr_api_base_url'],
         'MISTRAL_OCR_API_KEY': config['rag.mistral_ocr_api_key'],
         'MISTRAL_OCR_USE_BASE64': config['rag.mistral_ocr_use_base64'],
+        'MISTRAL_OCR_PARAMS': config['rag.mistral_ocr_params'],
         'PADDLEOCR_VL_BASE_URL': config['rag.paddleocr_vl_base_url'],
         'PADDLEOCR_VL_TOKEN': config['rag.paddleocr_vl_token'],
         # MinerU settings
@@ -900,6 +904,7 @@ class ConfigForm(BaseModel):
     MISTRAL_OCR_API_BASE_URL: str | None = None
     MISTRAL_OCR_API_KEY: str | None = None
     MISTRAL_OCR_USE_BASE64: bool | None = None
+    MISTRAL_OCR_PARAMS: dict | None = None
     PADDLEOCR_VL_BASE_URL: str | None = None
     PADDLEOCR_VL_TOKEN: str | None = None
 
@@ -1086,6 +1091,7 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         'MISTRAL_OCR_API_BASE_URL': config['rag.mistral_ocr_api_base_url'],
         'MISTRAL_OCR_API_KEY': config['rag.mistral_ocr_api_key'],
         'MISTRAL_OCR_USE_BASE64': config['rag.mistral_ocr_use_base64'],
+        'MISTRAL_OCR_PARAMS': config['rag.mistral_ocr_params'],
         'PADDLEOCR_VL_BASE_URL': config['rag.paddleocr_vl_base_url'],
         'PADDLEOCR_VL_TOKEN': config['rag.paddleocr_vl_token'],
         # MinerU settings
@@ -1529,38 +1535,68 @@ def save_docs_to_vector_db(
             concurrent_requests=config['rag.embedding_concurrent_requests'],
         )
 
+        batch_size = config['rag.embedding_batch_size']
+        buffer_size = RAG_EMBEDDING_BUFFER_SIZE
+        if isinstance(batch_size, int) and batch_size > 0:
+            # Round up to whole provider batches to preserve request boundaries.
+            buffer_size = batch_size * ((buffer_size + batch_size - 1) // batch_size)
+
         # Run async embedding in sync context using the main event loop
         # This allows the main loop to stay responsive to health checks during long operations
         embedding_timeout = RAG_EMBEDDING_TIMEOUT
 
-        future = asyncio.run_coroutine_threadsafe(
-            embedding_function(
-                list(map(lambda x: x.replace('\n', ' '), texts)),
-                prefix=config['rag.embedding_content_prefix'],
-                user=user,
-            ),
-            request.app.state.main_loop,
-        )
-        embeddings = future.result(timeout=embedding_timeout)
-        log.info('embeddings generated %s for %s items', len(embeddings), len(texts))
-
-        items = [
-            {
-                'id': str(uuid.uuid4()),
-                'text': text,
-                'vector': embeddings[idx],
-                'metadata': metadatas[idx],
-            }
-            for idx, text in enumerate(texts)
-        ]
-
         log.info('adding to collection %s', collection_name)
-        get_vector_db_client().insert(
-            collection_name=collection_name,
-            items=items,
-        )
+        inserted_ids = []
+        try:
+            for start in range(0, len(texts), buffer_size):
+                buffer_texts = texts[start : start + buffer_size]
+                future = asyncio.run_coroutine_threadsafe(
+                    embedding_function(
+                        [text.replace('\n', ' ') for text in buffer_texts],
+                        prefix=config['rag.embedding_content_prefix'],
+                        user=user,
+                    ),
+                    request.app.state.main_loop,
+                )
+                started_at = time.monotonic()
+                try:
+                    embeddings = future.result(timeout=embedding_timeout)
+                except TimeoutError:
+                    future.cancel()
+                    raise
+                if embedding_timeout is not None:
+                    embedding_timeout = max(embedding_timeout - (time.monotonic() - started_at), 0)
+                log.info('embeddings generated %s for %s items', len(embeddings), len(buffer_texts))
 
-        log.info('added %s items to collection %s', len(items), collection_name)
+                items = [
+                    {
+                        'id': str(uuid.uuid4()),
+                        'text': text,
+                        'vector': embeddings[idx],
+                        'metadata': metadatas[start + idx],
+                    }
+                    for idx, text in enumerate(buffer_texts)
+                ]
+
+                inserted_ids.extend(item['id'] for item in items)
+                get_vector_db_client().insert(
+                    collection_name=collection_name,
+                    items=items,
+                )
+                del items, embeddings, future
+        except Exception:
+            if inserted_ids:
+                try:
+                    if add:
+                        get_vector_db_client().delete(collection_name=collection_name, ids=inserted_ids)
+                    else:
+                        # This call created/replaced the collection; an empty one would make retries skip indexing.
+                        get_vector_db_client().delete_collection(collection_name=collection_name)
+                except Exception:
+                    log.exception('failed to remove partially added items from collection %s', collection_name)
+            raise
+
+        log.info('added %s items to collection %s', len(texts), collection_name)
         return True
     except Exception as e:
         log.exception(e)

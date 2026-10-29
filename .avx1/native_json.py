@@ -41,6 +41,11 @@ def build(destination, lto=None, experiment=None):
     if profile:
         base_flags = ("-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma "
                       f"-C opt-level={profile['opt']} -C embed-bitcode=yes")
+    from native_cache import enabled,signature,restore,store
+    cache_key=signature(sha256(archive),lto,base_flags,profile) if enabled() else None
+    if cache_key:
+        cached=restore(destination,cache_key)
+        if cached is not None:return cached
     environment = dict(os.environ, CARGO_BUILD_JOBS="4", CARGO_INCREMENTAL="0", RUSTFLAGS=base_flags,
                        CARGO_PROFILE_RELEASE_LTO=lto, CARGO_TARGET_DIR=str(WORK / ("cargo-" + lto)))
     if profile:
@@ -56,6 +61,10 @@ def build(destination, lto=None, experiment=None):
     if profile:result.update(experiment=experiment,codegen_units=profile['codegen'],opt_level=profile['opt'])
     write_json(destination / "native-build.json", result)
     (destination / "wheel.sha256").write_text(sha256(wheel) + "  " + wheel.name + "\n", encoding="utf-8")
+    if cache_key:
+        result.update(native_qualification_reuse=False,native_input_hash=cache_key)
+        write_json(destination/'native-build.json',result)
+        store(destination,cache_key,wheel)
     return result
 
 

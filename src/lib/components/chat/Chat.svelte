@@ -1407,6 +1407,16 @@
 				(taskIds?.length || generating);
 			if (!local || (!ownActive && (!baseline || baseline[id] === local))) {
 				history.messages[id] = { ...local, ...message };
+				// Keep recovered replies finished unless their task is active or has been replaced.
+				if (
+					local?.done === true &&
+					message.done === false &&
+					local.meta?.task_id &&
+					local.meta.task_id === message.meta?.task_id &&
+					!taskIds?.includes(local.meta.task_id)
+				) {
+					history.messages[id].done = true;
+				}
 			}
 			if (local) {
 				history.messages[id] = {
@@ -4886,12 +4896,20 @@
 		if (isShared) return;
 		if (!$chatId || $temporaryChatEnabled || chat?.id !== $chatId) return;
 		const loaded = chat?.chat ?? {};
-		if (equal(chatFiles, loaded.files ?? []) && equal(selectedModels, loaded.models ?? [])) return;
+		const saveModels =
+			selectedModels.length > 0 &&
+			selectedModels.every(Boolean) &&
+			(loaded.models ?? []).every((modelId) => $models.some((model) => model.id === modelId));
+		if (
+			equal(chatFiles, loaded.files ?? []) &&
+			(!saveModels || equal(selectedModels, loaded.models ?? []))
+		)
+			return;
 		const id = $chatId;
 
 		const res = await updateChatById(localStorage.token, id, {
 			files: chatFiles,
-			...(selectedModels.length && selectedModels.every(Boolean) ? { models: selectedModels } : {})
+			...(saveModels ? { models: selectedModels } : {})
 		}).catch((err) => {
 			console.error('[controls autosave]', err);
 			return null;
@@ -5262,6 +5280,7 @@
 							chat={{
 								id: $chatId,
 								archived: chat?.archived ?? false,
+								folder_id: chat?.folder_id,
 								chat: {
 									title: $chatTitle,
 									models: selectedModels,

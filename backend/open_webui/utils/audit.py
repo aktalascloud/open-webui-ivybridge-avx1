@@ -218,6 +218,7 @@ class AuditLoggingMiddleware:
             request.url.path.startswith('/api/v1/auths')
             or request.url.path.startswith('/oauth/')
             or request.url.path.startswith('/api/v1/local-providers/')
+            or re.fullmatch(r'/api/v1/users/[^/]+/api_key(?:/rotate)?',request.url.path) is not None
         )
         async with self._audit_context(request) as context:
 

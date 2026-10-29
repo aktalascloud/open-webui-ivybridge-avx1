@@ -315,6 +315,7 @@ cypress/screenshots
 # Fork build outputs and private material
 .avx1-work/
 .avx1-out/
+.avx1-native-cache/
 *.p12
 *.jks
 android/key.properties

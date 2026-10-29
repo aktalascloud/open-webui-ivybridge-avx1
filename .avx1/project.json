@@ -7,7 +7,7 @@
   "description": "Open WebUI for Ivy Bridge AVX1: reviewed fixes, LTO experiments, agent compatibility; extended Russian UI translation / дополненный русский перевод.",
   "repository": "aktalascloud/open-webui-ivybridge-avx1",
   "channel": "latest",
-  "upstream_commit": "7f03b6e778374aca1eca4f8c6f29cbf8a8b1aeda",
+  "upstream_commit": "3b8205505b871b92dd23e010b61f51a02d515a92",
   "stable_tag": "v0.12.4",
   "distribution": "single unified latest"
 }

@@ -55,10 +55,12 @@ def build_python(project, package, manifest):
     environment = dict(os.environ, CYPRESS_INSTALL_BINARY="0", HUSKY="0", PIP_DISABLE_PIP_VERSION_CHECK="1")
     run(sys.executable, "-m", "pip", "install", "build", "hatchling", "wheel")
     if project == "webui":
+        run(sys.executable,ROOT/'.avx1/test_native_cache.py')
         from build_browser_bridge import build as build_browser_bridge
         build_browser_bridge()
         run(sys.executable,ROOT/'.avx1/test_native_browser_bridge.py')
         run('node','--test',ROOT/'.avx1/test_strata_reasoning.mjs',env=environment)
+        run('node','--test',ROOT/'.avx1/test_chat_model_preservation.mjs',env=environment)
         run('node','--test',ROOT/'.avx1/test_browser_connector.mjs',env=environment)
         run(sys.executable,ROOT/'.avx1/test_strata_reasoning.py')
         run("node", "--experimental-strip-types", "--test", ROOT / ".avx1/test_suggestions.mjs", env=environment)
@@ -97,6 +99,7 @@ def build_python(project, package, manifest):
         if measurement.exists():manifest['context_guard']=json.loads(measurement.read_text('utf-8'))
     else:
         checked_script(ROOT / '.avx1/test_upstream_daily.py')
+        checked_script(ROOT / '.avx1/test_daily_20261029.py')
         checked_script(ROOT / '.avx1/test_authlib_security.py')
         checked_script(ROOT / '.avx1/test_local_providers.py')
         checked_script(ROOT / '.avx1/test_bridge_installer.py')

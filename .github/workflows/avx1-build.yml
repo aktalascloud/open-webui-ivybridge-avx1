@@ -29,6 +29,14 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Identify native compiler and hosted SDK image
+        id: native-inputs
+        run: python .avx1/native_cache.py
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: steps.native-inputs.outputs.cacheable == 'true'
+        with:
+          path: .avx1-native-cache
+          key: ivy-native-${{ runner.os }}-${{ steps.native-inputs.outputs.key }}-${{ hashFiles('pyproject.toml', '.avx1/native_json.py', '.avx1/native_cache.py', '.avx1/common.py', '.avx1/native-policy.json') }}
       - name: Build, test, audit and package
         env:
           BUILD_CHANNEL: latest

@@ -1,0 +1,77 @@
+{
+  "day": "20261029",
+  "scope": "Selected semantic review, not all863 indexed open PRs",
+  "official_upstream": "3b8205505b871b92dd23e010b61f51a02d515a92",
+  "official_changes": [
+    "KB metadata-only projection #33332",
+    "Embedding batch default #33288 and bounded buffers/rollback",
+    "Playground params forwarding #33286",
+    "RU-ready UI labels #33308",
+    "Shared folder pins/rename #33342/#33339",
+    "Note attachment permission #33281",
+    "Removed webhook migration #33295",
+    "Notification default #33284"
+  ],
+  "ported": [
+    {
+      "pr": 33345,
+      "head": "1a02165c134bec9e6d7ff18ca27e506b98b9154f",
+      "base": "3b8205505b871b92dd23e010b61f51a02d515a92",
+      "adaptation": "String/null outputs and nullable metadata guarded; original stored images unchanged"
+    },
+    {
+      "pr": 33311,
+      "head": "9924cbb82224866ab556c970a5826f8a43e3a36c",
+      "base": "7f03b6e778374aca1eca4f8c6f29cbf8a8b1aeda",
+      "adaptation": "Actual autosave callback regressions"
+    }
+  ],
+  "deferred": [
+    {
+      "pr": 33335,
+      "reason": "Mutation response files contract intentionally changes to affected-only; needs complete consuming-client coverage; author timing numbers are not our measurements"
+    },
+    {
+      "pr": 33334,
+      "reason": "Admin-selected multi-model agent delegation expands ACL/model-routing contract; not qualified"
+    },
+    {
+      "pr": 33299,
+      "reason": "Search UI refactor overlaps current upstream changes; requires separate lazy-preview regressions"
+    },
+    {
+      "repository": "LiveSparks/open-webui",
+      "prs": [
+        36,
+        37
+      ],
+      "reason": "New pi agent integration/tool routing/key handoff broadens architecture; not qualified"
+    },
+    {
+      "repository": "cogwheel0/conduit",
+      "prs": [
+        897,
+        742
+      ],
+      "reason": "Whole-app navigation/AICore backend outside current Cline-only UI and model scope"
+    },
+    {
+      "repository": "dto-btn/canchat-v2",
+      "prs": [
+        617,
+        620,
+        607
+      ],
+      "reason": "Full diffs indexed, broad fork-specific observability/dependency changes still need semantic review"
+    },
+    {
+      "repository": "SushantGautam/open-webui",
+      "prs": [
+        4
+      ],
+      "reason": "Trace propagation candidate indexed; no demonstrated need in this installation"
+    }
+  ],
+  "code_contract_readonly": "Existing knowledge attachment helper consumes listing names/IDs and ignores mutation responses; private source/valves untouched; no private filter test run",
+  "benchmarks": "No new phone/LLM/CPU speed percentage claimed; SQL column selection and bounded embedding behavior tested on synthetic fixtures"
+}

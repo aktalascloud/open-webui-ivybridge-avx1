@@ -186,5 +186,27 @@
       "Four public-installer ownership/scope regressions; host registration automatic from normal DSW2API setup/login",
       "Fresh shared-profile consent required; old isolated-profile consent cannot authorize access"
     ]
+  },
+  {
+    "id": "WEB-026",
+    "description": "Do not capture request/response bodies of user API-key rotation/revocation in audit logs; retain status and audit metadata. Complements the new upstream admin key routes.",
+    "source": "Local security adaptation; targeted audit and first-owner/permission/revocation regressions."
+  },
+  {
+    "id": "WEB-027",
+    "description": "PR33345: keep tool images away from vision-disabled models across saved/history/native/Responses paths; preserve UI outputs and tolerate valid string/null tool outputs. PR33311: preserve the saved chat model during provider outages; explicit selections still save.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33345",
+      "https://github.com/open-webui/open-webui/pull/33311"
+    ],
+    "verification": [
+      "Tool-image immutability and string/null outputs",
+      "Actual saveControls callback: outages, file changes, explicit selection and shared-chat guards"
+    ]
+  },
+  {
+    "id": "WEB-028",
+    "description": "Native orjson compilation cache validates exact source, hosted linker/SDK image, Rust/Python/packaging toolchain, flags, recipes and wheel hashes; unknown/custom toolchains or corrupt cache rebuild. Stock orjson remains default.",
+    "source": "Local build optimization; no new LLM throughput claim."
   }
 ]

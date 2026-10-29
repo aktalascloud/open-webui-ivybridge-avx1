@@ -237,7 +237,8 @@ class ProviderGates(unittest.TestCase):
                 request_capture.assert_not_awaited()
                 self.assertEqual([c.args[0]['type'] for c in response_capture.await_args_list],['http.response.start'])
             self.assertEqual(received,[b'fixture-private-account']);self.assertEqual(sent[-1]['body'],b'fixture-private-response')
-        for path in ['/api/v1/local-providers/dsw2api/setup','/api/v1/local-providers/dsw2api/browser/callback']:
+        for path in ['/api/v1/local-providers/dsw2api/setup','/api/v1/local-providers/dsw2api/browser/callback',
+                     '/api/v1/users/fixture-user/api_key/rotate','/api/v1/users/fixture-user/api_key']:
             asyncio.run(exercise(path))
 
 if __name__=='__main__':unittest.main()
