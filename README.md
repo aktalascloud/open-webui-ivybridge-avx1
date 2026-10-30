@@ -32,3 +32,5 @@ Original licenses/notices and source history are preserved. Exact corresponding 
 [PR/fork review: accepted and deferred changes](.avx1/review-20261030.json).
 
 [FreeLLM](docs/provider-eligibility.md): three anonymous cloud models from Reflection, Poolside and NVIDIA; no personal API key/account, shared200 requests/hour/IP. DSW2API/browser integration stays removed.
+
+Avatar update: full-body Conduit voice view and a private 100 MiB VRM cache; avatars stay on your OWUI server, never inside the APK. New uploads: 20 MiB, source textures up to 8K; display memory is bounded. Existing audio routing is preserved.

@@ -4394,5 +4394,9 @@
   "settings.admin.subagents.modelDescription.placeholder": "What is this model good for?",
   "settings.admin.subagents.models.description": "Models the AI can choose for sub-agents, each with an optional note on what it is good or bad at. Without a choice, sub-agents use the current chat model.",
   "settings.admin.subagents.models.label": "Models",
-  "FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.": "FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data."
+  "FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.": "FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.",
+  "Choose a VRM file, up to 20 MiB.": "Choose a VRM file, up to 20 MiB.",
+  "VRM 0.x or 1.0 · 20 MiB max · Embedded textures up to 8192 px. Upload a character you have permission to use.": "VRM 0.x or 1.0 · 20 MiB max · Embedded textures up to 8192 px. Upload a character you have permission to use.",
+  "Avatar textures must be at most 8192 px per side.": "Avatar textures must be at most 8192 px per side.",
+  "Avatar textures exceed the 128 megapixel total budget.": "Avatar textures exceed the 128 megapixel total budget."
 }

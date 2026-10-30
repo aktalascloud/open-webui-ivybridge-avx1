@@ -110,7 +110,7 @@
 		input.value = '';
 		if (!selected) return;
 		if (selected.size > AVATAR_MAX_BYTES || !/\.(vrm|glb)$/i.test(selected.name)) {
-			error = $i18n.t('Choose a VRM file, up to 25 MiB.');
+			error = $i18n.t('Choose a VRM file, up to 20 MiB.');
 			return;
 		}
 		stopPreview();
@@ -172,7 +172,7 @@
 						error = '';
 					}}
 					on:error={(event) => {
-						error = event.detail?.message ?? $i18n.t('Could not load avatar.');
+						error = $i18n.t(event.detail?.message ?? 'Could not load avatar.');
 						ready = false;
 						avatarValid = !file;
 						stopPreview();
@@ -376,7 +376,7 @@
 	</div>
 	<p class="text-xs text-gray-500 mt-2">
 		{$i18n.t(
-			'VRM 0.x or 1.0 · 25 MiB max · Embedded textures. Upload a character you have permission to use.'
+			'VRM 0.x or 1.0 · 20 MiB max · Embedded textures up to 8192 px. Upload a character you have permission to use.'
 		)}
 	</p>
 </fieldset>

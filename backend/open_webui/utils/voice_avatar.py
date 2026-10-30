@@ -6,7 +6,7 @@ import struct
 
 from PIL import Image
 
-AVATAR_MAX_BYTES = 25 * 1024 * 1024
+AVATAR_MAX_BYTES = 20 * 1024 * 1024
 
 
 def avatar_animation_tools(gestures):
@@ -55,7 +55,7 @@ def validate_voice_avatar(data: bytes) -> None:
 
 def _validate(data: bytes) -> None:
     if len(data) > AVATAR_MAX_BYTES:
-        raise ValueError('Avatar must be at most 25 MiB.')
+        raise ValueError('Avatar must be at most 20 MiB.')
     magic, version, size, json_size, chunk = struct.unpack_from('<5I', data)
     if magic != 0x46546C67 or version != 2 or size != len(data) or chunk != 0x4E4F534A:
         raise ValueError('Upload a binary VRM file.')
@@ -96,8 +96,10 @@ def _validate_textures(model: dict, data: bytes, start: int, binary_size: int) -
             raise ValueError('Invalid embedded avatar texture.')
         with Image.open(io.BytesIO(data[start + offset : start + offset + length])) as texture:
             pixels += texture.width * texture.height
-            if max(texture.size) > 4096 or pixels > 32 * 1024 * 1024:
-                raise ValueError('Avatar textures are too large. Export at 2048px or below.')
+            if max(texture.size) > 8192:
+                raise ValueError('Avatar textures must be at most 8192 px per side.')
+            if pixels > 128 * 1024 * 1024:
+                raise ValueError('Avatar textures exceed the 128 megapixel total budget.')
             texture.verify()
 
 

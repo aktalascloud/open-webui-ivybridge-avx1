@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { loadBodyAnimation } from './voice-avatar-animation';
 import { validateAvatar, type VoiceAvatarConfig } from './voice-avatar';
+import {boundedBitmapLoader} from './avatar-texture-loader.js';
 
 export type AvatarSignals = {
 	speaking: boolean;
@@ -16,7 +17,7 @@ export async function createAvatarRenderer(
 	data: ArrayBuffer,
 	signal: AbortSignal
 ) {
-	await validateAvatar(data);
+	const textures = await validateAvatar(data);
 	signal.throwIfAborted();
 	const manager = new THREE.LoadingManager();
 	manager.setURLModifier((url) => {
@@ -24,7 +25,10 @@ export async function createAvatarRenderer(
 		return url;
 	});
 	const loader = new GLTFLoader(manager);
-	loader.register((parser) => new VRMLoaderPlugin(parser));
+	loader.register((parser) => {
+		Object.assign(parser,{textureLoader:boundedBitmapLoader(textures)});
+		return new VRMLoaderPlugin(parser);
+	});
 	const gltf = await loader.parseAsync(data, '');
 	const vrm: VRM | undefined = gltf.userData.vrm;
 	if (!vrm || signal.aborted) {

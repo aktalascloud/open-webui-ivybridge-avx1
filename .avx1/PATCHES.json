@@ -235,5 +235,14 @@
       "Shared catalog preset and real outbound header-builder isolation regressions",
       "Packaged Chromium provider selector and existing Strata compatibility"
     ]
+  },
+  {
+    "id": "WEB-036",
+    "description": "VRM uploads 20 MiB, source textures 8K/128MP, GPU textures bounded 32MP/4096px without rewriting user files; installed legacy avatars remain readable.",
+    "verification": [
+      "Upload limit/8K fixtures",
+      "Packaged Chromium smoke and public microphone contracts",
+      "Existing models/audio/settings preserved"
+    ]
   }
 ]

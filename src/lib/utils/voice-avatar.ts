@@ -1,4 +1,5 @@
-export const AVATAR_MAX_BYTES = 25 * 1024 * 1024;
+export const AVATAR_MAX_BYTES = 20 * 1024 * 1024;
+const AVATAR_RENDER_MAX_BYTES = 25 * 1024 * 1024; // Existing installed avatars remain readable.
 
 export type AvatarState = 'idle' | 'listening' | 'speaking';
 export type AvatarAnimation = { file_id: string };
@@ -68,7 +69,7 @@ export function routeAvatarAnimation(
 
 // Validate before GLTFLoader can fetch resources or allocate GPU buffers.
 export function readAvatar(data: ArrayBuffer) {
-	if (data.byteLength > AVATAR_MAX_BYTES) throw new Error('Avatar must be at most 25 MiB.');
+	if (data.byteLength > AVATAR_RENDER_MAX_BYTES) throw new Error('Avatar must be at most 25 MiB.');
 	if (data.byteLength < 20) throw new Error('Upload a VRM 0.x or VRM 1.0 file.');
 	const view = new DataView(data);
 	if (
@@ -134,6 +135,7 @@ export function readAvatar(data: ArrayBuffer) {
 export async function validateAvatar(data: ArrayBuffer) {
 	const { json, binaryStart } = readAvatar(data);
 	let pixels = 0;
+	const textures: {data: Uint8Array; width: number; height: number}[] = [];
 	for (const image of json.images ?? []) {
 		const buffer = json.bufferViews?.[image.bufferView];
 		const start = binaryStart + (buffer?.byteOffset ?? 0);
@@ -149,10 +151,12 @@ export async function validateAvatar(data: ArrayBuffer) {
 		const bitmap = await createImageBitmap(
 			new Blob([data.slice(start, start + buffer.byteLength)], { type: image.mimeType })
 		);
-		const tooLarge = bitmap.width > 4096 || bitmap.height > 4096;
+		const tooLarge = bitmap.width > 8192 || bitmap.height > 8192;
 		pixels += bitmap.width * bitmap.height;
+		textures.push({data:new Uint8Array(data,start,buffer.byteLength),width:bitmap.width,height:bitmap.height});
 		bitmap.close();
-		if (tooLarge || pixels > 32 * 1024 * 1024)
-			throw new Error('Avatar textures are too large. Export at 2048px or below.');
+		if (tooLarge) throw new Error('Avatar textures must be at most 8192 px per side.');
+		if (pixels > 128 * 1024 * 1024) throw new Error('Avatar textures exceed the 128 megapixel total budget.');
 	}
+	return textures;
 }
