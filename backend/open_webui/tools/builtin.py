@@ -1601,7 +1601,9 @@ async def replace_note_content(
             update_data['title'] = title
 
         editor = await Users.get_user_by_id(__user__['id'])
-        if not editor or not await has_access_to_note_files(note, get_content_files(update_data['data']['content']), editor):
+        if not editor or not await has_access_to_note_files(
+            note, get_content_files(update_data['data']['content']), editor
+        ):
             return JSONCodec.dumps({'error': 'Cannot attach files you cannot access'})
         form = NoteUpdateForm(**update_data)
         updated_note = await Notes.update_note_by_id(note_id, form)
@@ -1676,7 +1678,7 @@ async def search_chats(
             limit=count * 3,  # Fetch more for filtering
         )
 
-        results = []
+        matched = []
         for chat in chats:
             # Skip the current chat to avoid showing it in search results
             if __chat_id__ and chat.id == __chat_id__:
@@ -1688,31 +1690,16 @@ async def search_chats(
             if end_timestamp and chat.updated_at > end_timestamp:
                 continue
 
-            # Find a matching message snippet
-            snippet = ''
-            messages = (getattr(chat, 'chat', None) or {}).get('history', {}).get('messages', {})
-            if not messages:
-                messages = (getattr(chat, 'chat', None) or {}).get('messages', {}) or {}
-            if isinstance(messages, list):
-                messages = {str(idx): message for idx, message in enumerate(messages)}
+            matched.append(chat)
+            if len(matched) >= count:
+                break
 
-            lower_query = chat_search_content_query(query)
-            needles = list(dict.fromkeys([lower_query, *chat_search_terms(lower_query)])) if lower_query else []
-
-            for needle in needles:
-                for msg_id, msg in messages.items():
-                    content = msg.get('content', '') if isinstance(msg, dict) else ''
-                    if isinstance(content, str) and needle in content.lower():
-                        idx = content.lower().find(needle)
-                        start = max(0, idx - 50)
-                        end = min(len(content), idx + len(needle) + 100)
-                        snippet = (
-                            ('...' if start > 0 else '') + content[start:end] + ('...' if end < len(content) else '')
-                        )
-                        break
-                if snippet:
-                    break
-
+        snippets = await Chats.get_chat_search_snippets([chat.id for chat in matched], user_id, query)
+        lower_query = chat_search_content_query(query)
+        needles = list(dict.fromkeys([lower_query, *chat_search_terms(lower_query)])) if lower_query else []
+        results = []
+        for chat in matched:
+            snippet = snippets.get(chat.id) or ''
             title = chat.title or ''
             if not snippet and any(needle in title.lower() for needle in needles):
                 snippet = f'Title match: {title}'
@@ -1725,9 +1712,6 @@ async def search_chats(
                     'updated_at': chat.updated_at,
                 }
             )
-
-            if len(results) >= count:
-                break
 
         return JSONCodec.dumps(results, ensure_ascii=False)
     except Exception as e:
@@ -3134,6 +3118,67 @@ async def view_knowledge_file(
     except Exception as e:
         log.exception(f'view_knowledge_file error: {e}')
         return JSONCodec.dumps({'error': str(e)})
+
+
+async def display_file(
+    path: str,
+    page: int | None = None,
+    inline: bool = False,
+    __request__: Request = None,
+    __user__: dict = None,
+    __model_knowledge__: list[dict] | None = None,
+) -> str:
+    """
+    Show a terminal, chat, or knowledge base file to the user.
+    After display_file succeeds, do not display the same file again or emit Markdown for it.
+
+    :param path: Terminal file path, or file_id or /api/v1/files/<file_id>/content for a chat or knowledge base file
+    :param page: For PDF, DOCX, and PPTX files, open the preview at this 1-based page or slide number
+    :param inline: Show terminal files inline instead of opening the file viewer; uploaded files always display inline
+    :return: JSON with the file's path, name, content type, and display state
+    """
+    if __request__ is None:
+        return JSONCodec.dumps({'error': 'Request context not available', 'exists': False})
+
+    if not __user__:
+        return JSONCodec.dumps({'error': 'User context not available', 'exists': False})
+
+    try:
+        from open_webui.models.files import Files
+
+        if '/' not in path:
+            path = f'/api/v1/files/{path}/content'
+        parts = path.split('/')
+        if len(parts) != 6 or parts[:4] != ['', 'api', 'v1', 'files'] or parts[-1] != 'content':
+            return JSONCodec.dumps(
+                {'error': 'Use file_id or /api/v1/files/<file_id>/content for an uploaded file.', 'exists': False}
+            )
+
+        file = await Files.get_file_by_id(parts[4])
+        if not file:
+            return JSONCodec.dumps({'error': 'File not found', 'exists': False})
+
+        if not await _has_read_access_to_file(file, __user__, __model_knowledge__):
+            return JSONCodec.dumps({'error': 'File not found', 'exists': False})
+
+        file_meta = file.meta or {}
+        result = {
+            'type': 'file',
+            'source': 'open_webui',
+            'exists': True,
+            'displayed': True,
+            'path': path,
+            'full_path': path,
+            'name': file_meta.get('name') or file.filename,
+            'content_type': file_meta.get('content_type') or 'application/octet-stream',
+            'mime_type': file_meta.get('content_type') or 'application/octet-stream',
+        }
+        if page:
+            result['page'] = page
+        return JSONCodec.dumps(result, ensure_ascii=False)
+    except Exception as e:
+        log.exception(f'display_file error: {e}')
+        return JSONCodec.dumps({'error': str(e), 'exists': False})
 
 
 async def list_knowledge(

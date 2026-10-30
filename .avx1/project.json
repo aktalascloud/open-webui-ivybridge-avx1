@@ -4,10 +4,10 @@
   "upstream": "open-webui/open-webui",
   "development": "dev",
   "runner": "windows-2022",
-  "description": "Open WebUI for Ivy Bridge AVX1: reviewed fixes, LTO experiments, agent compatibility; extended Russian UI translation / дополненный русский перевод.",
+  "description": "Open WebUI for Ivy Bridge AVX1: reviewed fixes, LTO experiments, agent compatibility; extended Russian UI translation / \u0434\u043e\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u0439 \u0440\u0443\u0441\u0441\u043a\u0438\u0439 \u043f\u0435\u0440\u0435\u0432\u043e\u0434.",
   "repository": "aktalascloud/open-webui-ivybridge-avx1",
   "channel": "latest",
-  "upstream_commit": "3b8205505b871b92dd23e010b61f51a02d515a92",
-  "stable_tag": "v0.12.4",
+  "upstream_commit": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
+  "stable_tag": "v0.12.5",
   "distribution": "single unified latest"
 }

@@ -20,6 +20,12 @@ def adapter():
         isinstance(node,ast.ImportFrom) and (node.module or '').startswith('open_webui'))]
     scope={'AIOHTTP_CLIENT_SESSION_TOOL_SERVER_SSL':True,
            'AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER':None,'MCP_INITIALIZE_TIMEOUT':5,'JSONCodec':json}
+    apps=SOURCE.with_name('apps.py')
+    app_tree=ast.parse(apps.read_text('utf-8'))
+    app_tree.body=[node for node in app_tree.body if not (
+        isinstance(node,ast.ImportFrom) and (node.module or '').startswith('open_webui'))]
+    scope['WEBUI_SECRET_KEY']='synthetic-mcp-app-secret'
+    exec(compile(app_tree,str(apps),'exec'),scope)
     exec(compile(tree,str(SOURCE),'exec'),scope)
     return scope
 

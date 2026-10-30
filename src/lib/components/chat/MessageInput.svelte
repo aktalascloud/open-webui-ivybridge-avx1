@@ -168,6 +168,7 @@
 
 	export let atSelectedModel: Model | undefined = undefined;
 	export let selectedModels: [''];
+	export let onModelSelect: (models: string[]) => void = () => {};
 
 	let selectedModelIds = [];
 	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
@@ -2795,6 +2796,7 @@
 										<ModelSelector
 											bind:this={modelSelector}
 											bind:selectedModels
+											{onModelSelect}
 											showSetDefault={!history?.currentId}
 											placement="auto"
 											align="end"
@@ -2804,7 +2806,7 @@
 									<StrataReasoning selectedModels={selectedModelIds} disabled={generating} />
 									<ModelControls selectedModels={selectedModelIds} />
 
-									{#if isActive && prompt === '' && files.length === 0}
+									{#if isActive && (history.messages[history.currentId]?.user_id ?? $_user?.id) === $_user?.id && prompt === '' && files.length === 0}
 										<div class=" flex items-center">
 											<Tooltip content={$i18n.t('Stop')}>
 												<button

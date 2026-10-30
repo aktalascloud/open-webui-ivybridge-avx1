@@ -282,6 +282,9 @@
 			// can distinguish "clear this field" from "don't change this field"
 			FILE_MAX_SIZE: RAGConfig.FILE_MAX_SIZE ?? '',
 			FILE_MAX_COUNT: RAGConfig.FILE_MAX_COUNT ?? '',
+			KNOWLEDGE_MAX_UPLOAD_COUNT: RAGConfig.KNOWLEDGE_MAX_UPLOAD_COUNT ?? '',
+			KNOWLEDGE_MAX_FILE_COUNT: RAGConfig.KNOWLEDGE_MAX_FILE_COUNT ?? '',
+			KNOWLEDGE_MAX_FILE_SIZE: RAGConfig.KNOWLEDGE_MAX_FILE_SIZE ?? '',
 			FILE_IMAGE_COMPRESSION_WIDTH: RAGConfig.FILE_IMAGE_COMPRESSION_WIDTH ?? '',
 			FILE_IMAGE_COMPRESSION_HEIGHT: RAGConfig.FILE_IMAGE_COMPRESSION_HEIGHT ?? '',
 			ALLOWED_FILE_EXTENSIONS: RAGConfig.ALLOWED_FILE_EXTENSIONS.split(',')
@@ -1587,6 +1590,52 @@
 							bind:value={RAGConfig.FILE_MAX_COUNT}
 							autocomplete="off"
 							min="0"
+						/>
+					</AdminSettingField>
+				</div>
+
+				<AdminSettingField
+					label={$i18n.t('settings.admin.documents.knowledgeMaxUploadCount.label')}
+					description={$i18n.t('settings.admin.documents.knowledgeMaxUploadCount.description')}
+				>
+					<input
+						class={inputClass}
+						type="number"
+						placeholder={$i18n.t('Leave empty for unlimited')}
+						bind:value={RAGConfig.KNOWLEDGE_MAX_UPLOAD_COUNT}
+						autocomplete="off"
+						min="1"
+						step="1"
+					/>
+				</AdminSettingField>
+
+				<div class="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2">
+					<AdminSettingField
+						label={$i18n.t('settings.admin.documents.knowledgeMaxSize.label')}
+						description={$i18n.t('settings.admin.documents.knowledgeMaxSize.description')}
+					>
+						<input
+							class={inputClass}
+							type="number"
+							placeholder={$i18n.t('Leave empty for unlimited')}
+							bind:value={RAGConfig.KNOWLEDGE_MAX_FILE_SIZE}
+							autocomplete="off"
+							min="1"
+							step="1"
+						/>
+					</AdminSettingField>
+					<AdminSettingField
+						label={$i18n.t('settings.admin.documents.knowledgeMaxCount.label')}
+						description={$i18n.t('settings.admin.documents.knowledgeMaxCount.description')}
+					>
+						<input
+							class={inputClass}
+							type="number"
+							placeholder={$i18n.t('Leave empty for unlimited')}
+							bind:value={RAGConfig.KNOWLEDGE_MAX_FILE_COUNT}
+							autocomplete="off"
+							min="1"
+							step="1"
 						/>
 					</AdminSettingField>
 				</div>

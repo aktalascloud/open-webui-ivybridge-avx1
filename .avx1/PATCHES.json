@@ -220,5 +220,22 @@
       "Native Messaging origin/framing/port HTTP fixture",
       "No real vendor inference/auth probes while user-reported account restriction applies"
     ]
+  },
+  {
+    "id": "WEB-030",
+    "description": "Upstream0.12.5/dev: MCP Apps with sandboxed iframe, current-user server grants, app-only tool visibility and explicit tool confirmation; lazy SQL chat search/snippets; round-local tool-call normalization; chat-load cancellation and explicit model persistence. Preserve our null/string tool-image guards and shared-browser security. Complete18 new Russian UI strings.",
+    "source": "Official09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c; Apache/BSD dependencies retained with upstream project license.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33377",
+      "https://github.com/open-webui/open-webui/pull/33384",
+      "https://github.com/open-webui/open-webui/pull/33335",
+      "https://github.com/open-webui/open-webui/pull/33205"
+    ],
+    "verification": [
+      "Targeted MCP app binding/visibility/current-user/no-replay/CSP tests",
+      "Knowledge pending-count/size guards and tool-round identity",
+      "Real SDK transport and existing auth/DSW regressions in CI",
+      "No private CODE tests or real DeepSeek vendor requests"
+    ]
   }
 ]

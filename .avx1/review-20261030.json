@@ -1,0 +1,19 @@
+{
+  "day": "20261030",
+  "official_source": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
+  "upstream_release": "v0.12.5",
+  "scope": "39 official commits; MCP/agent/search/KB/runtime changes reviewed; daily fork/discussion index continues separately, not all PRs semantically approved",
+  "merge_resolutions": {
+    "chat_search": "use upstream SQL DTO and lazy user-scoped snippet endpoint",
+    "tool_images": "retain local null metadata and non-list output guards",
+    "session_records": "upstream round-local deduplication; preserve call approval status",
+    "model_selection": "explicit upstream onModelSelect callback; provider fallback never autosaves",
+    "locales": "retain completed translations, add18 Russian keys"
+  },
+  "checks": "CI authoritative packaged/auth/security/SDK/browser gates; harness migration preflight19+9+5 cases passed; private filter tests skipped by user; DeepSeek requests0",
+  "deferred": [
+    "Broad unreviewed fork patches",
+    "Vendor-restricted DeepSeek authentication and inference",
+    "Physical phone performance claims"
+  ]
+}

@@ -100,6 +100,7 @@ def build_python(project, package, manifest):
     else:
         checked_script(ROOT / '.avx1/test_upstream_daily.py')
         checked_script(ROOT / '.avx1/test_daily_20261029.py')
+        checked_script(ROOT / '.avx1/test_daily_20261030.py')
         checked_script(ROOT / '.avx1/test_authlib_security.py')
         checked_script(ROOT / '.avx1/test_local_providers.py')
         checked_script(ROOT / '.avx1/test_browser_session_lease.py')
