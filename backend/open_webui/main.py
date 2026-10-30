@@ -166,7 +166,6 @@ from open_webui.routers import (
     groups,
     images,
     knowledge,
-    local_providers,
     memories,
     mfa,
     models,
@@ -876,9 +875,6 @@ app.mount('/ws', socket_app)
 
 app.include_router(ollama.router, prefix='/ollama', tags=['ollama'])
 app.include_router(openai.router, prefix='/openai', tags=['openai'])
-app.include_router(local_providers.router, prefix='/api/v1/local-providers', tags=['local-providers'])
-from open_webui.providers.manager import inference_app as dsw2api_inference_app
-app.mount('/dsw2api', dsw2api_inference_app)
 
 
 app.include_router(pipelines.router, prefix='/api/v1/pipelines', tags=['pipelines'])

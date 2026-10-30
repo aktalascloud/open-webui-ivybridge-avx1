@@ -178,41 +178,16 @@ class SubagentModels(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(metadata,before)
 
 
-class NoProviderReplay(unittest.TestCase):
-    def adapter(self):
-        class RateLimitError(Exception): pass
-        class UserMutedError(RateLimitError): pass
-        class UpstreamEmptyError(Exception): pass
-        s={'managed_env':NS(get=lambda key: '1' if key=='DEEPSEEK_DISABLE_AUTO_REPLAY' else None),
-           'RATE_LIMIT_RETRY_DELAYS':[1,2], 'RateLimitError':RateLimitError,
-           'UserMutedError':UserMutedError,'UpstreamEmptyError':UpstreamEmptyError,
-           'log':NS(warning=Mock()),'time':NS(sleep=Mock())}
-        load('providers/vendor/dsw2api/adapter.py',['chat','chat_stream'],s,owner='DeepSeekAdapter')
-        return s
-
-    def test_nonstream_rate_limit_and_unknown_empty_outcome_are_not_replayed(self):
-        s=self.adapter()
-        for error in [s['RateLimitError']('limited'),s['UpstreamEmptyError']('uncertain')]:
-            adapter=NS(_chat_once=Mock(side_effect=error),create_session=Mock())
-            with self.assertRaises(type(error)):s['chat'](adapter,'session','prompt')
-            self.assertEqual(adapter._chat_once.call_count,1);adapter.create_session.assert_not_called()
-        s['time'].sleep.assert_not_called()
-
-    def test_empty_stream_does_not_create_fresh_session_or_repeat_prompt(self):
-        s=self.adapter();adapter=NS(_chat_stream_once=Mock(return_value=iter(())),create_session=Mock())
-        with self.assertRaises(s['UpstreamEmptyError']):list(s['chat_stream'](adapter,'session','prompt'))
-        adapter.create_session.assert_not_called();self.assertEqual(adapter._chat_stream_once.call_count,1)
-
-    def test_partial_stream_then_rate_limit_is_not_replayed(self):
-        s=self.adapter()
-        def tokens(*args,**kwargs):
-            yield 'partial'
-            raise s['RateLimitError']('limited')
-        adapter=NS(_chat_stream_once=Mock(side_effect=tokens),create_session=Mock())
-        stream=s['chat_stream'](adapter,'session','prompt')
-        self.assertEqual(next(stream),'partial')
-        with self.assertRaises(s['RateLimitError']):next(stream)
-        adapter.create_session.assert_not_called();self.assertEqual(adapter._chat_stream_once.call_count,1)
+class RemovedProvider(unittest.TestCase):
+    def test_browser_account_provider_and_native_host_are_not_shipped(self):
+        root=ROOT.parent.parent
+        self.assertFalse((ROOT/'providers').exists())
+        self.assertFalse((ROOT/'routers/local_providers.py').exists())
+        self.assertNotIn('local_providers', (ROOT/'main.py').read_text('utf-8'))
+        self.assertNotIn('dsw2api', (root/'src/lib/components/AddConnectionModal.svelte').read_text('utf-8'))
+        build=(root/'.avx1/build.py').read_text('utf-8')
+        self.assertNotIn('build_browser_bridge',build)
+        self.assertNotIn('owui-native-host.exe',build)
 
 
 if __name__ == '__main__':

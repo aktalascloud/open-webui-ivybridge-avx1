@@ -1,9 +1,0 @@
-Based on the Cline DeepSeek Session Bridge, Apache-2.0.
-Source: https://github.com/aktalascloud/cline-desktop-ivybridge-avx1
-Local source revision: 39127eab72b1272e8da20daabddcefb553e656ae
-Modified for a separate, explicitly authorized OWUI native-messaging channel.
-Cline native-host protocol and extension identity are retained.
-
-Independent shared-channel, consent, status and dual-handoff additions are licensed under Apache-2.0.
-No Open WebUI frontend/UI code is included in this connector.
-Full license: LICENSE-CLINE-APACHE-2.0.txt.

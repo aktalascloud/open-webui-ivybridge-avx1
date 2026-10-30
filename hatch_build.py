@@ -11,8 +11,6 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version, build_data):
         super().initialize(version, build_data)
-        if os.name == 'nt' and not os.path.isfile('backend/open_webui/providers/browser_connector/native/owui-native-host.exe'):
-            subprocess.run([sys.executable, '.avx1/build_browser_bridge.py'], check=True)
         stderr.write('>>> Building Open Webui frontend\n')
         npm = shutil.which('npm')
         if npm is None:

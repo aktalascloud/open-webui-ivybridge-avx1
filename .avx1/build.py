@@ -56,12 +56,8 @@ def build_python(project, package, manifest):
     run(sys.executable, "-m", "pip", "install", "build", "hatchling", "wheel")
     if project == "webui":
         run(sys.executable,ROOT/'.avx1/test_native_cache.py')
-        from build_browser_bridge import build as build_browser_bridge
-        build_browser_bridge()
-        run(sys.executable,ROOT/'.avx1/test_native_browser_bridge.py')
         run('node','--test',ROOT/'.avx1/test_strata_reasoning.mjs',env=environment)
         run('node','--test',ROOT/'.avx1/test_chat_model_preservation.mjs',env=environment)
-        run('node','--test',ROOT/'.avx1/test_browser_connector.mjs',env=environment)
         run(sys.executable,ROOT/'.avx1/test_strata_reasoning.py')
         run("node", "--experimental-strip-types", "--test", ROOT / ".avx1/test_suggestions.mjs", ROOT / '.avx1/test_tool_server_policy.mjs', env=environment)
         run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
@@ -77,14 +73,6 @@ def build_python(project, package, manifest):
     else:
         run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
     wheel_paths = list(wheels.glob("*.whl"))
-    if project=='webui':
-        application=next(p for p in wheel_paths if p.name.startswith('open_webui-'))
-        with zipfile.ZipFile(application) as contents:
-            entry='open_webui/providers/browser_connector/native/owui-native-host.exe'
-            if contents.namelist().count(entry)!=1:raise RuntimeError('Shared native host missing or duplicated')
-            import hashlib
-            if hashlib.sha256(contents.read(entry)).hexdigest()!=sha256(ROOT/'backend'/entry):
-                raise RuntimeError('Packaged native host differs from the compiled candidate')
     for path in wheel_paths:
         verify_archive(path)
     audit_target = audit_python(wheel_paths, manifest)
@@ -102,9 +90,6 @@ def build_python(project, package, manifest):
         checked_script(ROOT / '.avx1/test_daily_20261029.py')
         checked_script(ROOT / '.avx1/test_daily_20261030.py')
         checked_script(ROOT / '.avx1/test_authlib_security.py')
-        checked_script(ROOT / '.avx1/test_local_providers.py')
-        checked_script(ROOT / '.avx1/test_browser_session_lease.py')
-        checked_script(ROOT / '.avx1/test_bridge_installer.py')
         checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
         checked_script(ROOT / ".avx1/test_mcp_protocol.py")
         checked_script(ROOT / ".avx1/bench_json.py")

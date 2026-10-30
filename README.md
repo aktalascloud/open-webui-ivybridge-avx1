@@ -8,18 +8,6 @@ Windows build for Ivy Bridge. Extended Russian UI and menus.
 
 Download the latest ZIP, extract it and run `Install.cmd`.
 
-## DSW2API · DeepSeek latest
-
-Choose **DSW2API** from the normal provider list under Admin Settings → Connections. Sign in through the installed system browser; one shared Cline + OWUI extension keeps the existing browser profile and the Cline extension ID. Separate Native Messaging channels send the session only to the selected application after consent; passwords and Google cookies are never read. No token copying or debugging port is needed.
-
-The separate OpenAI-compatible endpoint is `/dsw2api/v1`, model `deepseek-latest`. Use the local gateway key shown in the connection, never a DeepSeek cookie as an API key. There are no local RPM/daily quotas or older-model fallbacks. This is an unofficial web integration: DeepSeek controls availability, account rules and upstream throttling. No unlimited-service guarantee or paid-API fallback is implied.
-
-OWUI registers its own local bridge automatically. Once, load the unpacked shared extension from `%LOCALAPPDATA%\OWUI DeepSeek Browser Bridge\extension` in your browser. Its Cline ID stays unchanged; the Cline installation is preserved.
-
-Deep thinking and native DeepSeek smart search default to enabled; explicit request-level disabling takes priority.
-
-Dependencies are included in the package metadata. The current web model follows DeepSeek's latest web deployment; the provider does not pretend that a different or older model is the latest.
-
 ## Changes
 
 Security: Authlib 1.9.1 replaces vulnerable 1.7.2; seven advisory IDs and the exact regression scope are listed in `.avx1/PATCHES.json`.

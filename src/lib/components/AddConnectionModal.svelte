@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { getContext, onMount, onDestroy } from 'svelte';
-	import { localProviderRequest } from '$lib/apis/localProviders';
+	import { getContext, onMount } from 'svelte';
 	const i18n = getContext<any>('i18n');
 
 	import { verifyOpenAIConnection } from '$lib/apis/openai';
@@ -54,50 +53,6 @@
 	let availableModelIds: string[] = [];
 
 	let loading = false;
-	let providerPreparing = false;
-	let localProviderStatus: any = null;
-	let providerGeneration = 0;
-	let providerPoll: ReturnType<typeof setInterval> | undefined;
-	const stopProviderPoll = () => {
-		if (providerPoll) clearInterval(providerPoll);
-		providerPoll = undefined;
-	};
-	onDestroy(stopProviderPoll);
-	const refreshLocalProvider = async () => {
-		if (!show || provider !== 'dsw2api') { stopProviderPoll(); return; }
-		try {
-			const status = await localProviderRequest(localStorage.token, 'status');
-			if (show && provider === 'dsw2api') {
-				localProviderStatus = status;
-				if (status.connected) stopProviderPoll();
-			}
-		} catch { stopProviderPoll(); }
-	};
-	const providerChanged = async () => {
-		const generation = ++providerGeneration;
-		stopProviderPoll(); localProviderStatus = null; providerPreparing = false;
-		if (provider !== 'dsw2api') return;
-		providerPreparing = true;
-		try {
-			const prepared = await localProviderRequest(localStorage.token, 'setup', {});
-			if (!show || provider !== 'dsw2api' || generation !== providerGeneration) return;
-			url = prepared.url; key = prepared.key; auth_type = 'bearer';
-			prefixId = 'DSW2API'; connectionType = 'local';
-			headers = ''; forwardCookies = false; modelIds = []; apiType = '';
-			availableModelIds = ['deepseek-latest']; localProviderStatus = prepared.status;
-		} catch {
-			if (show && generation === providerGeneration) toast.error($i18n.t('Unable to prepare DSW2API'));
-		} finally { if (generation === providerGeneration) providerPreparing = false; }
-	};
-	const loginDeepSeek = async () => {
-		if (providerPreparing) return;
-		providerPreparing = true;
-		try {
-			localProviderStatus = await localProviderRequest(localStorage.token, 'browser/login', { consent: true });
-			stopProviderPoll(); providerPoll = setInterval(refreshLocalProvider, 1500);
-		} catch { toast.error($i18n.t('Unable to open the system browser')); }
-		finally { providerPreparing = false; }
-	};
 	let showDeleteConfirmDialog = false;
 	let showAdvanced = false;
 
@@ -228,7 +183,6 @@
 	};
 
 	const submitHandler = async () => {
-		if (providerPreparing) return;
 		loading = true;
 
 		if (!ollama && !url) {
@@ -345,7 +299,6 @@
 			} else {
 				connectionType = connection.config?.connection_type ?? 'external';
 				provider = connection.config?.provider ?? (connection.config?.azure ? 'azure' : '');
-				if (provider === 'dsw2api') void refreshLocalProvider();
 				apiVersion = connection.config?.api_version ?? '';
 				apiType = connection.config?.api_type ?? '';
 			}
@@ -399,45 +352,6 @@
 					}}
 				>
 					<div class="px-1">
-							{#if !ollama && !direct}
-								<div class="flex items-center justify-between gap-3 mb-3">
-									<label for="provider-select" class="text-sm font-medium">{$i18n.t('Provider')}</label>
-									<select id="provider-select" bind:value={provider} on:change={providerChanged}
-										class="rounded-lg bg-gray-50 dark:bg-gray-850 px-3 py-2 text-sm outline-hidden">
-										<option value="">{$i18n.t('Default')}</option>
-										<option value="azure">{$i18n.t('Azure OpenAI')}</option>
-										<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
-										<option value="lmstudio">{$i18n.t('LM Studio')}</option>
-										<option value="litellm">{$i18n.t('LiteLLM')}</option>
-										<option value="dsw2api">DSW2API</option>
-									</select>
-								</div>
-								{#if provider === 'dsw2api'}
-									<div data-dsw2api-connection class="rounded-xl border border-gray-200 dark:border-gray-800 p-3 mb-3 text-sm">
-										<div class="font-medium">{$i18n.t('DeepSeek — latest web model')}</div>
-										<p class="text-xs text-gray-500 mt-1">{$i18n.t('One model, no older-model fallback or local usage quota.')}</p>
-										{#if localProviderStatus?.vendor_blocked}
-                                            <div class="mt-3 text-amber-700 dark:text-amber-300">{$i18n.t('DeepSeek has restricted this account. Reconnecting does not remove the provider restriction.')}</div>
-                                            {#if localProviderStatus?.restriction_until}<p class="text-xs mt-1">{localProviderStatus.restriction_until}</p>{/if}
-                                        {:else}
-                                            {#if localProviderStatus?.connected}
-                                                <div class="mt-3 flex items-center gap-2"><span class="size-2 rounded-full bg-amber-500"></span>{$i18n.t('Browser session saved; inference availability is not verified.')}</div>
-                                            {/if}
-                                            {#if !localProviderStatus?.connected || localProviderStatus?.authorization_required}
-                                                {#if localProviderStatus?.authorization_required}<p class="text-xs mt-2">{$i18n.t('DeepSeek session expired. Reconnect the current browser session.')}</p>{/if}
-											<p class="text-xs text-gray-500 mt-3">{$i18n.t('Allow the shared Cline + OWUI extension to send only your DeepSeek session to OWUI from your existing browser profile. Passwords and Google cookies are not read.')}</p>
-											<p class="mt-2 text-xs">{$i18n.t('Load the shared extension once from this folder:')}</p>
-											<p class="text-xs break-all">%LOCALAPPDATA%\OWUI DeepSeek Browser Bridge\extension</p>
-											<button type="button" on:click={loginDeepSeek} disabled={providerPreparing}
-												class="mt-3 rounded-lg px-3 py-2 bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 disabled:opacity-50">
-												{providerPreparing ? $i18n.t('Preparing…') : $i18n.t('Sign in to DeepSeek in browser')}
-											</button>
-											{#if localProviderStatus?.login?.stage === 'awaiting_login'}<p class="text-xs mt-2">{$i18n.t('Open the shared extension and choose Cline + OWUI. The existing browser login is reused.')}</p>{/if}
-                                            {/if}
-										{/if}
-									</div>
-								{/if}
-							{/if}
 						{#if !direct}
 							<div class="flex gap-2">
 								<div class="flex w-full justify-between items-center">
@@ -738,7 +652,29 @@
 								</div>
 							</div>
 
-							
+							{#if !ollama && !direct}
+								<div class="flex flex-row justify-between items-center w-full mt-2">
+									<label
+										for="provider-select"
+										class={`mb-0.5 text-xs text-gray-500
+								`}>{$i18n.t('Provider')}</label
+									>
+
+									<div>
+										<select
+											id="provider-select"
+											bind:value={provider}
+											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
+										>
+											<option value="">{$i18n.t('Default')}</option>
+											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
+											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
+											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
+											<option value="litellm">{$i18n.t('LiteLLM')}</option>
+										</select>
+									</div>
+								</div>
+							{/if}
 
 							{#if azure}
 								<div class="flex gap-2 mt-2">

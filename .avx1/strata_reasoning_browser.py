@@ -118,19 +118,9 @@ def check_strata_reasoning(browser, base, work, provider):
     page.goto(base+'/admin/settings/connections',wait_until='domcontentloaded')
     page.locator('[data-add-openai-connection]').click(timeout=45000)
     selector=page.locator('#provider-select')
-    selector.wait_for(state='visible')
-    if page.locator('#provider-select').count()!=1:raise RuntimeError('Provider selector duplicated')
-    with page.expect_response('**/api/v1/local-providers/dsw2api/setup',timeout=60000) as setup:
-        selector.select_option('dsw2api')
-    if not setup.value.ok:raise RuntimeError('Packaged provider setup failed')
-    prepared=setup.value.json()
-    page.locator('[data-dsw2api-connection]').wait_for(state='visible')
-    if selector.locator('option[value="dsh"]').count():raise RuntimeError('Unexpected separate DSH provider')
-    result=context.request.get(base+'/dsw2api/v1/models',headers={'Authorization':'Bearer '+prepared['key']})
-    if not result.ok or [row['id'] for row in result.json()['data']]!=['deepseek-latest']:
-        raise RuntimeError('The real packaged API did not expose exactly one latest model')
-    # Browser sign-in is a real human action. Never launch it in a CI fixture.
-    print('CHROMIUM_NORMAL_PROVIDER_LIST_DSW2API_SETUP_ONE_LATEST_MODEL_PASSED; browser login not executed')
+    if selector.locator('option[value="dsw2api"]').count():raise RuntimeError('Removed provider still advertised')
+    schema=context.request.get(base+'/openapi.json').json()
+    if any('/local-providers/' in path or path.startswith('/dsw2api') for path in schema['paths']):raise RuntimeError('Removed provider API still registered')
     if errors:raise RuntimeError('Reasoning UI JavaScript error: '+errors[0])
     context.close()
     print('CHROMIUM_STRATA_REASONING_SAVE_RELOAD_ULTRA_ADAPTIVE_REAL_PROXY_LIGHT_DARK_MOBILE_PASSED; real model requests=0')

@@ -165,29 +165,6 @@
     "source": "User-requested family/alias guard, Node and actual Python boundary regressions."
   },
   {
-    "id": "WEB-024",
-    "description": "One DSW2API provider in normal Connections; one deepseek-latest web-model alias with no older-model fallback. Account sign-in uses the installed system browser and a consented profile-scoped connector, not WebDriver or an open debugging port. DPAPI/Fernet private credentials, inference-only API mount, per-user/chat isolation and metadata-only credential auditing.",
-    "source": "Pinned Unlicense deepseek-web2api-free protocol; DSH/WhaleGate reviewed as references. No paid provider, pooled credential or client/tool fingerprint injection; upstream limits are not bypassed.",
-    "verification": [
-      "Latest-only/auth/data/crypto/environment and nonce/cancellation guards",
-      "Scoped browser connector transport tests",
-      "Actual packaged browser/provider-list and ordinary API checks"
-    ],
-    "provider_sources": "backend/open_webui/providers/sources.json"
-  },
-  {
-    "id": "WEB-025",
-    "description": "One shared Cline + OWUI DeepSeek extension in the existing browser profile. Stable Cline extension ID and native-host protocol retained; separate nonce-authorized OWUI Native Messaging channel, no new browser profile, webRequest capture, localhost browser permission or debugging. Native deep thinking/search default on with explicit per-request off preserved.",
-    "source": "Cline extension Apache-2.0 attribution retained; own bounded Windows CLR native host and account-preflight route.",
-    "verification": [
-      "Shared-extension target isolation, forged/expired/revoked nonce and scope checks",
-      "Production native host origin/framing/port limits; fixture callback transport",
-      "Real browser invocation arguments; provider thinking/search defaults and request isolation",
-      "Four public-installer ownership/scope regressions; host registration automatic from normal DSW2API setup/login",
-      "Fresh shared-profile consent required; old isolated-profile consent cannot authorize access"
-    ]
-  },
-  {
     "id": "WEB-026",
     "description": "Do not capture request/response bodies of user API-key rotation/revocation in audit logs; retain status and audit metadata. Complements the new upstream admin key routes.",
     "source": "Local security adaptation; targeted audit and first-owner/permission/revocation regressions."
@@ -256,11 +233,7 @@
     "source": "Upstream anti-flood guidance reviewed; own managed-policy hardening with offline single-attempt and encrypted restart fixtures."
   },
   {
-    "id": "WEB-033",
-    "description": "PR27145 adaptation: direct tool-server function suffix allow/block filtering, retained explicit connection IDs, exact selection keys including numeric-looking IDs. Avoid advertising excluded tool schemas and selecting a different server after reorder.",
-    "urls": [
-      "https://github.com/open-webui/open-webui/pull/27145"
-    ],
-    "source": "Reviewed immutable3b347d6a9e1f2391a31463798634dc586656f67b; adapted to current integration picker. No LLM speed percentage claimed."
+    "id": "WEB-034",
+    "description": "Remove DSW2API provider, account/browser endpoints, native-host build and bundled extension at the user request. Preserve Cline, existing chats, stock audio and all other connections. No unverified anonymous/unlimited model catalog is advertised."
   }
 ]
