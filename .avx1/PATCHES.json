@@ -224,16 +224,16 @@
     "source": "Reviewed head59f62fb86692afddd31524de3eaae879029362d6; local parameter/legacy-config adaptation; CLA/project license retained."
   },
   {
-    "id": "WEB-032",
-    "description": "DSW2API: disable hidden rate-limit/empty-stream retries and fresh-session prompt replays in the managed adapter. Persist detected provider restrictions and expired-session state across restart in the existing encrypted account store. One shared request lease, concurrency1, delta history and no auto-login remain. No vendor restriction bypass or ban-free guarantee.",
-    "urls": [
-      "https://github.com/snake-aabb-wtf/deepseek-web2api-free/pull/11",
-      "https://github.com/snake-aabb-wtf/deepseek-web2api-free/issues/18"
-    ],
-    "source": "Upstream anti-flood guidance reviewed; own managed-policy hardening with offline single-attempt and encrypted restart fixtures."
-  },
-  {
     "id": "WEB-034",
     "description": "Remove DSW2API provider, account/browser endpoints, native-host build and bundled extension at the user request. Preserve Cline, existing chats, stock audio and all other connections. No unverified anonymous/unlimited model catalog is advertised."
+  },
+  {
+    "id": "WEB-035",
+    "description": "FreeLLM: one anonymous cloud profile with three fixed zero-price models from different vendors: Reflection Beam, Poolside Laguna S2.1 and NVIDIA Nemotron3.5 Super VL. Shared200 requests/hour/IP; explicit privacy disclosure. No personal API key/account/paid fallback, OWUI identity or cookies forwarded; exact model/endpoint guards. DSH/Free-LLM/FreeLLMAPI are monitored research sources, not installed desktop/router dependencies.",
+    "verification": [
+      "Actual anonymous SSE tool call passed once for each model; synthetic prompt only, no retries or private data",
+      "Shared catalog preset and real outbound header-builder isolation regressions",
+      "Packaged Chromium provider selector and existing Strata compatibility"
+    ]
   }
 ]

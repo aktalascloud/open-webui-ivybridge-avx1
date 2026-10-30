@@ -4453,5 +4453,6 @@
   "settings.admin.subagents.addModel.label": "Добавить модель",
   "settings.admin.subagents.modelDescription.placeholder": "Для каких задач подходит эта модель?",
   "settings.admin.subagents.models.description": "Модели, доступные для подагентов, с необязательным описанием их сильных и слабых сторон. Без выбора используется модель основного чата.",
-  "settings.admin.subagents.models.label": "Модели"
+  "settings.admin.subagents.models.label": "Модели",
+  "FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.": "FreeLLM: без аккаунта и API-ключа. Общий лимит — 200 запросов/час/IP. Поставщики могут сохранять запросы; не отправляйте конфиденциальные данные."
 }

@@ -4393,5 +4393,6 @@
   "settings.admin.subagents.addModel.label": "Add model",
   "settings.admin.subagents.modelDescription.placeholder": "What is this model good for?",
   "settings.admin.subagents.models.description": "Models the AI can choose for sub-agents, each with an optional note on what it is good or bad at. Without a choice, sub-agents use the current chat model.",
-  "settings.admin.subagents.models.label": "Models"
+  "settings.admin.subagents.models.label": "Models",
+  "FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.": "FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data."
 }

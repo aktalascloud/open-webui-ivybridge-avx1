@@ -1,19 +1,21 @@
-# Optional cloud providers / Облачные провайдеры
+# FreeLLM
 
-Checked 2026-10-30. Inclusion requires **no payment, registration, personal API key, or usage quota**. Unknown limits do not qualify. No cloud model currently meets all four requirements; no fictitious model, hidden paid fallback, extra router or account registration is installed.
+One provider in OWUI → Connections. No account, personal API key, Cline, DSH Desktop or extra router. The current anonymous Kilo gateway has a **shared limit of 200 requests/hour/public IP**, across all three models and clients. Hourly limits were explicitly accepted by the user on 30 October 2026.
 
-Проверено 30.10.2026. Для подключения одновременно требуются **бесплатность, отсутствие регистрации, личного API-ключа и квот**. Неизвестные лимиты не считаются безлимитом. Подтверждённых облачных моделей пока нет; фиктивный каталог, платный fallback и лишний роутер не добавлены.
+Один провайдер в OWUI → Подключения. Без аккаунта, личного API-ключа, Cline, DSH Desktop и лишнего роутера. Общий лимит анонимного Kilo — **200 запросов/час на публичный IP**, суммарно для трёх моделей и клиентов. Почасовой лимит согласован пользователем 30.10.2026.
 
-| Source / Источник | Finding / Результат |
+| Model / Модель | Selection evidence / Основание выбора |
 | --- | --- |
-| [DSH Desktop](https://github.com/dataelement/dsh-desktop/tree/7eac110fd516908771e4026bdb46a5ac92eae456) | Harness host, not an inference service; API-key or account authentication. Оболочка Harness; требует ключ или аккаунт. |
-| [Free-LLM](https://github.com/nejib1/Free-LLM/tree/29d15d5af1e528e92f05ac268669d1e891944132) | Directory includes finite free tiers and trials. Каталог бесплатных тарифов и пробных квот. |
-| [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi/tree/36826e7cfe9ba281d5815e865045f1333b598f13) | Router aggregates provider keys and finite budgets; total tokens are not unlimited access. Роутер ключей и конечных квот; сумма токенов не означает безлимит. |
+| Reflection Beam1.0 | [Official model card](https://reflection.ai/beam-model-card): coding, reasoning, MCP/tool use. |
+| Poolside Laguna S2.1 | [Official report](https://poolside.ai/blog/introducing-laguna-s-2-1): long-horizon coding/tool workflows. |
+| NVIDIA Nemotron3.5 Super VL | [Official model card](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4): reasoning, vision, long context. |
 
-Anonymous exceptions were checked: [Kilo](https://kilo.ai/docs/gateway/usage-and-billing) limits free use to 200 requests/hour/IP; [OVH](https://docs.ovhcloud.com/en/guides/public-cloud/ai-machine-learning/ai-endpoints-troubleshooting) to 2 requests/minute/IP/model. [AI Horde](https://github.com/Haidra-Org/AI-Horde/blob/main/horde/apis/v2/kobold.py) has request throttling; its FreeLLMAPI adapter does not implement tool calling. [FreeModel](https://freemodel.online/) requires a key and routes over finite quotas, including paid candidates. None qualifies under this policy.
+These are three distinct vendors, not three Nemotron variants. Selection is workload-based, not a universal intelligence ranking. All three passed one anonymous streaming tool-call probe; no private data was sent. Gateway-served precision and availability can change. No paid model or hidden retry/fallback is selected.
 
-Проверены и анонимные варианты: Kilo — 200 запросов/час/IP; OVH — 2 запроса/минуту/IP/модель; AI Horde ограничивает частоту, а адаптер не поддерживает tool calling. FreeModel требует ключ и использует конечные квоты, включая платные каналы. Эти варианты исключены.
+Три разных вендора, без повторов Nemotron. Выбор ориентирован на задачи пользователя и не объявляется универсальным рейтингом интеллекта. Каждая модель прошла анонимную потоковую проверку tool calling на искусственном запросе. Личные данные не отправлялись. Платный fallback и скрытый повтор запросов не включены.
 
-DSW2API and the OWUI browser connector were removed at the user's request. Existing chats, model metadata, ACLs, local providers and stock audio are preserved. Cline and the installed DSH Desktop are independent and unchanged by this integration. Research never sends private prompts or credentials to candidate services.
+**Privacy / Приватность:** providers may retain prompts/outputs for training; avoid personal/confidential data. Поставщики могут сохранять запросы и ответы для обучения; не передавайте конфиденциальные данные. [Gateway terms](https://kilo.ai/docs/gateway/models-and-providers) · [Quota](https://kilo.ai/docs/gateway/usage-and-billing).
 
-DSW2API и браузерный коннектор OWUI удалены по запросу. История, метаданные моделей, ACL, локальные подключения и штатный звук сохранены. Cline и установленный DSH Desktop независимы; эта интеграция их не меняет. Исследование не отправляет кандидатам личные запросы и ключи.
+Daily review checks the live free catalog and the sources [DSH Desktop](https://github.com/dataelement/dsh-desktop), [Free-LLM](https://github.com/nejib1/Free-LLM), [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi), including relevant PR/issues/forks. Maintain one strongest qualified option per vendor, three vendors total; preserve the list when unchanged. Unverified, paid or account/key-required channels are not added. DSW2API/browser integration stays removed; existing local services/history/ACLs are preserved.
+
+Ежедневно проверяются каталог и указанные источники, PR/issues/форки. По одному сильному проверенному варианту от каждого из трёх вендоров; неизменный список не требует пересборки. Платные каналы, обязательные аккаунты/ключи и неподтверждённые модели исключаются. DSW2API и браузерная интеграция не возвращаются; локальные сервисы, история и ACL сохранены.

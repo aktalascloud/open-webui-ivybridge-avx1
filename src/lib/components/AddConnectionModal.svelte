@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import { freeLlmPreset } from '$lib/utils/freeLlm';
 	import { getContext, onMount } from 'svelte';
 	const i18n = getContext<any>('i18n');
 
@@ -53,6 +54,14 @@
 	let availableModelIds: string[] = [];
 
 	let loading = false;
+	const providerChanged = () => {
+		if (provider !== 'freellm') return;
+		const preset = freeLlmPreset();
+		url = preset.url; key = ''; auth_type = preset.auth_type;
+		prefixId = preset.prefix_id; modelIds = preset.model_ids;
+		availableModelIds = [...preset.model_ids]; connectionType = 'external';
+		headers = ''; forwardCookies = false; apiType = ''; apiVersion = '';
+	};
 	let showDeleteConfirmDialog = false;
 	let showAdvanced = false;
 
@@ -352,6 +361,35 @@
 					}}
 				>
 					<div class="px-1">
+							{#if !ollama && !direct}
+								<div class="flex flex-row justify-between items-center w-full mt-2">
+									<label
+										for="provider-select"
+										class={`mb-0.5 text-xs text-gray-500
+								`}>{$i18n.t('Provider')}</label
+									>
+
+									<div>
+										<select
+											id="provider-select"
+											bind:value={provider}
+											on:change={providerChanged}
+											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
+										>
+											<option value="">{$i18n.t('Default')}</option>
+											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
+											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
+											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
+											<option value="freellm">FreeLLM</option>
+											<option value="litellm">{$i18n.t('LiteLLM')}</option>
+										</select>
+									</div>
+								</div>
+							{/if}
+                            {#if provider === 'freellm'}
+                                <p data-freellm-connection class="mb-3 rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-600 dark:bg-gray-850 dark:text-gray-300">{$i18n.t('FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.')}</p>
+                            {/if}
+
 						{#if !direct}
 							<div class="flex gap-2">
 								<div class="flex w-full justify-between items-center">
@@ -652,29 +690,7 @@
 								</div>
 							</div>
 
-							{#if !ollama && !direct}
-								<div class="flex flex-row justify-between items-center w-full mt-2">
-									<label
-										for="provider-select"
-										class={`mb-0.5 text-xs text-gray-500
-								`}>{$i18n.t('Provider')}</label
-									>
 
-									<div>
-										<select
-											id="provider-select"
-											bind:value={provider}
-											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
-										>
-											<option value="">{$i18n.t('Default')}</option>
-											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
-											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
-											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
-											<option value="litellm">{$i18n.t('LiteLLM')}</option>
-										</select>
-									</div>
-								</div>
-							{/if}
 
 							{#if azure}
 								<div class="flex gap-2 mt-2">

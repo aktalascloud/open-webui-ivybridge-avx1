@@ -1,0 +1,40 @@
+{
+  "base_url": "https://ai-gateway.kilo.ai/api/v1",
+  "prefix_id": "FreeLLM",
+  "hourly_requests_per_ip": 200,
+  "quota_scope": "shared across all models and clients on the same public IP",
+  "reviewed": "2026-10-30",
+  "models": [
+    {
+      "id": "reflection/beam-free",
+      "name": "Reflection Beam 1.0",
+      "context_length": 1048576,
+      "vision": false,
+      "source": "https://reflection.ai/beam-model-card",
+      "vendor": "reflection"
+    },
+    {
+      "id": "poolside/laguna-s-2.1:free",
+      "name": "Poolside Laguna S 2.1",
+      "context_length": 262144,
+      "vision": false,
+      "source": "https://poolside.ai/blog/introducing-laguna-s-2-1",
+      "vendor": "poolside"
+    },
+    {
+      "id": "nvidia/nemotron-3.5-super-vl:free",
+      "name": "NVIDIA Nemotron 3.5 Super VL",
+      "context_length": 1000000,
+      "vision": true,
+      "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4",
+      "vendor": "nvidia"
+    }
+  ],
+  "research_sources": [
+    "dataelement/dsh-desktop",
+    "nejib1/Free-LLM",
+    "tashfeenahmed/freellmapi"
+  ],
+  "terms": "https://kilo.ai/docs/gateway/models-and-providers",
+  "privacy": "Providers may retain prompts and outputs for training. Do not submit personal or confidential data."
+}

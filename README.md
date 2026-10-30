@@ -31,4 +31,4 @@ Original licenses/notices and source history are preserved. Exact corresponding 
 
 [PR/fork review: accepted and deferred changes](.avx1/review-20261030.json).
 
-[Cloud provider eligibility](docs/provider-eligibility.md): no verified anonymous, keyless, unlimited cloud model is currently bundled. DSW2API/browser integration removed; existing chats and local connections preserved.
+[FreeLLM](docs/provider-eligibility.md): three anonymous cloud models from Reflection, Poolside and NVIDIA; no personal API key/account, shared200 requests/hour/IP. DSW2API/browser integration stays removed.

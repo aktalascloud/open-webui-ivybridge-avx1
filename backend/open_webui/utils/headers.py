@@ -177,6 +177,11 @@ async def get_headers_and_cookies(
     user=None,
 ):
     config = config or {}
+    if config.get('provider') == 'freellm':
+        from open_webui.utils.free_llm import check_free_llm_request
+        check_free_llm_request(config, url, key)
+        # Never forward OWUI identities/session cookies to anonymous cloud services.
+        return {'Content-Type': 'application/json'}, {}
     cookies = getattr(request, 'cookies', {}) if config.get('forward_cookies', False) else {}
     headers = {
         'Content-Type': 'application/json',

@@ -47,6 +47,7 @@ from open_webui.utils.headers import get_headers_and_cookies, include_user_info_
 from open_webui.utils.json_codec import JSONCodec
 from open_webui.utils.misc import convert_logit_bias_input_to_json, get_provider_function
 from open_webui.utils.model_ids import strip_provider_model_prefix
+from open_webui.utils.free_llm import prepare_free_llm_payload
 from open_webui.utils.payload import (
     apply_model_params_to_body_openai,
     apply_system_prompt_to_body,
@@ -398,6 +399,7 @@ async def get_anthropic_request_target(request: Request, form_data: dict, user: 
     url, key, api_config = await get_openai_connection(model['urlIdx'])
     prefix_id = api_config.get('prefix_id')
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
+    payload = prepare_free_llm_payload(api_config, url, key, payload)
 
     headers, cookies = await get_headers_and_cookies(request, url, key, api_config, user=user)
 
@@ -1481,6 +1483,7 @@ async def generate_chat_completion(
 
     prefix_id = api_config.get('prefix_id', None)
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
+    payload = prepare_free_llm_payload(api_config, url, key, payload)
 
     payload = apply_strata_reasoning_profile(
         payload, author_template=has_strata_author_template(model_info),
@@ -1714,6 +1717,7 @@ async def embeddings(request: Request, form_data: dict, user):
     url, key, api_config = await get_openai_connection(idx)
 
     form_data['model'] = strip_provider_model_prefix(form_data['model'], api_config.get('prefix_id'))
+    form_data = prepare_free_llm_payload(api_config, url, key, form_data)
     # Prepare payload/body
     body = JSONCodec.dumps(form_data)
 
@@ -1848,6 +1852,7 @@ async def responses(
     url, key, api_config = await get_openai_connection(idx)
 
     payload['model'] = strip_provider_model_prefix(payload['model'], api_config.get('prefix_id'))
+    payload = prepare_free_llm_payload(api_config, url, key, payload)
     body = JSONCodec.dumps(payload)
 
     r = None

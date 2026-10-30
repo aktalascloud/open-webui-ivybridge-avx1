@@ -118,6 +118,13 @@ def check_strata_reasoning(browser, base, work, provider):
     page.goto(base+'/admin/settings/connections',wait_until='domcontentloaded')
     page.locator('[data-add-openai-connection]').click(timeout=45000)
     selector=page.locator('#provider-select')
+    selector.wait_for(state='visible')
+    selector.select_option('freellm')
+    page.locator('[data-freellm-connection]').wait_for(state='visible')
+    if page.locator('#url-input').input_value() != 'https://ai-gateway.kilo.ai/api/v1':
+        raise RuntimeError('FreeLLM preset URL differs')
+    if selector.locator('option[value="freellm"]').count()!=1:
+        raise RuntimeError('FreeLLM provider missing or duplicated')
     if selector.locator('option[value="dsw2api"]').count():raise RuntimeError('Removed provider still advertised')
     schema=context.request.get(base+'/openapi.json').json()
     if any('/local-providers/' in path or path.startswith('/dsw2api') for path in schema['paths']):raise RuntimeError('Removed provider API still registered')
