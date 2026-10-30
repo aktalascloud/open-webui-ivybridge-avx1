@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from types import SimpleNamespace as NS
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator, ValidationError
@@ -17,9 +17,10 @@ from typing import Literal
 ROOT = Path(__file__).resolve().parents[1] / 'backend/open_webui'
 
 
-def load(path, names, scope):
+def load(path, names, scope, owner=None):
     tree = ast.parse((ROOT / path).read_text('utf-8'))
-    chosen = [copy.deepcopy(n) for n in tree.body if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
+    nodes = tree.body if owner is None else next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == owner).body
+    chosen = [copy.deepcopy(n) for n in nodes if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
     assert {n.name for n in chosen} == set(names)
     for node in chosen:
         node.decorator_list = []
@@ -140,6 +141,78 @@ class ToolRounds(unittest.TestCase):
         self.assertEqual(result[0]['duration'], 1)
         self.assertEqual(result[2]['duration'], 2)
         self.assertEqual(result[2]['status'], 'rejected')
+
+
+class SubagentModels(unittest.IsolatedAsyncioTestCase):
+    async def test_admin_allowlist_is_intersected_with_current_user_model_access(self):
+        user=NS(id='viewer')
+        all_models=[{'id':'visible','info':None},{'id':'private','name':'Private'}]
+        s={'Config':NS(get=AsyncMock(return_value=[{'id':'visible'},{'id':'private'},'invalid'])),
+           'get_all_models':AsyncMock(return_value=all_models),
+           'get_filtered_models':AsyncMock(return_value=[all_models[0]])}
+        load('utils/subagents.py',['get_subagent_models'],s)
+        result=await s['get_subagent_models'](None,user)
+        self.assertEqual([m['id'] for m in result],['visible'])
+        s['get_filtered_models'].assert_awaited_once_with(all_models,user)
+
+    def test_author_modes_and_parent_controls_do_not_leak_to_different_model(self):
+        s=load('utils/subagents.py',['subagent_request_params'],{})
+        parent={'reasoning_effort':'ultra','temperature':.7,'custom_params':{'reason_mode':'auto'}}
+        before=copy.deepcopy(parent)
+        self.assertEqual(s['subagent_request_params']('davidau','deepseek',parent),{})
+        self.assertEqual(parent,before)
+        same=s['subagent_request_params']('davidau','davidau',parent)
+        self.assertEqual(same,parent);self.assertIsNot(same,parent)
+
+    async def test_unlisted_child_never_creates_a_chat_or_runs_model(self):
+        s={'Config':NS(get_many=AsyncMock(return_value={})),
+           'Chats':NS(get_chat_folder_id=AsyncMock(return_value=None),insert_new_chat=AsyncMock()),
+           'copy':copy,'UserModel':lambda **d:NS(**d),
+           'get_subagent_models':AsyncMock(return_value=[{'id':'allowed'}])}
+        load('utils/subagents.py',['delegate'],s)
+        metadata={'model_id':'parent','chat_context':{'params':{'temperature':.5}}}
+        before=copy.deepcopy(metadata)
+        result=await s['delegate']('task','context',False,model_id='private',request=None,
+                                   user_data={'id':'viewer'},metadata=metadata,parent_chat_id='chat',parent_message_id='message')
+        self.assertIn('not available',result);s['Chats'].insert_new_chat.assert_not_awaited()
+        self.assertEqual(metadata,before)
+
+
+class NoProviderReplay(unittest.TestCase):
+    def adapter(self):
+        class RateLimitError(Exception): pass
+        class UserMutedError(RateLimitError): pass
+        class UpstreamEmptyError(Exception): pass
+        s={'managed_env':NS(get=lambda key: '1' if key=='DEEPSEEK_DISABLE_AUTO_REPLAY' else None),
+           'RATE_LIMIT_RETRY_DELAYS':[1,2], 'RateLimitError':RateLimitError,
+           'UserMutedError':UserMutedError,'UpstreamEmptyError':UpstreamEmptyError,
+           'log':NS(warning=Mock()),'time':NS(sleep=Mock())}
+        load('providers/vendor/dsw2api/adapter.py',['chat','chat_stream'],s,owner='DeepSeekAdapter')
+        return s
+
+    def test_nonstream_rate_limit_and_unknown_empty_outcome_are_not_replayed(self):
+        s=self.adapter()
+        for error in [s['RateLimitError']('limited'),s['UpstreamEmptyError']('uncertain')]:
+            adapter=NS(_chat_once=Mock(side_effect=error),create_session=Mock())
+            with self.assertRaises(type(error)):s['chat'](adapter,'session','prompt')
+            self.assertEqual(adapter._chat_once.call_count,1);adapter.create_session.assert_not_called()
+        s['time'].sleep.assert_not_called()
+
+    def test_empty_stream_does_not_create_fresh_session_or_repeat_prompt(self):
+        s=self.adapter();adapter=NS(_chat_stream_once=Mock(return_value=iter(())),create_session=Mock())
+        with self.assertRaises(s['UpstreamEmptyError']):list(s['chat_stream'](adapter,'session','prompt'))
+        adapter.create_session.assert_not_called();self.assertEqual(adapter._chat_stream_once.call_count,1)
+
+    def test_partial_stream_then_rate_limit_is_not_replayed(self):
+        s=self.adapter()
+        def tokens(*args,**kwargs):
+            yield 'partial'
+            raise s['RateLimitError']('limited')
+        adapter=NS(_chat_stream_once=Mock(side_effect=tokens),create_session=Mock())
+        stream=s['chat_stream'](adapter,'session','prompt')
+        self.assertEqual(next(stream),'partial')
+        with self.assertRaises(s['RateLimitError']):next(stream)
+        adapter.create_session.assert_not_called();self.assertEqual(adapter._chat_stream_once.call_count,1)
 
 
 if __name__ == '__main__':

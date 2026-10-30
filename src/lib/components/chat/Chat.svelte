@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
+	import { isSelectedDirectToolServer } from '$lib/utils/toolServerPolicy.js';
 	import { applyStrataReasoning } from '$lib/utils/strataReasoning';
 	import type { TerminalContext } from '$lib/types';
 	import { v4 as uuidv4 } from 'uuid';
@@ -4401,12 +4402,7 @@
 		for (const toolId of selectedToolIds) {
 			if (toolId.startsWith('direct_server:')) {
 				let serverId = toolId.replace('direct_server:', '');
-				// Check if serverId is a number
-				if (!isNaN(parseInt(serverId))) {
-					toolServerIds.push(parseInt(serverId));
-				} else {
-					toolServerIds.push(serverId);
-				}
+				toolServerIds.push(serverId);
 			} else {
 				toolIds.push(toolId);
 			}
@@ -4455,7 +4451,7 @@
 				tool_servers: $config?.features?.enable_tool_servers
 					? [
 							...($toolServers ?? []).filter(
-								(server, idx) => toolServerIds.includes(idx) || toolServerIds.includes(server?.id)
+								(server, idx) => isSelectedDirectToolServer(server, idx, toolServerIds)
 							),
 							// Direct terminal servers — always included when enabled (not routed through selectedToolIds)
 							...(terminalEnabled

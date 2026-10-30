@@ -624,6 +624,8 @@ class DeepSeekAdapter:
                 # with backoff would only waste time. Surface immediately.
                 raise
             except RateLimitError:
+                if managed_env.get('DEEPSEEK_DISABLE_AUTO_REPLAY') == '1':
+                    raise
                 idx = attempt - 1
                 if idx >= len(RATE_LIMIT_RETRY_DELAYS):
                     raise
@@ -639,6 +641,8 @@ class DeepSeekAdapter:
                     prompt = retry_prompt
                     ref_file_ids = retry_ref_file_ids
             except UpstreamEmptyError:
+                if managed_env.get('DEEPSEEK_DISABLE_AUTO_REPLAY') == '1':
+                    raise
                 if attempt > 1:
                     raise
                 log.warning("upstream_empty_retry_nonstream")
@@ -836,6 +840,8 @@ class DeepSeekAdapter:
                 # immediately, no backoff retry.
                 raise
             except RateLimitError:
+                if managed_env.get('DEEPSEEK_DISABLE_AUTO_REPLAY') == '1':
+                    raise
                 idx = attempt - 1
                 if idx >= len(RATE_LIMIT_RETRY_DELAYS):
                     raise
@@ -844,11 +850,15 @@ class DeepSeekAdapter:
                             extra={"attempt": attempt, "delay": delay})
                 time.sleep(delay)
             except UpstreamEmptyError:
+                if managed_env.get('DEEPSEEK_DISABLE_AUTO_REPLAY') == '1':
+                    raise
                 if attempt > 1:
                     raise
             else:
                 if yielded:
                     return
+                if managed_env.get('DEEPSEEK_DISABLE_AUTO_REPLAY') == '1':
+                    raise UpstreamEmptyError('Empty upstream stream; automatic replay disabled')
                 log.warning("upstream_empty_retry_stream")
             if attempt > max(len(RATE_LIMIT_RETRY_DELAYS), 1):
                 break

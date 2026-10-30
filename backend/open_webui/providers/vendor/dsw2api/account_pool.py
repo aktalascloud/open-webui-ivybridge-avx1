@@ -141,6 +141,8 @@ class Account:
             "cookies": self.cookies,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "authorization_required": self.authorization_required,
+            "vendor_blocked": self.vendor_blocked,
         }
 
 
@@ -206,6 +208,9 @@ class AccountPool:
                 source="file",
                 created_at=created_at,
                 updated_at=updated_at,
+                authorization_required=item.get('authorization_required') is True,
+                vendor_blocked=item.get('vendor_blocked') is True,
+                state='error' if item.get('authorization_required') is True or item.get('vendor_blocked') is True else 'idle',
             ))
 
     def _ensure_store_dir(self):
@@ -416,6 +421,10 @@ class AccountPool:
             acct.state = 'error' if acct.authorization_required or acct.vendor_blocked else 'idle'
             acct.error_count += 1
             acct.last_error = str(error)
+            if acct.authorization_required or acct.vendor_blocked:
+                # A process restart must not silently lift a provider restriction
+                # or resume polling an expired session. Credentials remain encrypted.
+                self._save_persisted_accounts_locked()
 
     def reconnect_verified(self, token, cookies):
         """Reset only an explicitly verified matching session, including same credentials."""

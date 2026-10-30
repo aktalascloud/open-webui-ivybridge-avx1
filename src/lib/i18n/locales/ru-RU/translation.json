@@ -4449,5 +4449,9 @@
   "settings.admin.documents.knowledgeMaxSize.label": "Размер файла базы знаний (МБ)",
   "settings.admin.documents.knowledgeMaxSize.description": "Максимальный размер одного файла базы знаний.",
   "settings.admin.documents.knowledgeMaxCount.label": "Число файлов базы знаний",
-  "settings.admin.documents.knowledgeMaxCount.description": "Максимальное общее число файлов в базе знаний."
+  "settings.admin.documents.knowledgeMaxCount.description": "Максимальное общее число файлов в базе знаний.",
+  "settings.admin.subagents.addModel.label": "Добавить модель",
+  "settings.admin.subagents.modelDescription.placeholder": "Для каких задач подходит эта модель?",
+  "settings.admin.subagents.models.description": "Модели, доступные для подагентов, с необязательным описанием их сильных и слабых сторон. Без выбора используется модель основного чата.",
+  "settings.admin.subagents.models.label": "Модели"
 }

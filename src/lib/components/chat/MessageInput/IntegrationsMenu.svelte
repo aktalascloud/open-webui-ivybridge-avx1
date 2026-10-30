@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { directToolServerKey } from '$lib/utils/toolServerPolicy.js';
 	import { resolveLocalizedResource, resolveLocalizedFunction } from '$lib/utils/localizedContent';
 	import { functions as localizedFunctions } from '$lib/stores';
 	import { getContext, onDestroy, tick } from 'svelte';
@@ -151,8 +152,9 @@
 					continue;
 				}
 
-				items[`direct_server:${serverIdx}`] = {
-					id: `direct_server:${serverIdx}`,
+				const selectionKey = directToolServerKey(server, serverIdx);
+				items[selectionKey] = {
+					id: selectionKey,
 					name,
 					description: server.info.description ?? ''
 				};

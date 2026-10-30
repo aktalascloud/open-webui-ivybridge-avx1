@@ -284,6 +284,26 @@ class ProviderGates(unittest.TestCase):
         with self.assertRaises(HTTPException) as caught:self.service._acquire()
         self.assertEqual(caught.exception.status_code,403)
 
+    def test_detected_vendor_restriction_survives_restart_without_probes(self):
+        adapter=importlib.import_module('open_webui.providers.vendor.dsw2api.adapter')
+        pool=self.service.get_pool();acct=pool.add('fixture-token-'+'p'*32,'session=fixture-persist','fixture')
+        pool.mark_request_error(acct,adapter.UserMutedError('synthetic provider restriction'))
+        ciphertext=pool._store_path.read_text('utf-8')
+        self.assertNotIn(acct.token,ciphertext);self.assertNotIn(acct.cookies,ciphertext)
+        restarted=type(pool)();rows=restarted.get_all()
+        self.assertEqual(len(rows),1);self.assertTrue(rows[0]['vendor_blocked'])
+        self.assertEqual(rows[0]['state'],'error')
+        with self.assertRaises(PermissionError):restarted.reconnect_verified(acct.token,acct.cookies)
+
+    def test_expired_authorization_survives_restart_until_explicit_verified_reconnect(self):
+        adapter=importlib.import_module('open_webui.providers.vendor.dsw2api.adapter')
+        pool=self.service.get_pool();acct=pool.add('fixture-token-'+'a'*32,'session=fixture-expired','fixture')
+        pool.mark_request_error(acct,adapter.SessionAuthorizationError())
+        restarted=type(pool)();self.assertTrue(restarted.get_all()[0]['authorization_required'])
+        restarted.reconnect_verified(acct.token,acct.cookies)
+        again=type(pool)();self.assertEqual(again.get_all()[0]['state'],'idle')
+        self.assertFalse(again.get_all()[0]['authorization_required'])
+
     def test_reported_vendor_block_gates_inference_and_login_without_probes(self):
         pool=self.service.get_pool();pool.add('fixture-token-'+'g'*32,'session=fixture-guard','fixture')
         config=self.instance.config();config['vendor_restriction']={'active':True,'until_utc':time.time()+3600,'display_until':'fixture deadline'}

@@ -237,5 +237,30 @@
       "Real SDK transport and existing auth/DSW regressions in CI",
       "No private CODE tests or real DeepSeek vendor requests"
     ]
+  },
+  {
+    "id": "WEB-031",
+    "description": "PR33334: admin model allowlist for sub-agents, intersected with each user model ACL. Parent model/session stays unchanged; different-model children use their own parameters, so DavidAU-only author modes cannot leak. Legacy config clients preserve the allowlist when the field is omitted.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33334"
+    ],
+    "source": "Reviewed head59f62fb86692afddd31524de3eaae879029362d6; local parameter/legacy-config adaptation; CLA/project license retained."
+  },
+  {
+    "id": "WEB-032",
+    "description": "DSW2API: disable hidden rate-limit/empty-stream retries and fresh-session prompt replays in the managed adapter. Persist detected provider restrictions and expired-session state across restart in the existing encrypted account store. One shared request lease, concurrency1, delta history and no auto-login remain. No vendor restriction bypass or ban-free guarantee.",
+    "urls": [
+      "https://github.com/snake-aabb-wtf/deepseek-web2api-free/pull/11",
+      "https://github.com/snake-aabb-wtf/deepseek-web2api-free/issues/18"
+    ],
+    "source": "Upstream anti-flood guidance reviewed; own managed-policy hardening with offline single-attempt and encrypted restart fixtures."
+  },
+  {
+    "id": "WEB-033",
+    "description": "PR27145 adaptation: direct tool-server function suffix allow/block filtering, retained explicit connection IDs, exact selection keys including numeric-looking IDs. Avoid advertising excluded tool schemas and selecting a different server after reorder.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/27145"
+    ],
+    "source": "Reviewed immutable3b347d6a9e1f2391a31463798634dc586656f67b; adapted to current integration picker. No LLM speed percentage claimed."
   }
 ]

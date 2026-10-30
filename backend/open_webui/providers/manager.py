@@ -59,6 +59,7 @@ class ProviderManager:
                 'DEEPSEEK_ENCRYPTION_KEY':config['encryption_key'],'DEEPSEEK_JITTER_SECS':'0','LOG_LEVEL':'WARNING',
                 'LOG_FORMAT':'json','ALLOWED_ORIGINS':'','DISABLE_AUTO_RECOVER':'true',
                 'DEEPSEEK_MAX_CONCURRENCY':'1','DEEPSEEK_SHARED_BROWSER_LEASE':'1',
+                'DEEPSEEK_DISABLE_AUTO_REPLAY':'1',
                 'RECOVER_MANAGED_REQUEST_FAILURES':'1'})
             # The embedded protocol has no reason to retain a standalone stats
             # sampler. No account discovery, model probes or remote login runs.

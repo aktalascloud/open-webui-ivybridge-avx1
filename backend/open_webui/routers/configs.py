@@ -68,6 +68,7 @@ MODELS_CONFIG_KEYS = {
 }
 SUBAGENTS_CONFIG_KEYS = {
     'ENABLE_SUBAGENTS': 'subagents.enable',
+    'SUBAGENTS_MODELS': 'subagents.models',
     'SUBAGENTS_BACKGROUND_ENABLED': 'subagents.background_enabled',
     'SUBAGENTS_MAX_CONCURRENT': 'subagents.max_concurrent',
     'SUBAGENTS_MAX_ASYNC': 'subagents.max_async',
@@ -810,6 +811,7 @@ async def set_models_config(request: Request, form_data: ModelsConfigForm, user=
 
 class SubagentsConfigForm(BaseModel):
     ENABLE_SUBAGENTS: bool
+    SUBAGENTS_MODELS: list[dict] = []
     SUBAGENTS_BACKGROUND_ENABLED: bool
     SUBAGENTS_MAX_CONCURRENT: int
     SUBAGENTS_MAX_ASYNC: int
@@ -829,7 +831,7 @@ async def set_subagents_config(
     form_data: SubagentsConfigForm,
     user=Depends(get_admin_user),
 ):
-    await Config.upsert(config_updates(form_data.model_dump(), SUBAGENTS_CONFIG_KEYS))
+    await Config.upsert(config_updates(form_data.model_dump(exclude_unset=True), SUBAGENTS_CONFIG_KEYS))
     values = await get_config_values(SUBAGENTS_CONFIG_KEYS)
     await publish_event(
         request,

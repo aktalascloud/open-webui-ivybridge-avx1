@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 import { config } from '$lib/stores';
 import { WEBUI_BASE_URL } from '$lib/constants';
 import { convertOpenApiToToolPayload, resolveSchema } from '$lib/utils';
+import { filterToolServerSpecs } from '$lib/utils/toolServerPolicy.js';
 import { normalizeTags } from '$lib/utils/tags';
 import { getOpenAIModelsDirect } from './openai';
 
@@ -491,10 +492,11 @@ export const getToolServersData = async (servers: object[]) => {
 						const { openapi, info, specs } = {
 							openapi: res,
 							info: res.info,
-							specs: convertOpenApiToToolPayload(res)
+                            specs: filterToolServerSpecs(convertOpenApiToToolPayload(res), server?.config?.function_name_filter_list)
 						};
 
 						const result: Record<string, any> = {
+                            ...(server?.id != null ? { id: server.id } : {}),
 							url: server?.url,
 							openapi: openapi,
 							info: info,

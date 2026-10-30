@@ -4389,5 +4389,9 @@
   "DeepSeek has restricted this account. Reconnecting does not remove the provider restriction.": "DeepSeek has restricted this account. Reconnecting does not remove the provider restriction.",
   "Browser session saved; inference availability is not verified.": "Browser session saved; inference availability is not verified.",
   "DeepSeek session expired. Reconnect the current browser session.": "DeepSeek session expired. Reconnect the current browser session.",
-  "Open the shared extension and choose Cline + OWUI. The existing browser login is reused.": "Open the shared extension and choose Cline + OWUI. The existing browser login is reused."
+  "Open the shared extension and choose Cline + OWUI. The existing browser login is reused.": "Open the shared extension and choose Cline + OWUI. The existing browser login is reused.",
+  "settings.admin.subagents.addModel.label": "Add model",
+  "settings.admin.subagents.modelDescription.placeholder": "What is this model good for?",
+  "settings.admin.subagents.models.description": "Models the AI can choose for sub-agents, each with an optional note on what it is good or bad at. Without a choice, sub-agents use the current chat model.",
+  "settings.admin.subagents.models.label": "Models"
 }

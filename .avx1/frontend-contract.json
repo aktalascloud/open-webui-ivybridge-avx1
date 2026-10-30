@@ -10,7 +10,7 @@
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
     "src/lib/components/chat/MessageInput.svelte": "98cf1f4db67c4363b966a40f71e8f0e352641c38426b074f32e9f82b0e96e019",
-    "src/lib/components/chat/Chat.svelte": "cda4f3461a0f16b30d905bba4c39e04f60d26b912c76f382a0faaddb41382b17",
+    "src/lib/components/chat/Chat.svelte": "4390c212784137646eb35c803069301c89f417a785fad8aafb1cc85f0d22a356",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
     "src/lib/components/chat/Messages/ResponseMessage.svelte": "85af3382d937fbcdaa36f55f4102657ece4a09fd14d07252583283abd0ec6be3",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
@@ -19,5 +19,5 @@
     "upstream_commit": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
     "scope": "Explicit model-selection callbacks and current-user Stop guard in MessageInput; abortable/stale-load protection in Chat; sandboxed MCPApp branch in ResponseMessage. Mic provenance, voice budget, speech identity, reasoning and CallOverlay unchanged. Source-helper tests and current saveControls cases passed; packaged Chromium required."
   },
-  "reviewed_local_change": "Retain robust tool-image null/string guards. Source-only preflight now rejects stale hook receipts before compilation; full output attestation remains mandatory."
+  "reviewed_local_change": "Direct tool-server selection uses exact explicit IDs or legacy index only when no ID exists. Microphone, voice-budget and speech-identity hooks unchanged. New policy/discovery fixtures and packaged browser gate required."
 }

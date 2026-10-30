@@ -63,7 +63,7 @@ def build_python(project, package, manifest):
         run('node','--test',ROOT/'.avx1/test_chat_model_preservation.mjs',env=environment)
         run('node','--test',ROOT/'.avx1/test_browser_connector.mjs',env=environment)
         run(sys.executable,ROOT/'.avx1/test_strata_reasoning.py')
-        run("node", "--experimental-strip-types", "--test", ROOT / ".avx1/test_suggestions.mjs", env=environment)
+        run("node", "--experimental-strip-types", "--test", ROOT / ".avx1/test_suggestions.mjs", ROOT / '.avx1/test_tool_server_policy.mjs', env=environment)
         run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
         # The reviewed hatch hook uses npm ci and the checked-in lockfile.
         run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
