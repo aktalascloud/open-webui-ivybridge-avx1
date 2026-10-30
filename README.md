@@ -30,3 +30,5 @@ KB metadata query on this CPU: **94.76% fewer process CPU cycles**, median **94.
 Original licenses/notices and source history are preserved. Exact corresponding source is linked from each release. Credentials, logs, models and private filter/bridge code stay outside the public packages.
 
 [PR/fork review: accepted and deferred changes](.avx1/review-20261030.json).
+
+[Cloud provider eligibility](docs/provider-eligibility.md): no verified anonymous, keyless, unlimited cloud model is currently bundled. DSW2API/browser integration removed; existing chats and local connections preserved.
