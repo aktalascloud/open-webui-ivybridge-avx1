@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,6 +18,9 @@ def main():
         actual = hashlib.sha256((ROOT / name).read_text('utf-8').encode('utf-8')).hexdigest()
         if actual != expected:
             raise RuntimeError("Assistant source hook changed; review and tests required: " + name)
+    if '--source-only' in sys.argv:
+        print('Reviewed assistant source hooks verified')
+        return
     assets = ROOT / "build"
     if not (assets / "index.html").is_file():
         raise RuntimeError("Frontend output missing")

@@ -9,15 +9,15 @@
   "helper_sha256": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
-    "src/lib/components/chat/MessageInput.svelte": "95b2a8f422bcad25659a7692e30dbef3226ef8437ebb72c17c0ff4091f2c2b3d",
-    "src/lib/components/chat/Chat.svelte": "879bdbff64da361b6e5fd84caa9ec43981e4c8e1973bbd81193a364618553cfb",
+    "src/lib/components/chat/MessageInput.svelte": "98cf1f4db67c4363b966a40f71e8f0e352641c38426b074f32e9f82b0e96e019",
+    "src/lib/components/chat/Chat.svelte": "cda4f3461a0f16b30d905bba4c39e04f60d26b912c76f382a0faaddb41382b17",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-    "src/lib/components/chat/Messages/ResponseMessage.svelte": "518d64583aa680b353a44b43a87f573b1c57999da0f699cd1819e1f8132e7298",
+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "85af3382d937fbcdaa36f55f4102657ece4a09fd14d07252583283abd0ec6be3",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
   },
   "reviewed_upstream_change": {
-    "upstream_commit": "3b8205505b871b92dd23e010b61f51a02d515a92",
-    "scope": "Selected control visibility only in MessageInput; completed task recovery/folder metadata in Chat. Mic provenance, voice budget and speech identity hooks unchanged; existing helper tests and actual saveControls callback regressions pass."
+    "upstream_commit": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
+    "scope": "Explicit model-selection callbacks and current-user Stop guard in MessageInput; abortable/stale-load protection in Chat; sandboxed MCPApp branch in ResponseMessage. Mic provenance, voice budget, speech identity, reasoning and CallOverlay unchanged. Source-helper tests and current saveControls cases passed; packaged Chromium required."
   },
-  "reviewed_local_change": "PR33311 saved-model outage guard; per-model reasoning serialization unchanged; packaged Chromium remains mandatory."
+  "reviewed_local_change": "Retain robust tool-image null/string guards. Source-only preflight now rejects stale hook receipts before compilation; full output attestation remains mandatory."
 }
