@@ -24,7 +24,7 @@ Dependencies are included in the package metadata. The current web model follows
 
 Security: Authlib 1.9.1 replaces vulnerable 1.7.2; seven advisory IDs and the exact regression scope are listed in `.avx1/PATCHES.json`.
 
-Upstream fixes: sub-agent partial output (#33269), photo delegation (#33244), safer remote fetch (#33271), ComfyUI failures (#33237), IME input (#33245), accessible messages and note pages. Added Russian page menus and targeted migration/permission checks.
+Upstream 0.12.5/dev: chat-load race fixes [#33377](https://github.com/open-webui/open-webui/pull/33377), higher default tool-iteration budget [#33384](https://github.com/open-webui/open-webui/pull/33384), smaller KB mutation responses [#33335](https://github.com/open-webui/open-webui/pull/33335), and OpenAPI tool listings [#33205](https://github.com/open-webui/open-webui/pull/33205). Preserves MCP/browser isolation and adds 18 Russian labels. MCP Apps use a sandboxed iframe with explicit tool-call confirmation.
 
 - Current upstream: MCP protocol 2026-07-28 [#33087](https://github.com/open-webui/open-webui/pull/33087), deterministic tool schemas [#33000](https://github.com/open-webui/open-webui/pull/33000), batched chat-access checks [#32888](https://github.com/open-webui/open-webui/pull/32888). Real SDK tests cover discovery and legacy HTTP.
 - MCP arguments with alternative schemas: [#32903](https://github.com/open-webui/open-webui/pull/32903). Readable errors: [#32942](https://github.com/open-webui/open-webui/pull/32942).
@@ -41,4 +41,4 @@ KB metadata query on this CPU: **94.76% fewer process CPU cycles**, median **94.
 
 Original licenses/notices and source history are preserved. Exact corresponding source is linked from each release. Credentials, logs, models and private filter/bridge code stay outside the public packages.
 
-[PR/fork review: accepted and deferred changes](.avx1/review-20261025.json).
+[PR/fork review: accepted and deferred changes](.avx1/review-20261030.json).
