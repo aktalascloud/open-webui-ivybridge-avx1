@@ -1019,6 +1019,8 @@
 							>
 								<VoiceAvatar
                                     showControls={true}
+                                    canInterrupt={assistantSpeaking}
+                                    onInterrupt={stopAllAudio}
 									bind:this={avatarView}
 									config={selectedAvatar}
 									speaking={avatarSpeaking}

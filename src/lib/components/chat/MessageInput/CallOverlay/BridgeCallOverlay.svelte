@@ -79,6 +79,8 @@
 					>
 						<VoiceAvatar
                             showControls={true}
+                            canInterrupt={bridge.speaking}
+                            onInterrupt={() => bridge.stopSpeaking()}
 							bind:this={avatarView}
 							interruption={bridge.animationInterruption}
 							config={selectedAvatar}

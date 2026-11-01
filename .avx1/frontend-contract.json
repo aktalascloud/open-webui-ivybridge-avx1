@@ -13,7 +13,7 @@
     "src/lib/components/chat/Chat.svelte": "dd10defb206c64ce985742f67587efcbfb0f1ddaf55da1ab2954b5f3e003162c",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
     "src/lib/components/chat/Messages/ResponseMessage.svelte": "59ad006adcf2d90eaf24bba2fc32af86c5b93a47a11c6509e47936787f91d0ce",
-    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
+    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "27baf3dfc0102b96308f4d8e0fb99d42e960dca7f4646b056207cce4cf046235"
   },
   "reviewed_upstream_change": {
     "upstream_commit": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",

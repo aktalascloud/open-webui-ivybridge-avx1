@@ -17,6 +17,8 @@
 	export let animationFiles: AnimationFiles = {};
 	export let interruption = 0;
 	export let showControls = false;
+	export let canInterrupt = false;
+	export let onInterrupt: (() => void) | undefined = undefined;
 	const i18n = getContext<any>('i18n');
 	let lastInterruption = interruption;
 	let renderer: Awaited<ReturnType<typeof createAvatarRenderer>> | undefined;
@@ -231,6 +233,9 @@
     <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Zoom out')} title={$i18n.t('Zoom out')} on:click|stopPropagation={() => renderer?.zoomView(1.2)}>−</button>
     <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Zoom in')} title={$i18n.t('Zoom in')} on:click|stopPropagation={() => renderer?.zoomView(1/1.2)}>+</button>
     <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Reset view')} title={$i18n.t('Reset view')} on:click|stopPropagation={() => renderer?.resetView()}>↺</button>
+    {#if onInterrupt}
+      <button type="button" class="size-11 rounded-lg text-red-300 hover:bg-white/10 disabled:opacity-50" disabled={!canInterrupt} aria-label={$i18n.t('Stop speaking')} title={$i18n.t('Stop speaking')} on:click|stopPropagation={() => onInterrupt?.()}>■</button>
+    {/if}
   </div>
 {/if}
 </div>
