@@ -11,6 +11,13 @@ module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 
 class Limits(unittest.TestCase):
+    def test_new_card_inherits_avatar_without_overwriting_explicit_choices(self):
+        chosen={'file_id':'fixture','states':{},'gestures':[]}
+        self.assertEqual(module.new_model_avatar_default({}, {'voice_avatar':chosen}), chosen)
+        self.assertIsNone(module.new_model_avatar_default({'voice_avatar':None}, {'voice_avatar':chosen}))
+        self.assertIsNone(module.new_model_avatar_default({'voice_avatar':{'file_id':'custom'}}, {'voice_avatar':chosen}))
+        self.assertIsNone(module.new_model_avatar_default({}, {}))
+
     def texture(self,size,count=1):
         output=io.BytesIO();Image.new('L',size).save(output,format='PNG');data=output.getvalue()
         model={'images':[{'bufferView':0,'mimeType':'image/png'} for _ in range(count)],

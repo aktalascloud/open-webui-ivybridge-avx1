@@ -775,6 +775,7 @@
 		// reflects the actual defaults rather than hardcoded values
 		const modelsConfig = await getModelsDefaults(localStorage.token).catch(() => null);
 		defaultMeta = modelsConfig?.DEFAULT_MODEL_METADATA ?? {};
+		if (!model) voiceAvatar = structuredClone(defaultMeta.voice_avatar ?? null);
 
 		// Use admin defaults as base, falling back to hardcoded defaults
 		capabilities = { ...DEFAULT_CAPABILITIES, ...(defaultMeta.capabilities ?? {}) };

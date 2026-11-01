@@ -42,6 +42,7 @@ from open_webui.models.models import (
     ModelModel,
     ModelParams,
     ModelResponse,
+    ModelVoiceAvatar,
     Models,
 )
 from open_webui.storage.provider import Storage
@@ -61,6 +62,7 @@ from open_webui.utils.voice_avatar import (
     AVATAR_MAX_BYTES,
     validate_voice_animation,
     validate_voice_avatar,
+    new_model_avatar_default,
 )
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -408,6 +410,12 @@ async def create_new_model(
     )
 
     await _verify_background_image(form_data.meta.background_image_url, user, db)
+    if 'voice_avatar' not in form_data.meta.model_fields_set:
+        default_avatar = new_model_avatar_default(
+            form_data.meta.model_dump(exclude_unset=True), await Config.get('models.default_metadata') or {}
+        )
+        if default_avatar:
+            form_data.meta.voice_avatar = ModelVoiceAvatar.model_validate(default_avatar)
     await _verify_voice_avatar(form_data.meta.voice_avatar, user, db)
 
     form_data.access_grants = await filter_allowed_access_grants(

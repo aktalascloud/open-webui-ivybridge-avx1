@@ -9,6 +9,11 @@ from PIL import Image
 AVATAR_MAX_BYTES = 20 * 1024 * 1024
 
 
+def new_model_avatar_default(meta: dict, defaults: dict):
+    """Only an omitted choice inherits; explicit sphere/custom choices win."""
+    return defaults.get('voice_avatar') if 'voice_avatar' not in meta else None
+
+
 def avatar_animation_tools(gestures):
     if not gestures:
         return []
