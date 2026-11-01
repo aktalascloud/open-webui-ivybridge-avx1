@@ -1,12 +1,16 @@
 # Open WebUI AVX1
 
+[Русский](README.ru.md)
+
 Unofficial fork with reviewed agent/MCP fixes and extended Russian UI. One latest ZIP + Install.cmd.
 
 [Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](.avx1/PATCHES.json)
 
+New model cards inherit the configured VRM; explicit sphere/custom choices and existing cards remain unchanged. Store shared instructions in account settings and only distinct rules in model cards.
+
 ## Build
 
-Requires Python3.12+, Git and GitHub CLI for CI. No LLM, model weights or Codex dependency.
+Requires Python 3.12+, Git and GitHub CLI for CI. No LLM, model weights or Codex dependency.
 
 ```cmd
 Build.cmd status
@@ -17,7 +21,7 @@ Build.cmd build
 
 ## Run and verify
 
-Use the single release package. Keep user data separate from source. Settings, endpoints and model selection are runtime configuration, not build requirements. Ivy Bridge: AVX/F16C, O3 and verified LTO, without AVX2/FMA/PGO/fast-math. Android: ARM64 release AOT; source-built and prebuilt libraries are identified in the package manifest.
+Use the single release package. Keep user data separate from source. Settings, endpoints and model selection are runtime configuration, not build requirements. Ivy Bridge: AVX/F16C, O3 and verified LTO, without AVX2/FMA/PGO/fast-math. Actual native flags and prebuilt components are identified in the manifest.
 
 Current checks and measurements: [.avx1/measurements/latest.json](.avx1/measurements/latest.json). CPU microbenchmarks are not LLM tokens/s. Original licenses and notices apply.
 
