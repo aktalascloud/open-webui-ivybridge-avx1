@@ -20,3 +20,5 @@ Build.cmd build
 Use the single release package. Keep user data separate from source. Settings, endpoints and model selection are runtime configuration, not build requirements. Ivy Bridge: AVX/F16C, O3 and verified LTO, without AVX2/FMA/PGO/fast-math. Android: ARM64 release AOT; source-built and prebuilt libraries are identified in the package manifest.
 
 Current checks and measurements: [.avx1/measurements/latest.json](.avx1/measurements/latest.json). CPU microbenchmarks are not LLM tokens/s. Original licenses and notices apply.
+
+Measured on the local CPU: the160-file KB metadata fixture avoids20MiB extracted-text materialization; median process cycles fell94.63%. This is one SQLite/Pydantic operation, not inference throughput. Raw samples and exact source hashes are in the current measurement record.
