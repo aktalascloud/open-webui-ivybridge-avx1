@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { createEventDispatcher, getContext, onMount } from 'svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import {
 		avatarAssetIds,
@@ -16,6 +16,8 @@
 	export let active = true;
 	export let animationFiles: AnimationFiles = {};
 	export let interruption = 0;
+	export let showControls = false;
+	const i18n = getContext<any>('i18n');
 	let lastInterruption = interruption;
 	let renderer: Awaited<ReturnType<typeof createAvatarRenderer>> | undefined;
 	let syncAnimations: ((config: VoiceAvatarConfig, files: AnimationFiles) => void) | undefined;
@@ -208,6 +210,7 @@
 	});
 </script>
 
+<div class="avatar-viewport">
 <canvas
 	bind:this={canvas}
 	aria-hidden="true"
@@ -223,7 +226,17 @@
 	on:wheel|nonpassive={wheel}
 ></canvas>
 
+{#if showControls}
+  <div class="absolute top-2 right-2 z-10 flex gap-1 rounded-xl bg-gray-900/90 p-1 text-white" role="group" aria-label={$i18n.t('Voice avatar')}>
+    <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Zoom out')} title={$i18n.t('Zoom out')} on:click|stopPropagation={() => renderer?.zoomView(1.2)}>−</button>
+    <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Zoom in')} title={$i18n.t('Zoom in')} on:click|stopPropagation={() => renderer?.zoomView(1/1.2)}>+</button>
+    <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Reset view')} title={$i18n.t('Reset view')} on:click|stopPropagation={() => renderer?.resetView()}>↺</button>
+  </div>
+{/if}
+</div>
+
 <style>
+	.avatar-viewport { position: relative; width: 100%; height: 100%; }
 	.avatar-canvas {
 		display: block;
 		width: 100%;

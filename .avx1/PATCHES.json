@@ -258,5 +258,10 @@
     "id": "WEB-NEW-MODEL-VRM-DEFAULT",
     "description": "New model cards inherit the configured default VRM; preserve explicit sphere/custom choices and all existing cards. Editor reflects the server default. No personal VRM or prompt is bundled.",
     "verification": "Pure default-inheritance regressions, rig/texture validation and isolated model API canary; packaged Chromium smoke."
+  },
+  {
+    "id": "WEB-LIVE-AVATAR-CONTROLS",
+    "description": "Live voice avatars reuse preview rotation/pan/pinch/wheel/reset controls; interactive stages are not disabled while listening, and camera input does not interrupt audio.",
+    "verification": "Pinned Svelte compilation and packaged Chromium smoke; renderer interaction functions reused unchanged."
   }
 ]

@@ -61,13 +61,13 @@
 
 <section class="bridge-call" class:avatar-call={showAvatar} aria-label={$i18n.t('Voice call')}>
 	<div class="call-stage">
-		<button
-			type="button"
+		<svelte:element this={showAvatar ? 'div' : 'button'}
+			type={showAvatar ? undefined : 'button'} role={showAvatar ? 'group' : undefined}
 			class="orb-button"
 			class:avatar-button={showAvatar}
-			disabled={!bridge.speaking}
-			aria-label={$i18n.t('Stop speaking')}
-			on:click={() => bridge.stopSpeaking()}
+			disabled={showAvatar ? undefined : !bridge.speaking}
+			aria-label={showAvatar ? $i18n.t('Voice avatar') : $i18n.t('Stop speaking')}
+			on:click={() => { if (!showAvatar) bridge.stopSpeaking(); }}
 		>
 			{#if showAvatar && avatar}
 				{@const selectedAvatar = avatar}
@@ -78,6 +78,7 @@
 						class:loading-avatar={readyAvatar !== selectedAvatar.file_id}
 					>
 						<VoiceAvatar
+                            showControls={true}
 							bind:this={avatarView}
 							interruption={bridge.animationInterruption}
 							config={selectedAvatar}
@@ -113,7 +114,7 @@
 					muted={unavailable || (bridge.muted && !bridge.speaking)}
 				/>
 			{/if}
-		</button>
+		</svelte:element>
 
 		<div class="call-status" role="status" aria-live="polite" aria-atomic="true">
 			<p class="status-label">
@@ -122,7 +123,7 @@
 			</p>
 			<p class="status-hint">
 				{#if bridge.speaking}
-					{bridge.muted ? $i18n.t('Microphone off') : $i18n.t('Tap to interrupt')}
+					{showAvatar ? $i18n.t('Drag to rotate; pinch or scroll to zoom. Double-tap to reset.') : bridge.muted ? $i18n.t('Microphone off') : $i18n.t('Tap to interrupt')}
 				{:else if bridge.muted && bridge.connected}
 					{$i18n.t('Unmute to continue')}
 				{/if}

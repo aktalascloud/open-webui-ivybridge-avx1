@@ -4455,5 +4455,6 @@
   "Avatar textures exceed the 128 megapixel total budget.": "Avatar textures exceed the 128 megapixel total budget.",
   "Invalid media URL": "Invalid media URL",
   "Sign in to view this file": "Sign in to view this file",
-  "File unavailable or access denied": "File unavailable or access denied"
+  "File unavailable or access denied": "File unavailable or access denied",
+  "Drag to rotate; pinch or scroll to zoom. Double-tap to reset.": "Drag to rotate; pinch or scroll to zoom. Double-tap to reset."
 }

@@ -998,14 +998,14 @@
 
 		<div class="flex justify-center items-center flex-1 h-full w-full max-h-full">
 			{#if !camera}
-				<button
-					type="button"
+				<svelte:element this={showAvatar ? 'div' : 'button'}
+					type={showAvatar ? undefined : 'button'} role={showAvatar ? 'group' : undefined}
 					class={showAvatar
 						? 'relative w-full h-full min-h-64 flex items-center justify-center'
 						: ''}
-					aria-label={assistantSpeaking ? $i18n.t('Stop speaking') : $i18n.t('Voice call')}
+					aria-label={showAvatar ? $i18n.t('Voice avatar') : assistantSpeaking ? $i18n.t('Stop speaking') : $i18n.t('Voice call')}
 					on:click={() => {
-						if (assistantSpeaking) {
+						if (!showAvatar && assistantSpeaking) {
 							stopAllAudio();
 						}
 					}}
@@ -1018,6 +1018,7 @@
 								class:invisible={readyAvatar !== selectedAvatar.file_id}
 							>
 								<VoiceAvatar
+                                    showControls={true}
 									bind:this={avatarView}
 									config={selectedAvatar}
 									speaking={avatarSpeaking}
@@ -1103,7 +1104,7 @@
 							/>
 						{/if}
 					{/if}
-				</button>
+				</svelte:element>
 			{:else}
 				<div class="relative flex video-container w-full max-h-full pt-2 pb-4 md:py-6 px-2 h-full">
 					<!-- svelte-ignore a11y-media-has-caption -->
