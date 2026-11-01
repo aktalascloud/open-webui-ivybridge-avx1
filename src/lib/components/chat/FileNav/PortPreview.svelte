@@ -201,6 +201,7 @@
 		<!-- URL bar -->
 		<form class="flex-1 min-w-0" on:submit|preventDefault={navigateUrl}>
 			<input
+				aria-label={$i18n.t('URL')}
 				type="text"
 				bind:value={urlInput}
 				class="w-full text-[0.6875rem] font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full px-3 py-1 outline-hidden focus:border-gray-400 dark:focus:border-gray-500 text-gray-600 dark:text-gray-300 transition"
@@ -233,7 +234,7 @@
 		<!-- Close -->
 		<Tooltip content={$i18n.t('Close')}>
 			<button
-				class="p-1 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 transition"
+				class="py-1 rounded text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition px-0"
 				on:click={onClose}
 				aria-label={$i18n.t('Close')}
 			>

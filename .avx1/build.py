@@ -90,6 +90,7 @@ def build_python(project, package, manifest):
         checked_script(ROOT / '.avx1/test_upstream_daily.py')
         checked_script(ROOT / '.avx1/test_daily_20261029.py')
         checked_script(ROOT / '.avx1/test_daily_20261030.py')
+        checked_script(ROOT / '.avx1/test_responses_clients.py')
         checked_script(ROOT / '.avx1/test_free_llm.py')
         checked_script(ROOT / '.avx1/test_authlib_security.py')
         checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")

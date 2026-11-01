@@ -58,9 +58,11 @@
 	export let onLongPress: () => void = () => {};
 	export let onToggleExpand: (path: string) => void = () => {};
 	export let showDate: boolean = false;
+	export let dateField: 'modified' | 'created' = 'modified';
 	export let showHidden: boolean = false;
 	export let parentWritable = true;
 
+	$: entryDate = entry[dateField];
 	$: entryPath =
 		fullPath ??
 		(entry.type === 'directory' ? `${currentPath}${entry.name}/` : `${currentPath}${entry.name}`);
@@ -450,6 +452,7 @@
 						{#if renaming}
 							<!-- svelte-ignore a11y-click-events-have-key-events -->
 							<input
+								aria-label={$i18n.t('Rename')}
 								bind:this={renameInput}
 								bind:value={renameValue}
 								class="flex-1 text-xs bg-transparent outline-hidden text-gray-800 dark:text-gray-200 min-w-0 {variant ===
@@ -511,16 +514,16 @@
 								{/if}
 							</span>
 						{:else if entry.type === 'file' && entry.size !== undefined && !renaming}
-							{#if showDate && entry.modified}
+							{#if showDate && entryDate != null}
 								<span class="text-[0.625rem] text-gray-400 shrink-0"
-									>{formatRelativeTime(entry.modified)}</span
+									>{formatRelativeTime(entryDate)}</span
 								>
 							{/if}
 							<span class="text-xs text-gray-400 shrink-0">{formatFileSize(entry.size)}</span>
 						{:else if entry.type === 'directory' && !renaming}
-							{#if showDate && entry.modified}
+							{#if showDate && entryDate != null}
 								<span class="text-[0.625rem] text-gray-400 shrink-0"
-									>{formatRelativeTime(entry.modified)}</span
+									>{formatRelativeTime(entryDate)}</span
 								>
 							{/if}
 							{#if terminalUrl}

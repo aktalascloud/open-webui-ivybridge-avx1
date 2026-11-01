@@ -3,7 +3,9 @@ import time
 import uuid
 from typing import Optional
 
+from open_webui.models.notifications import emit_changes
 from open_webui.config import RAG_FILE_CONTENT_SEARCH_MAX_CHARS
+from open_webui.models.comments import delete_resource_comments
 from open_webui.internal.db import Base, JSONField, get_async_db_context
 from open_webui.models.access_grants import AccessGrantModel, AccessGrants
 from open_webui.models.config import Config
@@ -859,8 +861,10 @@ class KnowledgeTable:
         try:
             async with get_async_db_context(db) as db:
                 await AccessGrants.revoke_all_access('knowledge', id, db=db)
+                recipients = await delete_resource_comments('knowledge', [id], db=db)
                 await db.execute(delete(Knowledge).filter_by(id=id))
                 await db.commit()
+                await emit_changes(recipients)
                 return True
         except Exception:
             return False
@@ -872,8 +876,10 @@ class KnowledgeTable:
                 knowledge_ids = [row[0] for row in result.all()]
                 for knowledge_id in knowledge_ids:
                     await AccessGrants.revoke_all_access('knowledge', knowledge_id, db=db)
+                recipients = await delete_resource_comments('knowledge', knowledge_ids, db=db)
                 await db.execute(delete(Knowledge))
                 await db.commit()
+                await emit_changes(recipients)
 
                 return True
             except Exception:

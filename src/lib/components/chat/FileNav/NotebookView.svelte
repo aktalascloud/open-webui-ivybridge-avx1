@@ -281,7 +281,9 @@
 		<div class="nb-cell nb-cell-{cell.cell_type}">
 			{#if cell.cell_type === 'markdown'}
 				{#if editingCell[i]}
+					<!-- svelte-ignore a11y-autofocus -->
 					<textarea
+						aria-label={$i18n.t('Markdown')}
 						class="nb-edit-textarea text-sm"
 						bind:value={editedSources[i]}
 						on:input={autoResize}
@@ -289,6 +291,7 @@
 						on:keydown={(e) => {
 							if (e.key === 'Escape') cancelEditing(i);
 						}}
+						autofocus
 					></textarea>
 				{:else}
 					<!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -297,6 +300,12 @@
 						role="textbox"
 						tabindex="0"
 						on:dblclick={() => startEditing(i)}
+						on:keydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								startEditing(i);
+							}
+						}}
 					>
 						{@html renderMarkdown(toStr(cell.source))}
 					</div>
@@ -355,6 +364,12 @@
 								role="textbox"
 								tabindex="0"
 								on:dblclick={() => startEditing(i)}
+								on:keydown={(e) => {
+									if (e.key === 'Enter') {
+										e.preventDefault();
+										startEditing(i);
+									}
+								}}
 							>
 								{#if highlightedCells[i]}
 									<div class="nb-code-source shiki-preview">

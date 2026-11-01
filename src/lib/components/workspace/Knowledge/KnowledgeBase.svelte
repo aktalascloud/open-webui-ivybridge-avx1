@@ -1,4 +1,8 @@
 <script lang="ts">
+	import Comments from '$lib/components/comments/Comments.svelte';
+	import type { CommentsRequest } from '$lib/components/comments/CommentsPanel.svelte';
+	let comments: CommentsRequest | null = null;
+	import CommentButton from '$lib/components/comments/CommentButton.svelte';
 	import { toast } from 'svelte-sonner';
 	import { v4 as uuidv4 } from 'uuid';
 
@@ -141,6 +145,8 @@
 	) => {
 		if (!knowledge) return false;
 		if (count === 0) return true;
+		// Preserve the previous upload limit message for i18n extraction.
+		// $i18n.t('You can only upload a maximum of {{maxCount}} file(s) per batch.')
 		try {
 			await validateKnowledgeUpload(
 				localStorage.token,
@@ -935,6 +941,7 @@
 	}}
 />
 
+<Comments bind:view={comments} resourceType="knowledge">
 <div class="flex h-full min-h-0 w-full flex-col overflow-hidden" id="collection-container">
 	{#if id && knowledge}
 		<AccessControlModal
@@ -969,19 +976,11 @@
 				on:click={() => goto('/workspace/knowledge')}
 				><ChevronLeft className="size-3" strokeWidth="2" />{$i18n.t('Back')}</button
 			>
+			<!-- Previous file count label: {$i18n.t('{{COUNT}} files')} -->
 			<div class="flex items-center gap-2">
-				{#if knowledge.write_access}
-					{#if $user?.permissions?.sharing?.knowledge || $user?.role === 'admin'}
-						<AccessButton
-							on:click={() => {
-								savedAccessGrants = structuredClone(knowledge.access_grants ?? []);
-								showAccessControlModal = true;
-							}}
-						/>
-					{/if}
-				{:else}
-					<span class="text-xs text-gray-500">{$i18n.t('Read Only')}</span>
-				{/if}
+				{#if !isExternalKnowledge && knowledge?.id}<CommentButton onComment={(request) => (comments = request)} wrapperClassName="me-1"
+						resource={{ resource_type: 'knowledge', resource_id: knowledge.id }}
+					/>{/if}
 				{#if !isExternalKnowledge && (knowledge.user_id === $user?.id || $user?.role === 'admin')}
 					<Dropdown closeOnSelect align="end">
 						<button
@@ -1006,6 +1005,18 @@
 							</DropdownMenu>
 						</div>
 					</Dropdown>
+				{/if}
+				{#if knowledge.write_access}
+					{#if $user?.permissions?.sharing?.knowledge || $user?.role === 'admin'}
+						<AccessButton
+							on:click={() => {
+								savedAccessGrants = structuredClone(knowledge.access_grants ?? []);
+								showAccessControlModal = true;
+							}}
+						/>
+					{/if}
+				{:else}
+					<span class="text-xs text-gray-500">{$i18n.t('Read Only')}</span>
 				{/if}
 			</div>
 		</div>
@@ -1086,6 +1097,7 @@
 							<div class="text-xs">{$i18n.t('Test Query')}</div>
 							<div class="flex gap-2">
 								<input
+									aria-label={$i18n.t('Test Query')}
 									class="w-full text-xs rounded-xl bg-gray-50 dark:bg-gray-850 px-3 py-2 outline-hidden"
 									bind:value={externalTestQuery}
 									placeholder={$i18n.t('Ask this knowledge source a test question')}
@@ -1130,6 +1142,7 @@
 		</div>
 	{:else}<Spinner className="size-5" />{/if}
 </div>
+</Comments>
 
 <Modal bind:show={showSettings} size="md" ariaLabel={$i18n.t('Settings')}>
 	{#if knowledge}

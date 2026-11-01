@@ -354,6 +354,14 @@
 			}
 		}
 
+		if (text.includes('{{USER_ROLE}}')) {
+			const role = sessionUser?.role || '';
+
+			if (role) {
+				text = text.replaceAll('{{USER_ROLE}}', role);
+			}
+		}
+
 		if (text.includes('{{USER_BIO}}')) {
 			const bio = sessionUser?.bio || '';
 
@@ -602,7 +610,7 @@
 			await temporaryChatEnabled.set(!$temporaryChatEnabled);
 		}
 
-		if (location.pathname !== '/') {
+		if (location.pathname !== '/' && !location.pathname.startsWith('/folders/')) {
 			await goto('/');
 		}
 

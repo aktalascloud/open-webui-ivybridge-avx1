@@ -16,11 +16,11 @@ spec.loader.exec_module(policy)
 
 
 class FreeLLM(unittest.IsolatedAsyncioTestCase):
-    def test_only_three_reviewed_models_and_no_paid_or_credential_fallback(self):
+    def test_only_two_reviewed_models_and_no_paid_or_credential_fallback(self):
         cfg={'provider':'freellm','auth_type':'none'}
         models=[m['id'] for m in policy.CATALOG['models']]
-        self.assertEqual(len(set(models)),3)
-        self.assertEqual(len({m['vendor'] for m in policy.CATALOG['models']}),3)
+        self.assertEqual(len(set(models)),2)
+        self.assertEqual(len({m['vendor'] for m in policy.CATALOG['models']}),2)
         for model in models:policy.check_free_llm_request(cfg,policy.CATALOG['base_url'],'',model)
         for override in ({'auth_type':'session'},{'headers':{'Authorization':'secret'}},
                          {'forward_cookies':True},{'azure':True},{'api_type':'responses'}):

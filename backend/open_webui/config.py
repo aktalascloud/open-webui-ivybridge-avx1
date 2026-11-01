@@ -2136,6 +2136,9 @@ AUTOMATION_MIN_INTERVAL = os.getenv('AUTOMATION_MIN_INTERVAL', '')
 
 AUTOMATION_AUTH_TOKEN_EXPIRES_IN = os.getenv('AUTOMATION_AUTH_TOKEN_EXPIRES_IN', '1h')
 
+ENABLE_COMMENTS = os.getenv('ENABLE_COMMENTS', 'False').lower() == 'true'
+ENABLE_NOTIFICATIONS = os.getenv('ENABLE_NOTIFICATIONS', 'True').lower() == 'true'
+
 ENABLE_NOTES = os.getenv('ENABLE_NOTES', 'True').lower() == 'true'
 
 ENABLE_USER_STATUS = os.getenv('ENABLE_USER_STATUS', 'True').lower() == 'true'
@@ -3267,6 +3270,8 @@ DEFAULT_CONFIG = {
     'automations.min_interval': AUTOMATION_MIN_INTERVAL,
     'automations.auth_token_expires_in': AUTOMATION_AUTH_TOKEN_EXPIRES_IN,
     'notes.enable': ENABLE_NOTES,
+    'comments.enable': ENABLE_COMMENTS,
+    'notifications.enable': ENABLE_NOTIFICATIONS,
     'users.enable_status': ENABLE_USER_STATUS,
     'evaluation.arena.enable': ENABLE_EVALUATION_ARENA_MODELS,
     'evaluation.arena.models': EVALUATION_ARENA_MODELS,

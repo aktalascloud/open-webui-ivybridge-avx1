@@ -244,5 +244,14 @@
       "Packaged Chromium smoke and public microphone contracts",
       "Existing models/audio/settings preserved"
     ]
+  },
+  {
+    "id": "WEB-037",
+    "description": "Official dev refresh plus PR33394 Responses/API-client stream and usage compatibility, PR33459 new-chat initialization; existing direct-tool selection/filter fix already covers PR27145. Security pins:joserfc1.7.7/pypdf6.21.4. Two qualified FreeLLM vendors with parameter-count labels.",
+    "urls": [
+      "https://github.com/open-webui/open-webui/pull/33394",
+      "https://github.com/open-webui/open-webui/pull/33459"
+    ],
+    "verification": "Targeted regressions plus exact-source package/privacy/security/startup gates; final CI receipt records actual scope."
   }
 ]

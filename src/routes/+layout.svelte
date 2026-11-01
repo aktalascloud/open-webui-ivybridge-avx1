@@ -1,4 +1,5 @@
 <script>
+	import CommentsHost from '$lib/components/comments/CommentsHost.svelte';
 	import { io } from 'socket.io-client';
 	import { spring } from 'svelte/motion';
 	import { createPyodideWorker } from '$lib/pyodide/createPyodideWorker';
@@ -76,7 +77,6 @@
 	import { setTextScale } from '$lib/utils/text-scale';
 
 	import NotificationToast from '$lib/components/NotificationToast.svelte';
-	import AppSidebar from '$lib/components/app/AppSidebar.svelte';
 	import SyncStatsModal from '$lib/components/chat/Settings/SyncStatsModal.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import MfaManagement from '$lib/components/auth/MfaManagement.svelte';
@@ -1511,19 +1511,16 @@
 {/if}
 
 {#if loaded}
-	{#if mfaManagement}
-		<MfaManagement flow={mfaManagement} onClose={() => (mfaManagement = null)} />
-	{:else if $isApp}
-		<div class="flex flex-row h-screen">
-			<AppSidebar />
-
-			<div class="w-full flex-1 max-w-[calc(100%-4.5rem)]">
+	<div class="flex h-dvh w-full overflow-hidden">
+		<div class="min-w-0 flex-1">
+			{#if mfaManagement}
+				<MfaManagement flow={mfaManagement} onClose={() => (mfaManagement = null)} />
+			{:else}
 				<slot />
-			</div>
+			{/if}
 		</div>
-	{:else}
-		<slot />
-	{/if}
+		<CommentsHost />
+	</div>
 {/if}
 
 {#if $config?.features.enable_community_sharing}

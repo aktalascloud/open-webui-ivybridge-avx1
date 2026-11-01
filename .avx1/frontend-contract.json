@@ -9,10 +9,10 @@
   "helper_sha256": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
-    "src/lib/components/chat/MessageInput.svelte": "98cf1f4db67c4363b966a40f71e8f0e352641c38426b074f32e9f82b0e96e019",
-    "src/lib/components/chat/Chat.svelte": "4390c212784137646eb35c803069301c89f417a785fad8aafb1cc85f0d22a356",
+    "src/lib/components/chat/MessageInput.svelte": "6c4bffdd9c0f1e6f9dfb4ec0513e37fc75fae688b91dacafe0bfc93b92c5d627",
+    "src/lib/components/chat/Chat.svelte": "dd10defb206c64ce985742f67587efcbfb0f1ddaf55da1ab2954b5f3e003162c",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-    "src/lib/components/chat/Messages/ResponseMessage.svelte": "85af3382d937fbcdaa36f55f4102657ece4a09fd14d07252583283abd0ec6be3",
+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "59ad006adcf2d90eaf24bba2fc32af86c5b93a47a11c6509e47936787f91d0ce",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "69ad1ae4e892655b82e75fd02e23a9615bcf96b1a5852d29cbd77bda62d42240"
   },
   "reviewed_upstream_change": {

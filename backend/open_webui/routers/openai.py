@@ -6,6 +6,7 @@ import secrets
 import hashlib
 import logging
 import re
+import time
 from typing import Optional
 from urllib.parse import quote, urlparse
 
@@ -52,6 +53,7 @@ from open_webui.utils.payload import (
     apply_model_params_to_body_openai,
     apply_system_prompt_to_body,
 )
+from open_webui.utils.response import convert_responses_usage_to_openai
 from open_webui.utils.session_pool import (
     cleanup_response,
     get_client_timeout,
@@ -1389,9 +1391,16 @@ def convert_responses_result(response: dict) -> dict:
                 }
             )
 
+    if response.get('status') == 'incomplete':
+        incomplete_reason = (response.get('incomplete_details') or {}).get('reason')
+        finish_reason = 'content_filter' if incomplete_reason == 'content_filter' else 'length'
+    else:
+        finish_reason = 'tool_calls' if tool_calls else 'stop'
+
     return {
         'id': response.get('id', ''),
         'object': 'chat.completion',
+        'created': int(time.time()),
         'model': response.get('model', ''),
         'choices': [
             {
@@ -1401,10 +1410,10 @@ def convert_responses_result(response: dict) -> dict:
                     'content': content,
                     **({'tool_calls': tool_calls} if tool_calls else {}),
                 },
-                'finish_reason': 'tool_calls' if tool_calls else 'stop',
+                'finish_reason': finish_reason,
             }
         ],
-        'usage': response.get('usage', {}),
+        'usage': convert_responses_usage_to_openai(response.get('usage')),
     }
 
 
