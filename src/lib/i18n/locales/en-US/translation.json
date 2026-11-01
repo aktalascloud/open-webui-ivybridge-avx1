@@ -4398,5 +4398,8 @@
   "Choose a VRM file, up to 20 MiB.": "Choose a VRM file, up to 20 MiB.",
   "VRM 0.x or 1.0 · 20 MiB max · Embedded textures up to 8192 px. Upload a character you have permission to use.": "VRM 0.x or 1.0 · 20 MiB max · Embedded textures up to 8192 px. Upload a character you have permission to use.",
   "Avatar textures must be at most 8192 px per side.": "Avatar textures must be at most 8192 px per side.",
-  "Avatar textures exceed the 128 megapixel total budget.": "Avatar textures exceed the 128 megapixel total budget."
+  "Avatar textures exceed the 128 megapixel total budget.": "Avatar textures exceed the 128 megapixel total budget.",
+  "Invalid media URL": "Invalid media URL",
+  "Sign in to view this file": "Sign in to view this file",
+  "File unavailable or access denied": "File unavailable or access denied"
 }

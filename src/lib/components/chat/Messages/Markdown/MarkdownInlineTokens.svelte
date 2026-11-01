@@ -22,6 +22,7 @@
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { skills, terminalSkills } from '$lib/stores';
 	import { copyToClipboard, safeLinkUrl, unescapeHtml } from '$lib/utils';
+	import { protectedFileUrl, downloadProtectedFile } from '$lib/utils/protectedFiles';
 
 	import Image from '$lib/components/common/Image.svelte';
 	import KatexRenderer from './KatexRenderer.svelte';
@@ -76,6 +77,14 @@
 	 * Handle link clicks - intercept same-origin app URLs for in-app navigation
 	 */
 	const handleLinkClick = (e: MouseEvent, href: string) => {
+		const file = protectedFileUrl(href, window.location.origin);
+		if (file) {
+			e.preventDefault();
+			downloadProtectedFile(file, localStorage.getItem('token') ?? '').catch(() => {
+				toast.error($i18n.t('File unavailable or access denied'));
+			});
+			return;
+		}
 		try {
 			const url = new URL(href, window.location.origin);
 			// Check if same origin and an in-app route

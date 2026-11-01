@@ -4458,5 +4458,8 @@
   "Choose a VRM file, up to 20 MiB.": "Выберите файл VRM размером до 20 МиБ.",
   "VRM 0.x or 1.0 · 20 MiB max · Embedded textures up to 8192 px. Upload a character you have permission to use.": "VRM 0.x или 1.0 · до 20 МиБ · встроенные текстуры до 8192 px. Загружайте персонажа, на использование которого у вас есть разрешение.",
   "Avatar textures must be at most 8192 px per side.": "Размер текстур аватара — не больше 8192 px по каждой стороне.",
-  "Avatar textures exceed the 128 megapixel total budget.": "Суммарный размер текстур аватара превышает 128 мегапикселей."
+  "Avatar textures exceed the 128 megapixel total budget.": "Суммарный размер текстур аватара превышает 128 мегапикселей.",
+  "Invalid media URL": "Некорректный адрес медиафайла",
+  "Sign in to view this file": "Войдите, чтобы посмотреть файл",
+  "File unavailable or access denied": "Файл недоступен или нет прав на его просмотр"
 }

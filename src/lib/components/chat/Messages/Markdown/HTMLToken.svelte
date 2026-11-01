@@ -5,6 +5,8 @@
 
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { settings } from '$lib/stores';
+	import ProtectedMedia from '$lib/components/common/ProtectedMedia.svelte';
+	import { mediaSource } from '$lib/utils/protectedFiles';
 
 	const i18n: any = getContext('i18n');
 	const markdown = getContext<{ document?: boolean } | undefined>('markdown');
@@ -22,33 +24,16 @@
 	{#if markdown?.document}
 		{@html html ?? ''}
 	{:else if html && html.includes('<video')}
-		{@const video = html.match(/<video[^>]*>([\s\S]*?)<\/video>/)}
-		{@const videoSrc = video && video[1]}
+		{@const videoSrc = mediaSource(html, 'video')}
 		{#if videoSrc}
-			<!-- svelte-ignore a11y-media-has-caption -->
-			<video
-				class="w-full my-2"
-				src={videoSrc.replaceAll('&amp;', '&')}
-				title={$i18n.t('Video player')}
-				frameborder="0"
-				referrerpolicy="strict-origin-when-cross-origin"
-				controls
-				allowfullscreen
-			></video>
+			<ProtectedMedia src={videoSrc} kind="video" />
 		{:else}
 			{token.text}
 		{/if}
 	{:else if html && html.includes('<audio')}
-		{@const audio = html.match(/<audio[^>]*>([\s\S]*?)<\/audio>/)}
-		{@const audioSrc = audio && audio[1]}
+		{@const audioSrc = mediaSource(html, 'audio')}
 		{#if audioSrc}
-			<!-- svelte-ignore a11y-media-has-caption -->
-			<audio
-				class="w-full my-2"
-				src={audioSrc.replaceAll('&amp;', '&')}
-				title={$i18n.t('Audio player')}
-				controls
-			></audio>
+			<ProtectedMedia src={audioSrc} kind="audio" />
 		{:else}
 			{token.text}
 		{/if}
