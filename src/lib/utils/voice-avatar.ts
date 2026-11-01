@@ -21,6 +21,16 @@ export type VoiceAvatarConfig = {
 	gestures?: AvatarGesture[];
 };
 
+export function resolveModelAvatar(
+	meta: { voice_avatar?: VoiceAvatarConfig | null } | null | undefined,
+	editing: boolean,
+	defaultAvatar: VoiceAvatarConfig | null
+): VoiceAvatarConfig | null {
+	if (meta && Object.prototype.hasOwnProperty.call(meta, 'voice_avatar'))
+		return structuredClone(meta.voice_avatar ?? null);
+	return editing ? null : structuredClone(defaultAvatar);
+}
+
 export type AvatarAnimationResult = { status: 'started' | 'cancelled' | 'unavailable' };
 export type AvatarAnimationCommand = {
 	name: string;

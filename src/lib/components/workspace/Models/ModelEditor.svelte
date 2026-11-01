@@ -57,6 +57,7 @@
 	import Photo from '$lib/components/icons/Photo.svelte';
 	import {
 		avatarAssetIds,
+		resolveModelAvatar,
 		type AnimationFiles,
 		type VoiceAvatarConfig
 	} from '$lib/utils/voice-avatar';
@@ -653,6 +654,7 @@
 	const loadModel = async (value: any) => {
 		customPromptDraft = null;
 		model = value ? structuredClone(value) : null;
+		voiceAvatar = resolveModelAvatar(model?.meta, edit, defaultMeta.voice_avatar ?? null);
 		backgroundFile = null;
 		avatarFile = null;
 		animationFiles = {};
@@ -662,7 +664,6 @@
 		if (model) {
 			model.meta ??= {};
 			name = model.name;
-			voiceAvatar = model.meta?.voice_avatar ? structuredClone(model.meta.voice_avatar) : null;
 			await tick();
 
 			id = model.id;
@@ -775,7 +776,6 @@
 		// reflects the actual defaults rather than hardcoded values
 		const modelsConfig = await getModelsDefaults(localStorage.token).catch(() => null);
 		defaultMeta = modelsConfig?.DEFAULT_MODEL_METADATA ?? {};
-		if (!model) voiceAvatar = structuredClone(defaultMeta.voice_avatar ?? null);
 
 		// Use admin defaults as base, falling back to hardcoded defaults
 		capabilities = { ...DEFAULT_CAPABILITIES, ...(defaultMeta.capabilities ?? {}) };
