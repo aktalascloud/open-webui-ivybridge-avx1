@@ -368,7 +368,10 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
 
     # Apply global model defaults to all models
     # Per-model overrides take precedence over global defaults
-    default_metadata = config.get('models.default_metadata') or {}
+    # Avatars are creation defaults, not a replacement for existing sphere/custom choices.
+    default_metadata = {
+        key: value for key, value in (config.get('models.default_metadata') or {}).items() if key != 'voice_avatar'
+    }
 
     if default_metadata:
         for model in models:
