@@ -1,11 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mediaSource, protectedFileUrl, protectedFileBlob } from './protectedFiles';
+import { Marked } from 'marked';
+import { mediaExtension } from './marked/media-extension';
 
 const origin = 'http://localhost:8080';
 const path = '/api/v1/files/owned-file/content';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('authenticated generated media', () => {
+	it('passes a complete token from the real lexer into the HTML renderer', () => {
+		const parser = new Marked({ extensions: [mediaExtension('block'), mediaExtension('inline')] });
+		for (const text of [`<video>${path}</video>`, `<video controls src="${path}"></video>`, `<audio>${path}</audio>`]) {
+			const tokens = parser.lexer(text+'\n\n');
+			expect(tokens[0].type).toBe('html');
+			expect((tokens[0] as any).text).toBe(text);
+		}
+		expect(parser.lexer('```html\n<video>'+path+'</video>\n```')[0].type).toBe('code');
+		const paragraph = parser.lexer('Video: <video>'+path+'</video>')[0] as any;
+		expect(paragraph.tokens.some((t: any) => t.type === 'html' && t.text.includes('</video>'))).toBe(true);
+	});
 	it('reads attribute, source-child and legacy inner-URL media', () => {
 		expect(mediaSource(`<video src="${path}"></video>`, 'video')).toBe(path);
 		expect(mediaSource(`<video>${path}</video>`, 'video')).toBe(path);

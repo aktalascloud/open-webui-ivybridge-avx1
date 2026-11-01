@@ -8,6 +8,7 @@
 	import colonFenceExtension from '$lib/utils/marked/colon-fence-extension';
 	import footnoteExtension from '$lib/utils/marked/footnote-extension';
 	import citationExtension from '$lib/utils/marked/citation-extension';
+	import { mediaExtension } from '$lib/utils/marked/media-extension';
 
 	const options = {
 		throwOnError: false
@@ -23,6 +24,8 @@
 	marked.use({ breaks: true });
 	marked.use({
 		extensions: [
+				mediaExtension('block'),
+				mediaExtension('inline'),
 			mentionExtension({ triggerChar: '@' }),
 			mentionExtension({ triggerChar: '#' }),
 			mentionExtension({ triggerChar: '$' })
