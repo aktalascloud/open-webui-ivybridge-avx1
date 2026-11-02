@@ -31,10 +31,26 @@ def audit_python(wheels, manifest):
     run(sys.executable, "-m", "pip", "install", "--no-cache-dir", "--target", target, *wheels)
     run(sys.executable, "-m", "pip", "install", "pip-audit")
     report = WORK / "pip-audit.json"
+    # Mainstream's development version need not exist on PyPI. Every resolved
+    # third-party package still goes through the strict advisory gate.
+    from audit_requirements import resolved_requirements
+    configuration = tomllib.loads((ROOT / 'pyproject.toml').read_text('utf-8'))
+    project = configuration['project']
+    version = project.get('version')
+    if version is None:
+        if configuration['tool']['hatch']['version']['path'] != 'package.json':
+            raise RuntimeError('Unknown local application version source')
+        version = json.loads((ROOT / 'package.json').read_text('utf-8'))['version']
+    libraries, own = resolved_requirements(target, project['name'], version)
+    requirements = WORK / 'resolved-audit-requirements.txt'
+    requirements.write_text(''.join(item['name']+'=='+item['version']+'\n' for item in libraries), encoding='utf-8')
     # A missing advisory service or unresolved advisory blocks publication.
-    audit=subprocess.run([sys.executable,'-m','pip_audit','--path',str(target),'--strict','--format','json','--output',str(report)],cwd=ROOT)
+    audit=subprocess.run([sys.executable,'-m','pip_audit','--requirement',str(requirements),'--no-deps','--disable-pip','--strict','--format','json','--output',str(report)],cwd=ROOT)
     if audit.returncode not in {0,1} or not report.exists():raise RuntimeError('Dependency audit unavailable; publication blocked')
     data = json.loads(report.read_text("utf-8"))
+    audited = {(re.sub(r'[-_.]+','-',item['name']).lower(), item['version']) for item in data['dependencies']}
+    if audited != {(item['name'],item['version']) for item in libraries}:
+        raise RuntimeError('Resolved dependency audit inventory differs')
     if manifest['project']=='webui':
         from security_scope import review
         assessment=review(data,ROOT)
@@ -44,8 +60,9 @@ def audit_python(wheels, manifest):
         assessment={'status':'passed; no dependency advisories','exceptions':[]}
     write_json(WORK/'security-review.json',assessment)
     manifest["security"] = {"python_audit": "passed with explicit applicability review", "dependencies": len(data["dependencies"]),
-                            'assessment':assessment}
-    manifest["resolved_dependencies"] = [{"name": item["name"], "version": item["version"]} for item in data["dependencies"]]
+                            'assessment':assessment, 'local_application': {**own, 'source_commit': manifest['source_commit'],
+                            'scope': 'Reviewed fork source and tests; local development version is not a published PyPI dependency'}}
+    manifest["resolved_dependencies"] = [own, *libraries]
     return target
 
 
@@ -238,6 +255,7 @@ def main():
     run(sys.executable, ROOT / '.avx1/test_locales.py')
     if project['id']=='webui':
         run(sys.executable, ROOT / '.avx1/test_security_scope.py')
+        run(sys.executable, ROOT / '.avx1/test_audit_requirements.py')
         run(sys.executable, ROOT / '.avx1/test_agent_prs.py')
     package = WORK / "package"
     package.mkdir()

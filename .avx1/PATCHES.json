@@ -276,5 +276,10 @@
     "id": "WEB-COMPOSER-IDENTITY",
     "description": "Bind existing microphone provenance to each actual composer inputId/DOM node after upstream introduced side chats. Preserve main default behavior, keep side transcripts from marking the main draft, and forward the same user_message.meta wire shape from SideChat. Reuse stable selected-tool-server identity checks in SideChat so an explicit ID cannot alias an array index. Refresh source-hook attestation only after reviewing the mainline showTabs/temporary-resume/model-control diffs.",
     "verification": "8 helper/actual discovery/actual side-send contracts pass;2 changed components compile with exact lock Svelte5.57.2. Source-only frontend contract passes. Prior98-component compilation and backend policy checks retained; packaged browser proof remains mandatory."
+  },
+  {
+    "id": "AVX1-RESOLVED-AUDIT",
+    "description": "Audit every resolved third-party distribution with strict pinned requirements, including transitive dependencies. Identify the source-built local application separately and verify its source version, rather than requiring an unpublished upstream development version on PyPI. Unknown/skipped libraries and inventory differences still block publication.",
+    "verification": "Two metadata-inventory cases and three applicability-policy cases pass. Full resolved audit and packaged browser proof remain mandatory CI gates."
   }
 ]
