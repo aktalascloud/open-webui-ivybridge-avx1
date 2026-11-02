@@ -230,8 +230,6 @@
 
 {#if showControls}
   <div class="absolute top-2 right-2 z-10 flex gap-1 rounded-xl bg-gray-900/90 p-1 text-white" role="group" aria-label={$i18n.t('Voice avatar')}>
-    <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Zoom out')} title={$i18n.t('Zoom out')} on:click|stopPropagation={() => renderer?.zoomView(1.2)}>−</button>
-    <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Zoom in')} title={$i18n.t('Zoom in')} on:click|stopPropagation={() => renderer?.zoomView(1/1.2)}>+</button>
     <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Reset view')} title={$i18n.t('Reset view')} on:click|stopPropagation={() => renderer?.resetView()}>↺</button>
     {#if onInterrupt}
       <button type="button" class="size-11 rounded-lg text-red-300 hover:bg-white/10 disabled:opacity-50" disabled={!canInterrupt} aria-label={$i18n.t('Stop speaking')} title={$i18n.t('Stop speaking')} on:click|stopPropagation={() => onInterrupt?.()}>■</button>
