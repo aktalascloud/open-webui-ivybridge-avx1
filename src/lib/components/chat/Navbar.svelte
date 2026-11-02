@@ -10,9 +10,10 @@
 		chatTitle as _chatTitle,
 		config,
 		mobile,
+		selectedTerminalId,
 		settings,
-		showControls,
 		showSidebar,
+		showTabs,
 		temporaryChatEnabled,
 		user
 	} from '$lib/stores';
@@ -36,7 +37,7 @@
 	import EllipsisHorizontal from '../icons/EllipsisHorizontal.svelte';
 	import ChatPlus from '../icons/ChatPlus.svelte';
 	import ChatCheck from '../icons/ChatCheck.svelte';
-	import Knobs from '../icons/Knobs.svelte';
+	import SplitPanel from '../icons/SplitPanel.svelte';
 	import Sparkles from '$lib/components/layout/Sidebar/icons/Sparkles.svelte';
 	import { isTemporaryChatId } from '$lib/utils/chatId';
 	import { createMessagesList } from '$lib/utils';
@@ -156,9 +157,9 @@
 <nav
 	class="sticky top-0 z-30 w-full {$mobile
 		? 'pt-1.5'
-		: 'pt-0.5'} pb-1 -mb-12 flex flex-col items-center drag-region"
+		: ''} pb-1 -mb-12 flex flex-col items-center drag-region"
 >
-	<div class="flex items-center w-full {$mobile ? 'px-2.5' : 'pl-1.5 pr-1'}">
+	<div class="flex items-center w-full {$mobile ? 'px-1.5' : 'pl-1.5 pr-1'}">
 		<div
 			id="navbar-bg-gradient-to-b"
 			class="{chat?.id
@@ -169,7 +170,7 @@
 		<div class=" flex max-w-full w-full mx-auto bg-transparent">
 			<div class="flex items-center w-full max-w-full">
 				{#if $mobile && !$showSidebar}
-					<div class="mr-1 flex flex-none items-center self-center">
+					<div class="mr-1 flex flex-none items-center self-start">
 						<Tooltip content={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}>
 							<button
 								id="sidebar-toggle-button"
@@ -188,7 +189,7 @@
 				{/if}
 
 				<div
-					class="flex-1 min-w-0 overflow-hidden max-w-full mt-0.5 py-0.5 pl-1 {$showSidebar
+					class="flex-1 min-w-0 overflow-hidden max-w-full md:mt-0.5 md:py-0.5 pl-1 {$showSidebar
 						? 'ml-1'
 						: ''}"
 				>
@@ -198,7 +199,7 @@
 								<input
 									bind:this={chatTitleInput}
 									bind:value={chatTitle}
-									class="min-w-0 flex-1 bg-transparent py-1 text-[0.9375rem] font-normal text-gray-700 outline-hidden dark:text-gray-300"
+									class="min-w-0 flex-1 bg-transparent md:py-1 text-[0.9375rem] font-normal text-gray-700 outline-hidden dark:text-gray-300"
 									aria-label={$i18n.t('Title')}
 									placeholder={generating ? $i18n.t('Generating...') : ''}
 									disabled={generating}
@@ -232,7 +233,7 @@
 								</Tooltip>
 							{:else}
 								<h1
-									class="min-w-0 truncate py-1 text-left text-[0.9375rem] font-normal text-gray-700 dark:text-gray-300"
+									class="min-w-0 truncate md:py-1 text-left text-[0.9375rem] font-normal text-gray-700 dark:text-gray-300"
 								>
 									{title || chat?.chat?.title || $i18n.t('New Chat')}
 								</h1>
@@ -255,7 +256,7 @@
 						<h1 class="sr-only">{$i18n.t('New Chat')}</h1>
 						<div class="pointer-events-none invisible flex max-w-full min-w-0 items-center gap-2">
 							<div
-								class="min-w-0 truncate py-1 text-left text-[0.9375rem] font-normal text-gray-700 dark:text-gray-300"
+								class="min-w-0 truncate md:py-1 text-left text-[0.9375rem] font-normal text-gray-700 dark:text-gray-300"
 							>
 								{$i18n.t('New Chat')}
 							</div>
@@ -294,9 +295,9 @@
 									aria-label={$i18n.t(`Temporary Chat`)}
 								>
 									{#if $temporaryChatEnabled}
-										<ChatBubbleDottedChecked className="size-4.5" strokeWidth="1.5" />
+										<ChatBubbleDottedChecked className="size-4" strokeWidth="1.5" />
 									{:else}
-										<ChatBubbleDotted className="size-4.5" strokeWidth="1.5" />
+										<ChatBubbleDotted className="size-4" strokeWidth="1.5" />
 									{/if}
 								</button>
 							</Tooltip>
@@ -327,7 +328,7 @@
 								}}
 								aria-label={$i18n.t('New Chat')}
 							>
-								<ChatPlus className="size-4.5" strokeWidth="1.5" />
+								<ChatPlus className="size-4" strokeWidth="1.5" />
 							</button>
 						</Tooltip>
 					{/if}
@@ -368,16 +369,15 @@
 						</Menu>
 					{/if}
 
-					{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
-						<Tooltip content={$i18n.t('Controls')}>
+					{#if history.currentId || $selectedTerminalId}
+						<Tooltip content={$i18n.t('Tabs')}>
 							<button
 								class="flex size-6 cursor-pointer items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
-								on:click={async () => {
-									await showControls.set(!$showControls);
-								}}
-								aria-label={$i18n.t('Controls')}
+								on:click={() => showTabs.set(!$showTabs)}
+								aria-label={$i18n.t('Tabs')}
+								aria-expanded={!!$showTabs}
 							>
-								<Knobs className="size-5" strokeWidth="1" />
+								<SplitPanel className="size-4.5" strokeWidth="1" />
 							</button>
 						</Tooltip>
 					{/if}

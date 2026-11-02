@@ -216,11 +216,7 @@ async def _verify_knowledge_file_access(
             )
 
 
-###########################
-# GetModels
-# Let each model here be judged by what it does and not
-# by what it claims. The house deserves honest servants.
-###########################
+# Get Models
 
 
 PAGE_ITEM_COUNT = 30
@@ -304,9 +300,7 @@ async def get_models(
     )
 
 
-###########################
-# GetBaseModels
-###########################
+# Get Base Models
 
 
 @router.get('/all', response_model=list[ModelResponse])
@@ -329,9 +323,7 @@ async def get_base_models(
     return await Models.get_base_models(tag=tag, db=db)
 
 
-###########################
-# GetModelTags
-###########################
+# Get Model Tags
 
 
 @router.get('/tags', response_model=list[str])
@@ -344,9 +336,7 @@ async def get_model_tags(user=Depends(get_verified_user), db: AsyncSession = Dep
     return sorted(tags)
 
 
-############################
-# CreateNewModel
-############################
+# Create New Model
 
 
 @router.post('/create', response_model=ModelModel | None)
@@ -444,9 +434,7 @@ async def create_new_model(
     return model_response(model)
 
 
-############################
-# ExportModels
-############################
+# Export Models
 
 
 class ModelExportResponse(ModelModel):
@@ -504,9 +492,7 @@ async def export_models(
     return exported
 
 
-############################
-# ImportModels
-############################
+# Import Models
 
 
 class ModelsImportForm(BaseModel):
@@ -745,9 +731,7 @@ async def import_models(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-############################
-# SyncModels
-############################
+# Sync Models
 
 
 class SyncModelsForm(BaseModel):
@@ -784,9 +768,7 @@ async def sync_models(
     return models
 
 
-###########################
-# GetModelById
-###########################
+# Get Model By Id
 
 
 class ModelIdForm(BaseModel):
@@ -843,9 +825,7 @@ async def get_model_by_id(id: str, user=Depends(get_verified_user), db: AsyncSes
         )
 
 
-###########################
-# GetModelById
-###########################
+# Get Model By Id
 
 
 async def authorized_model_history(id, user, db):
@@ -1092,9 +1072,7 @@ async def get_model_profile_image(
     )
 
 
-############################
-# ToggleModelById
-############################
+# Toggle Model By Id
 
 
 @router.post('/model/toggle', response_model=ModelResponse | None)
@@ -1143,9 +1121,7 @@ async def toggle_model_by_id(
         )
 
 
-############################
-# UpdateModelById
-############################
+# Update Model By Id
 
 
 @router.post('/model/update', response_model=ModelModel | None)
@@ -1220,9 +1196,7 @@ async def update_model_by_id(
     return model_response(model)
 
 
-############################
-# UpdateModelAccessById
-############################
+# Update Model Access By Id
 
 
 class ModelAccessGrantsForm(BaseModel):
@@ -1302,9 +1276,7 @@ async def update_model_access_by_id(
     return model_response(model)
 
 
-############################
-# DeleteModelById
-############################
+# Delete Model By Id
 
 
 @router.post('/model/delete', response_model=bool)

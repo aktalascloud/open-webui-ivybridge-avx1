@@ -71,21 +71,22 @@
 
 	let showButtons = false;
 
-	// Preserve the CSS anchor while letting actions escape the message scroll container.
-	const portalActions = (node: HTMLElement, keepOpen: boolean) => {
+	// The top layer escapes scroll clipping without moving actions out of the message's tab order.
+	const positionActions = (node: HTMLElement, keepOpen: boolean) => {
 		const anchor = node.parentElement!;
 		const messageElement = anchor.parentElement!;
 		let cleanup: (() => void) | undefined;
 		let destroyed = false;
-		document.body.appendChild(node);
+		node.showPopover();
 
 		const update = () => {
 			if (destroyed) return;
 			const visible =
-				keepOpen ||
-				[messageElement, node].some(
-					(element) => element.matches(':hover') || element.contains(document.activeElement)
-				);
+				!showDeleteConfirmDialog &&
+				(keepOpen ||
+					[messageElement, node].some(
+						(element) => element.matches(':hover') || element.contains(document.activeElement)
+					));
 			node.style.opacity = visible ? '1' : '0';
 			node.style.pointerEvents = visible ? 'auto' : 'none';
 			if (visible && !cleanup) {
@@ -99,7 +100,7 @@
 				cleanup = undefined;
 			}
 		};
-		const scheduleUpdate = () => queueMicrotask(update);
+		const scheduleUpdate = () => requestAnimationFrame(update);
 		const events = ['pointerenter', 'pointerleave', 'focusin', 'focusout'];
 		for (const element of [messageElement, node]) {
 			for (const event of events) element.addEventListener(event, scheduleUpdate);
@@ -116,7 +117,6 @@
 				for (const element of [messageElement, node]) {
 					for (const event of events) element.removeEventListener(event, scheduleUpdate);
 				}
-				node.remove();
 			}
 		};
 	};
@@ -272,9 +272,10 @@
 			{#if !edit && !disabled && !$$slots.header}
 				<div class="absolute right-1 -top-3">
 					<div
-						use:portalActions={showButtons}
+						use:positionActions={showButtons}
+						popover="manual"
 						class="fixed z-9999 flex w-max gap-1 rounded-lg bg-white dark:bg-gray-850 shadow-md p-0.5 border border-gray-100/30 dark:border-gray-850/30"
-						style="opacity: 0; pointer-events: none;"
+						style="inset: auto; margin: 0; color: inherit; opacity: 0; pointer-events: none;"
 					>
 						<slot name="actions">
 							{#if onReaction}

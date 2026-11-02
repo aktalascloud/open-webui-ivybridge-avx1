@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { getContext, onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { config, user, showControls } from '$lib/stores';
+	import { config, user, showTabs } from '$lib/stores';
 	import Annotation from '$lib/components/icons/Annotation.svelte';
 	import CommentHighlights from './CommentHighlights.svelte';
 	import { selectedComment, commentSelectionDraft } from './anchors';
 	import { toast } from 'svelte-sonner';
+	import { positionSelectionToolbar } from '$lib/utils/selectionToolbar';
 	const i18n = getContext<any>('i18n');
 	let selection: ReturnType<typeof selectedComment> = null;
 	let account: string | null = null;
@@ -23,13 +24,15 @@
 		!$page.url.pathname.startsWith('/s/')
 	);
 	let preparing = false;
+	let selectionButton: HTMLButtonElement;
+	let usingSelectionButton = false;
 	$: if (($user?.id ?? null) !== account) {
 		account = $user?.id ?? null;
 		commentSelectionDraft.set(null);
 		selection = null;
 	}
 	const select = () => {
-		if (!preparing) selection = commentsAllowed ? selectedComment() : null;
+		if (!preparing && !usingSelectionButton) selection = commentsAllowed ? selectedComment() : null;
 	};
 	const commentSelection = async () => {
 		const selected = selection;
@@ -50,35 +53,41 @@
 		}
 	};
 	onMount(() => {
-		document.addEventListener('mouseup', select);
-		document.addEventListener('keyup', select);
+		document.addEventListener('selectionchange', select);
 		return () => {
-			document.removeEventListener('mouseup', select);
-			document.removeEventListener('keyup', select);
+			document.removeEventListener('selectionchange', select);
 		};
 	});
 </script>
 
+<svelte:document
+	on:focusin={(event) => {
+		usingSelectionButton = !!selectionButton?.contains(event.target as Node);
+	}}
+	on:pointerdown|capture={(event) => {
+		usingSelectionButton = !!selectionButton?.contains(event.target as Node);
+	}}
+/>
 <svelte:window
 	on:keydown={(event) => {
 		if (event.key === 'Escape') {
 			if (
-				($showControls === 'comments' || typeof $showControls === 'object') &&
+				($showTabs === 'comments' || typeof $showTabs === 'object') &&
 				!document.querySelector('.modal, [aria-modal="true"]')
 			)
-				showControls.set(false);
+				showTabs.set(false);
 			selection = null;
 		}
 	}}
-	on:scroll|capture={() => (selection = null)}
 />
 {#if commentsAllowed}
 	{#key account}<CommentHighlights />{/key}
 	{#if selection && !selection.options.toolbar_id}
 		<button
+			bind:this={selectionButton}
+			use:positionSelectionToolbar={selection.range}
 			type="button"
-			class="fixed z-9999 flex items-center gap-1 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-850 px-2 py-1 text-xs shadow-xl"
-			style={`left:${Math.max(8, Math.min(selection.rect.left, window.innerWidth - 130))}px;top:${Math.min(window.innerHeight - 48, selection.rect.bottom + 12)}px`}
+			class="fixed z-9999 min-h-9 sm:min-h-0 flex items-center gap-1 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-850 px-2 py-1 text-xs shadow-xl"
 			on:mousedown|preventDefault
 			disabled={preparing}
 			on:click={commentSelection}><Annotation className="size-3" />{$i18n.t('Comment')}</button

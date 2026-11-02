@@ -206,7 +206,7 @@
 	$: csvHeader = csvRows.length > 0 ? csvRows[0] : [];
 	$: csvBody = csvRows.length > 1 ? csvRows.slice(1) : [];
 
-	// ── Shiki code highlighting (SVG only) ──────────────────────────────
+	// Shiki code highlighting (SVG only)
 	let highlightedHtml: string | null = null;
 	let highlightingFile: string | null = null;
 
@@ -231,7 +231,7 @@
 		highlightedHtml = null;
 	}
 
-	// ── JSON parsing ────────────────────────────────────────────────────
+	// JSON parsing
 	let parsedJson: unknown = undefined;
 	let jsonError: string | null = null;
 
@@ -248,7 +248,7 @@
 		jsonError = null;
 	}
 
-	// ── Notebook parsing ─────────────────────────────────────────────────
+	// Notebook parsing
 	let parsedNotebook: Record<string, unknown> | null = null;
 
 	$: if (isNotebook && fileContent !== null) {
@@ -356,7 +356,7 @@
 						: undefined}
 				/>
 			{:catch}
-				<div class="p-4 text-sm text-red-500">{$i18n.t('Preview failed')}</div>
+				<div class="p-4 text-sm text-gray-500 dark:text-gray-400">{$i18n.t('Preview failed')}</div>
 			{/await}
 		{/key}
 	{:else if fileSqliteData !== null}
@@ -370,14 +370,14 @@
 			</div>
 			{#if excelSheetNames.length > 1}
 				<div
-					class="flex items-center gap-1 py-1.5 px-3 border-t border-gray-100 dark:border-gray-800 overflow-x-auto"
+					class="flex items-center gap-1 py-1.5 px-1.5 border-t border-gray-100/40 dark:border-gray-800/25 overflow-x-auto"
 				>
 					{#each excelSheetNames as sheet}
 						<button
-							class="shrink-0 px-3 py-1 text-xs rounded-md transition-colors
+							class="shrink-0 px-2 py-1 text-xs rounded-md transition-colors
 								{selectedExcelSheet === sheet
-								? 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-normal'
-								: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}"
+								? 'bg-gray-100/40 dark:bg-gray-800/25 text-gray-700 dark:text-gray-200 font-normal'
+								: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
 							on:click={() => onSheetChange?.(sheet)}
 						>
 							{sheet}
@@ -516,7 +516,7 @@
 			</div>
 		{:else if isJson && !showRaw && jsonError}
 			<div class="p-3 text-xs">
-				<div class="text-red-500 mb-2">
+				<div class="text-gray-500 dark:text-gray-400 mb-2">
 					{$i18n.t('JSON parse error: {{error}}', { error: jsonError })}
 				</div>
 				<pre
@@ -691,7 +691,7 @@
 		padding-left: 1.5em;
 		margin: 0.5em 0;
 	}
-	/* ── Shiki code highlighting ─────────────────────────────────── */
+	/* Shiki code highlighting */
 	.shiki-preview :global(pre.shiki) {
 		margin: 0;
 		padding: 0.75rem 1rem;

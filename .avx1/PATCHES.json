@@ -263,5 +263,13 @@
     "id": "WEB-LIVE-AVATAR-CONTROLS",
     "description": "Live voice avatars reuse preview rotation/pan/pinch/wheel/reset controls; interactive stages are not disabled while listening, and camera input does not interrupt audio.",
     "verification": "Pinned Svelte compilation and packaged Chromium smoke; renderer interaction functions reused unchanged."
+  },
+  {
+    "id": "WEB-MAINSTREAM-013",
+    "description": "Merge official dev2840f0e: temporary-chat ownership/resume, pending approval state, Terminal browser/desktop/event relays and per-card subagent model selection. Preserve legacy DB helpers, Responses conversion, model-specific Strata controls, native tool behavior and private avatar defaults.",
+    "source": "https://github.com/open-webui/open-webui/commit/2840f0e07b398b76db04978334e3232fe8b89c31",
+    "adaptation": "Per-card target list may only narrow the existing administrator allowlist plus user model ACL; cross-model child requests keep their own parameters. Browser tickets encrypt the issuing credential and revalidate it through central session/API-key auth, retaining revocation, owner binding and endpoint policy. Internal Terminal capabilities are encrypted inside the relay envelope, not readable in JWT payloads. Viewer tickets are mode-bound: proxy tickets cannot upgrade to Chrome/VNC and reverse.",
+    "verification": "16 new offline policy boundaries,13 daily regressions,8 earlier daily regressions,7 upstream regressions,3 Responses and3 FreeLLM tests;304 Python files compile;96 changed Svelte components compile with exact lockfile compiler5.57.2;4461 WebUI locale keys/placeholders recorded separately. This is not a packaged browser/DB/runtime qualification.",
+    "license": "noVNC1.7.0 source package verified against lockfile SHA512; vendor notices, authors and license texts retained in LICENSE-NOVNC.txt and copied by the existing package license gate."
   }
 ]

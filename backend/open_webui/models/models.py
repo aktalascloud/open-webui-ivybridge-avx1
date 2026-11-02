@@ -67,7 +67,7 @@ def strip_extracted_content_from_model_knowledge(knowledge: Any) -> Any:
     return sanitized
 
 
-# --- Models DB Schema ---
+# Models DB schema
 
 
 ModelControlKey = Annotated[str, Field(pattern=re.compile(r'^(?!(?:constructor|prototype)\Z)[a-zA-Z][a-zA-Z0-9_-]*\Z'))]
@@ -108,6 +108,10 @@ class ModelParams(BaseModel):
 
 class ModelVoice(BaseModel):
     voice: str | None = Field(default=None, min_length=1, max_length=200, pattern=r'^\S+$')
+
+
+class ModelSubagents(BaseModel):
+    model_ids: list[str] = Field(default_factory=list)
 
 
 class ModelAvatarAnimation(BaseModel):
@@ -151,6 +155,7 @@ class ModelMeta(BaseModel):
     i18n: dict[str, Any] | None = None
     capabilities: dict | None = None
     knowledge: list[Any] | None = None
+    subagents: ModelSubagents | None = None
     voice: ModelVoice | None = None
     voice_avatar: ModelVoiceAvatar | None = None
 

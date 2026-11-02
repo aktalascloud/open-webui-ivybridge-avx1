@@ -4456,5 +4456,8 @@
   "Invalid media URL": "Invalid media URL",
   "Sign in to view this file": "Sign in to view this file",
   "File unavailable or access denied": "File unavailable or access denied",
-  "Drag to rotate; pinch or scroll to zoom. Double-tap to reset.": "Drag to rotate; pinch or scroll to zoom. Double-tap to reset."
+  "Drag to rotate; pinch or scroll to zoom. Double-tap to reset.": "Drag to rotate; pinch or scroll to zoom. Double-tap to reset.",
+  "Models this model can delegate to. Users must have access to them. Leave empty to use the current model.": "Restrict this card to models allowed by the administrator. Empty keeps the administrator's list; the current model remains the default.",
+  "You do not have permission to use side chat.": "",
+  "Allow Side Chat": ""
 }

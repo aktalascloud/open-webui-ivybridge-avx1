@@ -13,7 +13,7 @@
 		tags,
 		folders as _folders,
 		showSidebar,
-		showControls,
+		showTabs,
 		showSearch,
 		mobile,
 		pinnedChats,
@@ -226,12 +226,7 @@
 		}
 	};
 
-	// Keep the optimistic sidebar highlight in sync with the active chat. Leaving the
-	// chat view (e.g. navigating to an admin page) clears chatId, and programmatic
-	// navigation such as cloning moves chatId to a different chat — in both cases the
-	// previously-selected item must not stay highlighted. The optimistic on-click
-	// highlight is preserved because a click sets selectedChatId without changing
-	// chatId, so this reactive only re-runs once chatId catches up to the same value.
+	// Follow chatId changes on navigation; preserve the click's optimistic highlight until chatId catches up.
 	$: selectedChatId = $chatId || null;
 
 	let showCreateChannel = false;
@@ -263,7 +258,7 @@
 		{
 			setFolderItems?: () => unknown;
 			upsertChat?: (chat: Record<string, unknown>) => unknown;
-			setChatActive?: (chatId: string, active: boolean) => boolean;
+			setChatActive?: (chatId: string, active: boolean, pendingApproval: boolean) => boolean;
 			setChatReadAt?: (chatId: string, lastReadAt: number) => boolean;
 			setAllChatsRead?: () => unknown;
 		}
@@ -410,7 +405,7 @@
 					? [...folderMap[folder.parent_id].childrenIds, folder.id]
 					: [folder.id];
 
-				// Sort the children by updated_at field
+				// Recently updated folders get the front seats.
 				folderMap[folder.parent_id].childrenIds.sort((a, b) => {
 					return folderMap[b].updated_at - folderMap[a].updated_at;
 				});
@@ -445,10 +440,10 @@
 			return;
 		}
 
-		// Check for duplicate names in the same parent
+		// Check sibling names before adding another folder called "New folder".
 		const siblings = Object.values(folders).filter((folder) => folder.parent_id === parent_id);
 		if (siblings.find((folder) => folder.name.toLowerCase() === name.toLowerCase())) {
-			// If a folder with the same name already exists, append a number to the name
+			// Same name? Issue a numbered sequel.
 			let i = 1;
 			while (
 				siblings.find((folder) => folder.name.toLowerCase() === `${name} ${i}`.toLowerCase())
@@ -500,7 +495,7 @@
 	};
 
 	const initChatList = async () => {
-		// Reset pagination variables
+		// Mark the chat list as loading while tags, pinned notes, and chats refresh.
 		console.log('initChatList');
 		chatListReady = false;
 
@@ -696,7 +691,12 @@
 	};
 
 	const onKeyDown = (e) => {
-		if (e.key === 'Escape' && !inboxOpened && $selectedChatIds.size > 0 && !showDeleteSelectedConfirm) {
+		if (
+			e.key === 'Escape' &&
+			!inboxOpened &&
+			$selectedChatIds.size > 0 &&
+			!showDeleteSelectedConfirm
+		) {
 			e.preventDefault();
 			chatSelection.clear();
 		}
@@ -727,7 +727,7 @@
 	const MIN_WIDTH = 220;
 	const MAX_WIDTH = 480;
 	let viewportWidth = 320;
-	$: mobileWidth = Math.min(MAX_WIDTH, Math.max(0, viewportWidth - 40));
+	$: mobileWidth = Math.min(380, Math.max(0, viewportWidth - 40));
 
 	let isResizing = false;
 	let activePointerId: number | null = null;
@@ -912,6 +912,7 @@
 			type: string;
 			data: {
 				active?: boolean;
+				pending_approval?: boolean;
 				folder_id?: string | null;
 				last_read_at?: number;
 				folder_unread_counts?: Record<string, number>;
@@ -921,10 +922,12 @@
 		if (event.data?.type === 'chat:active') {
 			const eventData = event.data.data ?? {};
 			const active = eventData.active ?? false;
-			const found = setChatActive(event.chat_id, active);
+			const pendingApproval = eventData.pending_approval ?? false;
+			const found = setChatActive(event.chat_id, active, pendingApproval);
 			let foundInFolder = false;
 			for (const folder of Object.values(folderRegistry)) {
-				foundInFolder = folder?.setChatActive?.(event.chat_id, active) || foundInFolder;
+				foundInFolder =
+					folder?.setChatActive?.(event.chat_id, active, pendingApproval) || foundInFolder;
 			}
 			if (!foundInFolder && active && eventData.folder_id) {
 				await folderRegistry[eventData.folder_id]?.setFolderItems?.();
@@ -1051,7 +1054,7 @@
 <MobileSwipePanel
 	open={$showSidebar}
 	enabled={$mobile}
-	blocked={!!$showControls}
+	blocked={!!$showTabs}
 	width={$mobile ? mobileWidth : $sidebarWidth}
 	onOpenChange={(open) => showSidebar.set(open)}
 	let:visible
@@ -1094,7 +1097,7 @@
 
 	{#if !$mobile && !$showSidebar}
 		<div
-			class="w-[calc(42px*var(--app-text-scale,1))] shrink-0 py-[calc(0.25rem*var(--app-text-scale,1))] px-[calc(0.25rem*var(--app-text-scale,1))] flex flex-col justify-between text-gray-700 dark:text-gray-300 hover:bg-gray-50/30 dark:hover:bg-gray-800/30 h-full z-10 transition-all border-e-[0.5px] border-gray-50 dark:border-gray-850/30"
+			class="w-[calc(42px*var(--app-text-scale,1))] shrink-0 pt-0.5 pb-1 px-1 flex flex-col justify-between text-gray-700 dark:text-gray-300 hover:bg-gray-50/30 dark:hover:bg-gray-800/30 h-full z-10 transition-all border-e-[0.5px] border-gray-50 dark:border-gray-850/30"
 			id="sidebar"
 			role="navigation"
 			aria-label={$i18n.t(inboxOpened ? 'Notifications' : 'Chat history')}
@@ -1108,7 +1111,7 @@
 					closeSidebarButton?.focus();
 				}}
 			>
-				<div class="pb-1">
+				<div class="pb-0.5">
 					<Tooltip
 						content={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
 						placement="right"
@@ -1116,7 +1119,7 @@
 						<button
 							bind:this={openSidebarButton}
 							id="sidebar-open-button"
-							class="flex size-8.5 items-center justify-center transition group {isWindows
+							class="flex size-8.5 shrink-0 items-center justify-center transition group {isWindows
 								? 'cursor-pointer'
 								: 'cursor-[e-resize]'}"
 							aria-label={`${$i18n.t('Open Sidebar')}${$config?.features?.enable_notifications && $inboxCount ? ` · ${$i18n.t('Notifications')} (${$inboxCount})` : ''}`}
@@ -1299,10 +1302,10 @@
 				class=" my-auto flex flex-col justify-between h-screen max-h-[100dvh] w-[var(--sidebar-width)] overflow-x-hidden scrollbar-hidden z-50 border-e border-gray-50 dark:border-gray-850/30"
 			>
 				<div
-					class="sidebar px-1 pt-1.5 pb-1 flex justify-between space-x-1 text-gray-600 dark:text-gray-400 sticky top-0 z-10 -mb-2"
+					class="sidebar {$mobile ? 'px-0.75 pt-1 pb-1 -mb-2' : 'px-1 pt-0.5 pb-0.5'} flex shrink-0 justify-between space-x-1 text-gray-600 dark:text-gray-400 sticky top-0 z-10"
 				>
 					<a
-						class="flex items-center rounded-xl size-8.5 h-full justify-center hover:bg-gray-100 dark:hover:bg-gray-900 transition no-drag-region"
+						class="flex items-center rounded-xl size-8.5 {$mobile ? 'h-full' : 'shrink-0'} justify-center hover:bg-gray-100 dark:hover:bg-gray-900 transition no-drag-region"
 						href="/"
 						draggable="false"
 						aria-label={$i18n.t('New Chat')}
@@ -1331,7 +1334,9 @@
 						</div>
 					</a>
 					<div class="flex shrink-0 items-center gap-px">
-						{#if $config?.features?.enable_notifications}<InboxButton onClose={() => inboxHost.close()} />{/if}
+						{#if $config?.features?.enable_notifications}<InboxButton
+								onClose={() => inboxHost.close()}
+							/>{/if}
 						<Tooltip
 							content={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
 							placement="bottom"
@@ -1374,7 +1379,7 @@
 				{/if}
 
 				<div
-					class="relative flex flex-col flex-1 overflow-y-auto scrollbar-hidden space-y-1.5 pt-2.5 pb-2.5"
+					class="relative flex flex-col flex-1 overflow-y-auto scrollbar-hidden space-y-1.5 {$mobile ? 'pt-1.5' : ''} pb-2.5"
 					style:display={inboxOpened ? 'none' : undefined}
 					on:scroll={(e) => {
 						if (e.target.scrollTop === 0) {
@@ -1395,7 +1400,7 @@
 								aria-label={$i18n.t('New Chat')}
 							>
 								<div class="self-center flex size-4 shrink-0 items-center justify-center">
-									<EditPencilIcon className=" size-4" strokeWidth="1.5" />
+									<EditPencilIcon className="size-4" strokeWidth="1.5" />
 								</div>
 
 								<div class="flex flex-1 self-center translate-y-[0.5px]">
@@ -1776,6 +1781,7 @@
 														updatedAt={chat.updated_at}
 														lastReadAt={chat.last_read_at}
 														active={chat.active ?? false}
+														pendingApproval={chat.pending_approval ?? false}
 														{shiftKey}
 														selected={selectedChatId === chat.id}
 														on:select={() => {
@@ -1844,6 +1850,7 @@
 													updatedAt={chat.updated_at}
 													lastReadAt={chat.last_read_at}
 													active={chat.active ?? false}
+													pendingApproval={chat.pending_approval ?? false}
 													{shiftKey}
 													selected={selectedChatId === chat.id}
 													on:select={() => {

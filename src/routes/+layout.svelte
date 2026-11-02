@@ -25,6 +25,7 @@
 		chatId,
 		tags,
 		temporaryChatEnabled,
+		openTemporaryChatIds,
 		isLastActiveTab,
 		isApp,
 		appInfo,
@@ -34,8 +35,7 @@
 		channelId,
 		channelRequestQueues,
 		terminalServers,
-		connectedUserTerminals,
-		showControls,
+		showTabs,
 		showFileNavPath,
 		showFileNavDir,
 		pyodideWorker,
@@ -558,7 +558,7 @@
 				if (result?.exists !== false) {
 					displayFileHandler(
 						result?.path ?? params.path,
-						{ showControls, showFileNavPath },
+						{ showTabs, showFileNavPath },
 						{ page: params?.page }
 					);
 				}
@@ -580,28 +580,13 @@
 
 	const chatEventHandler = async (event, cb) => {
 		if (event.shared) return;
-		// Answer this session's availability check even when another chat is active.
-		if (
-			event?.data?.type === 'request:terminal:state' &&
-			event.data.data?.session_id === $socket?.id
-		) {
-			cb?.({
-				connected:
-					$config?.features?.enable_tool_servers &&
-					[...$connectedUserTerminals.values()].some(
-						(shell) =>
-							shell.terminalId === event.data.data?.terminal_id && shell.chatId === event.chat_id
-					)
-			});
-			return;
-		}
 		const chat = $page.url.pathname.includes(`/c/${event.chat_id}`);
 
 		// Skip events from temporary chats that are not the current chat.
 		// This prevents notifications from being sent to other tabs/devices
 		// for privacy, since temporary chats are not meant to be persisted or visible elsewhere.
 		const isTemporaryChat = isTemporaryChatId(event.chat_id);
-		if (isTemporaryChat && event.chat_id !== $chatId) {
+		if (isTemporaryChat && event.chat_id !== $chatId && !$openTemporaryChatIds.has(event.chat_id)) {
 			return;
 		}
 
@@ -780,6 +765,7 @@
 
 		if (
 			!event?.internal &&
+			!$openTemporaryChatIds.has(event.chat_id) &&
 			((event.chat_id !== $chatId && !$temporaryChatEnabled) || isInBackground)
 		) {
 			if (type === 'chat:completion') {

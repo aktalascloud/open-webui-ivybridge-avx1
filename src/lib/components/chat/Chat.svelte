@@ -31,7 +31,8 @@
 		user,
 		socket,
 		audioQueue,
-		showControls,
+		showTabs,
+		sideChatRequest,
 		showCallOverlay,
 		temporaryChatEnabled,
 		mobile,
@@ -77,6 +78,7 @@
 	import { acquireWakeLock } from '$lib/utils/wakeLock';
 	import { routeAvatarAnimation } from '$lib/utils/voice-avatar';
 	import { createTemporaryChatId, isTemporaryChatId } from '$lib/utils/chatId';
+	import { resumeTemporaryChat } from '$lib/apis';
 	import {
 		applyResponseStreamEvent,
 		getOutputText,
@@ -129,7 +131,7 @@
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
-	import ChatControls from './ChatControls.svelte';
+	import ChatTabs from './ChatTabs.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import ElicitationDialog from './ElicitationDialog.svelte';
 	import DeleteConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -435,6 +437,11 @@
 	$: isShared = chat != null && chat.user_id !== $user?.id;
 	$: if (isShared && $showCallOverlay) showCallOverlay.set(false);
 	$: canClone = isShared && ($user?.role === 'admin' || ($user?.permissions?.chat?.import ?? true));
+	$: sideChatAllowed =
+		$user?.role === 'admin' ||
+		($user?.role === 'user' &&
+			($user.permissions?.chat?.temporary ?? true) &&
+			($user.permissions?.chat?.side_chat ?? false));
 	let cloning = false;
 
 	const cloneSharedChat = async () => {
@@ -1289,7 +1296,7 @@
 		if (type === 'terminal:display_file') {
 			if (!data?.path) return;
 			if ($settings?.terminalFileDisplay === 'inline') return;
-			displayFileHandler(data.path, { showControls, showFileNavPath }, { page: data?.page });
+			displayFileHandler(data.path, { showTabs, showFileNavPath }, { page: data?.page });
 		} else if (type === 'terminal:write_file' || type === 'terminal:replace_file_content') {
 			if (!data?.path) return;
 			showFileNavDir.set(data.path);
@@ -1459,6 +1466,7 @@
 	$: syncChatRoom($socket, $chatId, $temporaryChatEnabled);
 
 	const chatEventHandler = async (event, cb) => {
+		if (isTemporaryChatId(event.chat_id) && event.chat_id !== $chatId) return;
 		if (event?.data?.type === 'chat:presence') {
 			if (!$socket?.connected || event.chat_id !== $chatId || event.chat_id !== joinedChatId)
 				return;
@@ -1892,7 +1900,32 @@
 
 	const handleSocketConnect = async () => {
 		clearTyping();
-		if (!$chatId || $temporaryChatEnabled) return;
+		if (!$chatId || !$socket?.id) return;
+		if (isTemporaryChatId($chatId)) {
+			const id = $chatId;
+			try {
+				const result = await resumeTemporaryChat(localStorage.token, id, $socket.id);
+				if ($chatId !== id) return;
+				taskIds = result.task_ids.length ? result.task_ids : null;
+				for (const stream of result.streams) {
+					const message = history.messages[stream.message_id];
+					if (message && !message.done) message.output = stream.output;
+				}
+
+				if (!taskIds) {
+					for (const message of Object.values(history.messages) as any[]) {
+						if (message.role === 'assistant' && !message.done) {
+							message.done = true;
+							message.error = { content: $i18n.t('Connection lost. Please retry.') };
+						}
+					}
+				}
+				history = history;
+			} catch (error) {
+				toast.error(getErrorMessage(error));
+			}
+			return;
+		}
 		joinedChatId = '';
 		syncChatRoom($socket, $chatId, $temporaryChatEnabled);
 		const id = $chatId;
@@ -1935,14 +1968,6 @@
 		if ($page.url.pathname === '/' || $page.url.pathname.startsWith('/folders/')) {
 			tick().then(initNewChat);
 		}
-
-		const showControlsSubscribe = showControls.subscribe((value) => {
-			if (!value) {
-				showCallOverlay.set(false);
-				showArtifacts.set(false);
-				showEmbeds.set(false);
-			}
-		});
 
 		// the artifacts pane reads this list when it opens, which can be before the debounced rebuild
 		const showArtifactsSubscribe = showArtifacts.subscribe((value) => {
@@ -1997,7 +2022,6 @@
 				if (chatIdProp && !$temporaryChatEnabled) {
 					updateLastReadAt(chatIdProp);
 				}
-				showControlsSubscribe();
 				showArtifactsSubscribe();
 				selectedFolderSubscribe();
 
@@ -2590,9 +2614,7 @@
 		artifactContents.set(contents);
 	};
 
-	//////////////////////////
 	// Web functions
-	//////////////////////////
 
 	const openCallOverlay = () => {
 		if (isShared) return;
@@ -2625,13 +2647,13 @@
 		}
 
 		showCallOverlay.set(true);
-		showControls.set(true);
+		showTabs.set(true);
 	};
 
 	const initNewChat = async () => {
 		loading = true;
-		if (!embedded && ($showControls === 'comments' || typeof $showControls === 'object'))
-			showControls.set(false);
+		if (!embedded && ($showTabs === 'comments' || $showTabs === 'side' || typeof $showTabs === 'object'))
+			showTabs.set(false);
 		const signal = startChatLoad();
 		modelDefaults = null;
 		clearTimeout(saveControlsTimer);
@@ -2765,7 +2787,7 @@
 		}
 
 		if ($mobile) {
-			await showControls.set(false);
+			await showTabs.set(false);
 		}
 		await showCallOverlay.set(false);
 		await showArtifacts.set(false);
@@ -3117,12 +3139,7 @@
 			});
 			lastScrollTop = messagesContainerElement.scrollTop;
 
-			// content-visibility: auto causes the initial scrollHeight to be based on
-			// estimated sizes (contain-intrinsic-size). After we scroll, previously
-			// off-screen messages become visible and the browser resolves their actual
-			// heights, which shifts scrollHeight. Re-layouts can cascade across frames
-			// (new sizes reveal more content, triggering further size resolution), so
-			// we re-scroll across two animation frames to land at the true bottom.
+			// Re-scroll over two frames as content-visibility resolves estimated message heights.
 			requestAnimationFrame(() => {
 				if (messagesContainerElement && autoScroll) {
 					messagesContainerElement.scrollTo({
@@ -3424,7 +3441,7 @@
 				scrollToBottom();
 			}
 
-			if (messages.length === 0) {
+			if (!$chatId) {
 				await initChatHandler(history);
 			} else {
 				await saveChatHandler($chatId, history);
@@ -3488,7 +3505,7 @@
 			scrollToBottom();
 		}
 
-		if (messages.length === 0) {
+		if (!$chatId) {
 			await initChatHandler(history);
 		} else {
 			await saveChatHandler($chatId, history);
@@ -3643,9 +3660,7 @@
 		bridge?.update();
 	};
 
-	//////////////////////////
 	// Chat functions
-	//////////////////////////
 
 	const submitPrompt = async (
 		inputContent: string,
@@ -3663,7 +3678,7 @@
 			)
 		);
 		chatFiles = chatFiles.filter(
-			// Remove duplicates
+			// One copy per attachment; the model does not need an encore.
 			(item, index, array) => array.findIndex((i) => equal(i, item)) === index
 		);
 
@@ -3859,6 +3874,8 @@
 		prompt = '';
 	};
 
+	let terminalTabs: ChatTabs;
+
 	const getChatId = async (_history: typeof history) => {
 		let _chatId = $chatId;
 		// Empty embedded drafts create their backing chat only when the first message is sent.
@@ -3885,8 +3902,13 @@
 				_chatId = createTemporaryChatId($socket?.id);
 				await chatId.set(_chatId);
 			}
+			if (!_chatId && terminalTabs?.hasTerminals()) {
+				_chatId = await initChatHandler(_history);
+			}
 			await tick();
 		}
+		if (history !== _history) return null;
+		if (_chatId) await terminalTabs?.bindTerminalChat(_chatId);
 		return _chatId;
 	};
 
@@ -3927,6 +3949,26 @@
 		if (String(userPrompt).trim() === '/status') {
 			clearCommandInput();
 			handleStatusCommand();
+			return { status: 'rejected' };
+		}
+		if (String(userPrompt).trim() === '/comments') {
+			clearCommandInput();
+			messageInput?.openComments();
+			return { status: 'rejected' };
+		}
+		const sideCommand = String(userPrompt).trim().match(/^\/(?:side|btw)(?:\s+([\s\S]*))?$/i);
+		if (sideCommand && !sideChatAllowed) {
+			toast.error($i18n.t('You do not have permission to use side chat.'));
+			return { status: 'rejected' };
+		}
+		if (sideCommand && !embedded && $chatId && history.currentId) {
+			if (selectedModels.length !== 1 || !selectedModelIds[0]) {
+				toast.error($i18n.t('Select only one model to open a side chat.'));
+				return { status: 'rejected' };
+			}
+			clearCommandInput();
+			sideChatRequest.set({ parentId: $chatId, prompt: sideCommand[1] ?? '' });
+			showTabs.set('side');
 			return { status: 'rejected' };
 		}
 		if (String(userPrompt).trim() === '/fork') {
@@ -4117,11 +4159,7 @@
 			history.messages[parentId].models = [...selectedModelIds];
 		}
 
-		// Create response messages for each selected model
-		// Build message_ids list: [{model_id, message_id, modelIdx}, ...]
-		// Uses an array instead of a dict to support duplicate model IDs in side-by-side chat.
-		// modelIdx identifies each side-by-side column so the backend can persist it; without
-		// it, duplicate models collapse into one another when the chat is reloaded.
+		// Use a message_ids array with modelIdx to preserve separate columns for duplicate models.
 		const messageIdsList: Array<{ model_id: string; message_id: string; modelIdx: number }> = [];
 		for (const [_modelIdx, modelId] of selectedModelIds.entries()) {
 			const model = $models.filter((m) => m.id === modelId).at(0);
@@ -4213,10 +4251,7 @@
 					primaryResponseMessageId,
 					_chatId,
 					{
-						// Always forward the message_ids list (not just for multi-model sends) so the
-						// backend persists each response's modelIdx — including single-column
-						// regenerations in a duplicate-model chat, which would otherwise lose their
-						// column identity and collapse on reload.
+						// Send message_ids even for single-column regenerations to preserve modelIdx on reload.
 						messageIdsList: messageIdsList.length > 0 ? messageIdsList : undefined,
 						regenerationPrompt,
 						regenerationMessageId
@@ -4321,7 +4356,7 @@
 					(item.type === 'file' && !isRasterImageContentType(item?.content_type))
 			)
 		);
-		// Remove duplicates
+		// One copy per attachment; the model does not need an encore.
 		files = files.filter((item, index, array) => array.findIndex((i) => equal(i, item)) === index);
 
 		scrollToBottom();
@@ -4563,10 +4598,7 @@
 					onToolCallResolved(res);
 				}
 
-				// Finish new-chat setup even if an event already supplied the chat id.
-				// Only update if the user hasn't navigated to a different chat
-				// while the request was in flight (prevents overwriting $chatId
-				// and causing spurious toast notifications / state duplication).
+				// Finish new-chat setup only if navigation has not changed the active chat during the request.
 				if (
 					res.chat_id &&
 					history.messages[responseMessageId] &&
@@ -4605,10 +4637,7 @@
 						window.history.replaceState(window.history.state, '', `/c/${res.chat_id}`);
 						await refreshChatList(localStorage.token);
 
-						// Persist chat-level params (system prompt, advanced
-						// params) that the backend doesn't receive in the
-						// chat completion request.  Files are now persisted
-						// by the backend at chat creation time.
+						// Save chat params omitted from the completion request; the backend already saves files.
 						if (Object.keys(params).length > 0) {
 							await updateChatParams(localStorage.token, res.chat_id, params);
 						}
@@ -4887,7 +4916,7 @@
 
 			selectedFolder.set(null);
 		} else {
-			_chatId = createTemporaryChatId($socket?.id);
+			_chatId = isTemporaryChatId(_chatId) ? _chatId : createTemporaryChatId($socket?.id);
 			await chatId.set(_chatId);
 		}
 		await tick();
@@ -5442,6 +5471,9 @@
 										{taskIds}
 										bind:selectedModels
 										onModelSelect={saveControls}
+										bind:chatFiles
+										bind:params
+										onParamChange={saveParam}
 										bind:files
 										bind:prompt
 										bind:autoScroll
@@ -5540,6 +5572,9 @@
 										{taskIds}
 										bind:selectedModels
 										onModelSelect={saveControls}
+										bind:chatFiles
+										bind:params
+										onParamChange={saveParam}
 										bind:files
 										bind:prompt
 										bind:autoScroll
@@ -5605,6 +5640,9 @@
 									{history}
 									bind:selectedModels
 									onModelSelect={saveControls}
+									bind:chatFiles
+									bind:params
+									onParamChange={saveParam}
 									bind:messageInput
 									bind:files
 									bind:prompt
@@ -5656,23 +5694,16 @@
 			</div>
 
 			{#if !embedded}
-				<ChatControls
+				<ChatTabs
 					bind:terminalContext
 					bind:history
-					bind:chatFiles
-					bind:params
-					onParamChange={saveParam}
 					bind:files
 					chatId={$chatId}
+					bind:this={terminalTabs}
 					chatUser={chatOwner}
 					modelId={selectedModelIds?.at(0) ?? null}
-					models={selectedModelIds.reduce((a, e, i, arr) => {
-						const model = $models.find((m) => m.id === e);
-						if (model) {
-							return [...a, model];
-						}
-						return a;
-					}, [])}
+					canSideChat={sideChatAllowed && selectedModels.length === 1 && !!selectedModelIds[0]}
+					systemPrompt={params?.system || $settings.system || ''}
 					submitPrompt={submitHandler}
 					onAskFile={askFile}
 					{stopResponse}
@@ -5688,7 +5719,7 @@
 </div>
 
 <style>
-	::-webkit-scrollbar {
+	:global(:where(html:not(.native-scrollbars))) ::-webkit-scrollbar {
 		height: 0.5rem;
 		width: 0.5rem;
 	}

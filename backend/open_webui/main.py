@@ -22,7 +22,6 @@ from fastapi import (
     applications,
     status,
 )
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -209,6 +208,7 @@ from open_webui.socket.main import (
 from open_webui.tasks import (
     cleanup_task,
     create_task,
+    get_response_streams_by_chat_id,
     has_active_tasks,
     list_task_ids_by_item_id,
     list_tasks,
@@ -221,7 +221,7 @@ from open_webui.utils import logger
 from open_webui.utils.access_control import has_permission
 from open_webui.utils.access_control.folders import has_folder_write_access
 from open_webui.utils.actions import chat_action as chat_action_handler
-from open_webui.utils.asgi_middleware import AppHTTPMiddleware
+from open_webui.utils.asgi_middleware import AppHTTPMiddleware, BrowserCORSMiddleware
 from open_webui.utils.audit import AuditLevel, AuditLoggingMiddleware
 from open_webui.utils.auth import (
     create_admin_user,
@@ -233,7 +233,9 @@ from open_webui.utils.auth import (
     is_valid_token,
 )
 from open_webui.utils.chat import (
+    register_temporary_chat_session,
     chat_completed as chat_completed_handler,
+    get_temporary_chat,
 )
 from open_webui.utils.chat import (
     generate_chat_completion as chat_completion_handler,
@@ -588,11 +590,7 @@ app.state.USER_COUNT = None
 app.state.EXTERNAL_PWA_MANIFEST_URL = EXTERNAL_PWA_MANIFEST_URL
 
 
-########################################
-#
-# OPENTELEMETRY
-#
-########################################
+# OpenTelemetry
 
 if ENABLE_OTEL:
     from open_webui.utils.telemetry.setup import setup as setup_opentelemetry
@@ -600,69 +598,34 @@ if ENABLE_OTEL:
     setup_opentelemetry(app=app, db_engine=engine)
 
 
-########################################
-#
-# OLLAMA
-#
-########################################
+# Ollama
 
 
 app.state.OLLAMA_MODELS = {}
 
-########################################
-#
-# OPENAI
-#
-########################################
+# OpenAI
 
 
 app.state.OPENAI_MODELS = {}
 
-########################################
-#
-# TOOL SERVERS
-#
-########################################
+# Tool servers
 
 app.state.TOOL_SERVERS = []
 
-########################################
-#
-# TERMINAL SERVER
-#
-########################################
+# Terminal server
 
 app.state.TERMINAL_SERVERS = []
 
-########################################
-#
-# DIRECT CONNECTIONS
-#
-########################################
-
-
-########################################
-#
 # SCIM
-#
-########################################
 
 app.state.ENABLE_SCIM = ENABLE_SCIM
 app.state.SCIM_TOKEN = SCIM_TOKEN
 
-########################################
-#
-# MODELS
-#
-########################################
+# Models
 
 app.state.BASE_MODELS = []
 
-########################################
-#
-# WEBUI
-#
-########################################
+# WebUI
 
 
 async def initialize_runtime_config(app: FastAPI):
@@ -797,25 +760,7 @@ async def initialize_runtime_config(app: FastAPI):
     )
 
 
-########################################
-#
-# CODE EXECUTION
-#
-########################################
-
-
-########################################
-#
-# IMAGES
-#
-########################################
-
-
-########################################
-#
-# AUDIO
-#
-########################################
+# Audio
 
 
 app.state.faster_whisper_model = None
@@ -823,18 +768,7 @@ app.state.speech_synthesiser = None
 app.state.speech_speaker_embeddings_dataset = None
 
 
-########################################
-#
-# TASKS
-#
-########################################
-
-
-########################################
-#
-# WEBUI
-#
-########################################
+# WebUI
 
 app.state.MODELS = MODELS
 
@@ -862,19 +796,13 @@ if ENABLE_COMPRESSION_MIDDLEWARE:
     app.add_middleware(CompressMiddleware)
 
 
-# All HTTP middlewares below are pure-ASGI implementations. The previous
-# `BaseHTTPMiddleware` / `@app.middleware('http')` versions wrapped the
-# downstream app in an anyio task group whose cancel scope cancelled
-# in-flight DB calls (and any other awaits) on client disconnect /
-# response completion — which surfaced as noisy SQLAlchemy
-# `terminate_force_close` tracebacks under aiosqlite and as random
-# CancelledError storms across the request path. See
-# `open_webui.utils.asgi_middleware` for the rationale.
+# Use pure ASGI middleware to avoid BaseHTTPMiddleware cancellation of in-flight DB work.
+# See open_webui.utils.asgi_middleware for the disconnect and cleanup rationale.
 app.add_middleware(AppHTTPMiddleware)
 
 
 app.add_middleware(
-    CORSMiddleware,
+    BrowserCORSMiddleware,
     allow_origins=CORS_ALLOW_ORIGIN,
     allow_credentials=True,
     allow_methods=['*'],
@@ -936,11 +864,7 @@ if ENABLE_SCIM:
     app.include_router(scim.router, prefix='/api/v1/scim/v2', tags=['scim'])
 
 
-##################################
-#
 # Chat Endpoints
-#
-##################################
 
 
 @app.get('/api/models')
@@ -948,7 +872,7 @@ if ENABLE_SCIM:
 async def get_models(request: Request, refresh: bool = False, user=Depends(get_verified_user)):
     all_models = await get_all_models(request, refresh=refresh, user=user)
 
-    # Filter out filter pipelines
+    # Keep filter pipelines off the model menu; they work backstage.
     models = [
         model for model in all_models if not ('pipeline' in model and model['pipeline'].get('type', None) == 'filter')
     ]
@@ -965,7 +889,7 @@ async def get_models(request: Request, refresh: bool = False, user=Depends(get_v
         info = model.get('info') if isinstance(model.get('info'), dict) else {}
         meta = info.get('meta') if isinstance(info.get('meta'), dict) else {}
 
-        # Remove profile image URL to reduce payload size
+        # Leave profile images out; this model list is traveling light.
         meta.pop('profile_image_url', None)
 
         if 'tags' in meta:
@@ -977,7 +901,7 @@ async def get_models(request: Request, refresh: bool = False, user=Depends(get_v
     model_order_list = await Config.get('ui.model_order_list')
     if model_order_list:
         model_order_dict = {model_id: i for i, model_id in enumerate(model_order_list)}
-        # Sort models by order list priority, with fallback for those not in the list
+        # Configured models get the front seats; the rest line up by name.
         models.sort(
             key=lambda model: (
                 model_order_dict.get(model.get('id', ''), float('inf')),
@@ -1022,7 +946,7 @@ async def unload_model(request: Request, form_data: ModelUnloadForm, user=Depend
             break
         model_id = model_info.base_model_id
 
-    # --- Ollama provider ---
+    # Ollama provider
     if model_id in ollama_models:
         ollama_config = await Config.get_many('ollama.base_urls', 'ollama.api_configs')
         ollama_base_urls = ollama_config.get('ollama.base_urls') or []
@@ -1068,7 +992,7 @@ async def unload_model(request: Request, form_data: ModelUnloadForm, user=Depend
             )
         return {'status': True}
 
-    # --- OpenAI-compatible providers ---
+    # OpenAI-compatible providers
     if model_id in openai_models:
         openai_config = await Config.get_many('openai.api_configs', 'openai.api_base_urls', 'openai.api_keys')
         openai_api_configs = openai_config.get('openai.api_configs') or {}
@@ -1115,9 +1039,7 @@ async def unload_model(request: Request, form_data: ModelUnloadForm, user=Depend
     raise HTTPException(status_code=404, detail=f'Model "{model_id}" not found')
 
 
-##################################
 # Embeddings
-##################################
 
 
 @app.post('/api/embeddings')
@@ -1376,6 +1298,18 @@ async def chat_completion(
 
         if is_new_chat:
             metadata['chat_id'] = str(uuid4())
+
+        if is_temporary_chat_id(metadata.get('chat_id')):
+            session_id = metadata.get('session_id')
+            if not isinstance(session_id, str) or not await register_temporary_chat_session(
+                request.app.state.redis,
+                metadata['chat_id'],
+                user.id,
+                session_id,
+                get_user_id_from_session_pool(session_id),
+                create=True,
+            ):
+                raise HTTPException(status_code=404, detail='Temporary chat expired or unavailable')
 
         initial_title_generation = None
         if is_new_chat and tasks and TASKS.TITLE_GENERATION in tasks:
@@ -1976,11 +1910,7 @@ async def resolve_chat_message_tool_call(
 app.state.CHAT_COMPLETION_HANDLER = chat_completion
 
 
-##################################
-#
 # Anthropic Messages API Compatible Endpoint
-#
-##################################
 
 
 from open_webui.utils.anthropic import (
@@ -2109,13 +2039,13 @@ async def generate_messages(
             return await passthrough_anthropic_messages(request, form_data, user)
         passthrough_params = api_config.get('passthrough_params') or []
 
-    # Convert Anthropic payload to OpenAI format
+    # Translate Anthropic into OpenAI before sending it through the house plumbing.
     openai_payload = convert_anthropic_to_openai_payload(form_data, passthrough_params)
 
     # Route through the existing chat_completion handler
     response = await chat_completion(request, openai_payload, user)
 
-    # Convert response back to Anthropic format
+    # Translate back to Anthropic; the caller ordered that dialect.
     if isinstance(response, StreamingResponse):
         # Streaming response: wrap the generator to convert SSE format
         return StreamingResponse(
@@ -2208,7 +2138,8 @@ async def list_tasks_endpoint(request: Request, user=Depends(get_admin_user)):
 async def list_tasks_by_chat_id_endpoint(request: Request, chat_id: str, user=Depends(get_verified_user)):
     socket_id = get_temporary_chat_session_id(chat_id)
     if socket_id:
-        owner_id = get_user_id_from_session_pool(socket_id)
+        owner = await get_temporary_chat(request.app.state.redis, chat_id)
+        owner_id = owner['user_id'] if owner else get_user_id_from_session_pool(socket_id)
         if owner_id != user.id and not (user.role == 'admin' and ENABLE_ADMIN_CHAT_ACCESS):
             return {'task_ids': []}
     else:
@@ -2225,12 +2156,31 @@ async def list_tasks_by_chat_id_endpoint(request: Request, chat_id: str, user=De
     return {'task_ids': task_ids}
 
 
+@app.post('/api/tasks/chat/{chat_id:path}/resume')
+async def resume_temporary_chat(request: Request, chat_id: str, form_data: dict, user=Depends(get_verified_user)):
+    session_id = form_data.get('session_id')
+    if not isinstance(session_id, str) or not await register_temporary_chat_session(
+        request.app.state.redis,
+        chat_id,
+        user.id,
+        session_id,
+        get_user_id_from_session_pool(session_id),
+        create=True,
+    ):
+        raise HTTPException(status_code=404, detail='Temporary chat expired or unavailable')
+    return {
+        'task_ids': await list_task_ids_by_item_id(request.app.state.redis, chat_id),
+        'streams': await get_response_streams_by_chat_id(request.app.state.redis, chat_id),
+    }
+
+
 @app.post('/api/tasks/chat/{chat_id:path}/stop')
 async def stop_tasks_by_chat_id_endpoint(request: Request, chat_id: str, user=Depends(get_verified_user)):
     socket_id = get_temporary_chat_session_id(chat_id)
     chat = None
     if socket_id:
-        owner_id = get_user_id_from_session_pool(socket_id)
+        owner = await get_temporary_chat(request.app.state.redis, chat_id)
+        owner_id = owner['user_id'] if owner else get_user_id_from_session_pool(socket_id)
         if owner_id != user.id and not (user.role == 'admin' and ENABLE_ADMIN_CHAT_ACCESS):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
     else:
@@ -2288,15 +2238,12 @@ async def stop_tasks_by_chat_id_endpoint(request: Request, chat_id: str, user=De
             if event_emitter:
                 await event_emitter({'type': 'chat:completion', 'data': {'done': True, 'output': output}})
                 await event_emitter({'type': 'chat:tasks:cancel'})
+                await event_emitter({'type': 'chat:active', 'data': {'active': False}})
 
     return result
 
 
-##################################
-#
 # Config Endpoints
-#
-##################################
 
 
 @app.get('/api/config')
@@ -2435,7 +2382,7 @@ async def get_app_config(request: Request):
         },
         'features': {
             'slim': USE_SLIM,
-            # --- Public: required by login/signup page pre-auth ---
+            # Public: required by login/signup page pre-auth
             'auth': WEBUI_AUTH,
             'auth_trusted_header': bool(WEBUI_AUTH_TRUSTED_EMAIL_HEADER),
             'enable_signup_password_confirmation': ENABLE_SIGNUP_PASSWORD_CONFIRMATION,
@@ -2448,7 +2395,7 @@ async def get_app_config(request: Request):
                 if WEBSOCKET_HEARTBEAT_INTERVAL is not None
                 else {}
             ),
-            # --- Authenticated: only consumed by logged-in frontend ---
+            # Authenticated: only consumed by logged-in frontend
             **(
                 {
                     'enable_api_keys': config.get('auth.enable_api_keys'),
@@ -2777,7 +2724,7 @@ async def get_current_usage(user=Depends(get_verified_user)):
         raise HTTPException(status_code=500, detail='Internal Server Error')
 
 
-# --- OAuth Login & Callback ---
+# OAuth login & callback
 
 
 try:
@@ -2993,9 +2940,7 @@ async def oauth_login_callback(
     return await oauth_manager.handle_callback(request, provider, response, db=db)
 
 
-############################
 # OIDC Back-Channel Logout
-############################
 
 
 @app.post('/oauth/backchannel-logout')
@@ -3156,7 +3101,7 @@ async def check_db_health():
     return {'status': True}
 
 
-# --- static assets & files ---
+# Static assets & files
 # Windows registry entries can override these with text/plain, which breaks module and wasm loading
 mimetypes.add_type('text/javascript', '.js')
 mimetypes.add_type('text/javascript', '.mjs')

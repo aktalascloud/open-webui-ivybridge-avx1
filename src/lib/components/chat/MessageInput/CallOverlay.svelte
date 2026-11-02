@@ -443,7 +443,7 @@
 				// Check if initial speech/noise has started
 				const hasSound = domainData.some((value) => value > 0);
 				if (hasSound) {
-					// BIG RED TEXT
+					// Big red text
 					console.log('%c%s', 'color: red; font-size: 20px;', '🔊 Sound detected');
 					if (mediaRecorder && mediaRecorder.state !== 'recording') {
 						mediaRecorder.start();
@@ -747,10 +747,7 @@
 
 	const chatEventHandler = async (e) => {
 		const { id, content } = e.detail;
-		// "id" here is message id
-		// if "id" is not the same as "currentMessageId" then do not process
-		// "content" here is a sentence from the assistant,
-		// there will be many sentences for the same "id"
+		// Collect assistant sentences only for the active message ID.
 
 		if (currentMessageId === id) {
 			if ($config.audio.tts.engine === "openai" && $settings?.audio?.tts?.engine !== "browser-kokoro" && __assistantVoiceBudget.hold(id, content)) return;
@@ -919,7 +916,7 @@
 {#if $showCallOverlay}
 	<!-- A media element can only have one Web Audio source, even after its context closes. -->
 	<audio bind:this={callAudioElement} class="hidden"></audio>
-	<div class="max-w-lg w-full h-full max-h-[100dvh] flex flex-col justify-between p-3 md:p-6">
+	<div class="max-w-lg w-full h-full max-h-[100dvh] flex flex-col justify-between px-3 pb-3 md:px-6 md:pb-6">
 		{#if camera}
 			<button
 				type="button"

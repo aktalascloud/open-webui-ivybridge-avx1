@@ -74,14 +74,18 @@ async def _build_request(source: Request, user_id: str, *, internal: bool) -> Re
     return request
 
 
-async def get_subagent_models(request: Request, user: UserModel) -> list[dict]:
+async def get_subagent_models(request: Request, user: UserModel, parent_model: dict | None = None) -> list[dict]:
     configured_models = await Config.get('subagents.models')
     if not configured_models:
         return []
     models = {model['id']: model for model in await get_filtered_models(await get_all_models(request, user=user), user)}
+    parent_settings = (((parent_model or {}).get('info') or {}).get('meta') or {}).get('subagents')
+    allowed_ids = set(parent_settings.get('model_ids') or []) if isinstance(parent_settings, dict) else None
     subagent_models = []
     for entry in configured_models:
         if not isinstance(entry, dict) or not isinstance(entry.get('id'), str):
+            continue
+        if allowed_ids is not None and entry['id'] not in allowed_ids:
             continue
         model = models.get(entry.get('id'))
         if not model:
@@ -370,7 +374,7 @@ async def delegate(
     if run.get('direct'):
         return 'Error: sub-agents are unavailable for direct connections.'
     if model_id:
-        subagent_models = await get_subagent_models(request, UserModel(**user_data))
+        subagent_models = await get_subagent_models(request, UserModel(**user_data), metadata.get('model'))
         available_model_ids = [model['id'] for model in subagent_models]
         if model_id not in available_model_ids:
             return (

@@ -4516,5 +4516,8 @@
   "SQL query": "SQL-запрос",
   "settings.admin.models.builtinTools.tools.label": "Создание инструментов",
   "settings.admin.models.builtinTools.tools.description": "Создавать Python-инструменты рабочей области из чата",
-  "Drag to rotate; pinch or scroll to zoom. Double-tap to reset.": "Перетаскивайте для поворота; щипок или колесо — для масштаба. Двойное нажатие сбрасывает ракурс."
+  "Drag to rotate; pinch or scroll to zoom. Double-tap to reset.": "Перетаскивайте для поворота; щипок или колесо — для масштаба. Двойное нажатие сбрасывает ракурс.",
+  "Allow Side Chat": "Разрешить боковой чат",
+  "Models this model can delegate to. Users must have access to them. Leave empty to use the current model.": "Ограничьте эту карточку моделями, разрешёнными администратором. Пустой список сохраняет список администратора; текущая модель остаётся выбором по умолчанию.",
+  "You do not have permission to use side chat.": "У вас нет разрешения на использование бокового чата."
 }

@@ -8,6 +8,8 @@ Unofficial fork with reviewed agent/MCP fixes and extended Russian UI. One lates
 
 New model cards inherit the configured VRM; explicit sphere/custom choices and existing cards remain unchanged. Store shared instructions in account settings and only distinct rules in model cards.
 
+Mainstream dev updates retain the fork's Responses, Strata and avatar adapters. Per-card subagent choices narrow the administrator's allowlist and user access; other models use their own parameters. Terminal browser access remains tied to the issuing login/API key, including revocation and endpoint restrictions.
+
 ## Build
 
 Requires Python 3.12+, Git and GitHub CLI for CI. No LLM, model weights or Codex dependency.
