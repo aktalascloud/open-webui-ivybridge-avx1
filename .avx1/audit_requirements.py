@@ -1,5 +1,6 @@
 """Identify the source-built application; retain every resolved library for audit."""
-from importlib.metadata import distributions
+from importlib.metadata import PathDistribution
+from pathlib import Path
 import re
 
 
@@ -8,7 +9,12 @@ def resolved_requirements(target, project_name, project_version):
     own_name = normalize(project_name)
     resolved = {}
     own = None
-    for package in distributions(path=[str(target)]):
+    # Read current installed metadata directly; Python3.12's discovery cache can
+    # retain an earlier target directory listing after packages are installed.
+    for info in sorted(Path(target).iterdir()):
+        if info.suffix not in ('.dist-info', '.egg-info'):
+            continue
+        package = PathDistribution(info)
         name, version = package.metadata['Name'], package.version
         if not name or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', name) or not re.fullmatch(r'[A-Za-z0-9.!+_-]+', version):
             raise RuntimeError('Invalid resolved package metadata')
