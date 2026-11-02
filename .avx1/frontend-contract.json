@@ -6,18 +6,24 @@
     "speech-identity",
     "local-call-emoji"
   ],
-  "helper_sha256": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
+  "helper_sha256": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
   "sources": {
-    "src/lib/utils/assistantCompatibility.js": "c4f35bdeb7853b3bf76a1282421b36407ae72e01a45287a57f335a2061ade6ce",
-    "src/lib/components/chat/MessageInput.svelte": "6c4bffdd9c0f1e6f9dfb4ec0513e37fc75fae688b91dacafe0bfc93b92c5d627",
-    "src/lib/components/chat/Chat.svelte": "dd10defb206c64ce985742f67587efcbfb0f1ddaf55da1ab2954b5f3e003162c",
+    "src/lib/utils/assistantCompatibility.js": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
+    "src/lib/components/chat/MessageInput.svelte": "bda3aac8544dca19915b9022423b3d21d9ac7cfd5d77958a80f9c2be71f24cef",
+    "src/lib/components/chat/Chat.svelte": "f13877aa4c5186af190efa4030575de3366e52df809888705abc21782bf70815",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
     "src/lib/components/chat/Messages/ResponseMessage.svelte": "59ad006adcf2d90eaf24bba2fc32af86c5b93a47a11c6509e47936787f91d0ce",
-    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "27baf3dfc0102b96308f4d8e0fb99d42e960dca7f4646b056207cce4cf046235"
+    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "f19bada2693869ca9135e74743ca7fc49507778f2dc657bcba56e20cf675e368",
+    "src/lib/components/chat/ChatTabs/SideChat.svelte": "bf3aaa7344679d9ff66770dfb89d2ad9a0418758e197deb3c8a918d7c0b30d9d"
   },
   "reviewed_upstream_change": {
     "upstream_commit": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
     "scope": "Explicit model-selection callbacks and current-user Stop guard in MessageInput; abortable/stale-load protection in Chat; sandboxed MCPApp branch in ResponseMessage. Mic provenance, voice budget, speech identity, reasoning and CallOverlay unchanged. Source-helper tests and current saveControls cases passed; packaged Chromium required."
   },
-  "reviewed_local_change": "Direct tool-server selection uses exact explicit IDs or legacy index only when no ID exists. Microphone, voice-budget and speech-identity hooks unchanged. New policy/discovery fixtures and packaged browser gate required."
+  "reviewed_local_change": "Direct tool-server selection uses exact explicit IDs or legacy index only when no ID exists, including the new SideChat path. Mic provenance selects each actual editor DOM node/inputId. Voice-budget and speech-identity wire remain V1; private CODE/filter sources unchanged.",
+  "reviewed_mainstream_change": {
+    "upstream_commit": "2840f0e07b398b76db04978334e3232fe8b89c31",
+    "scope": "showTabs/new side-chat input IDs, model-control params/files and permission-gated side composer; temporary-chat reconnect resumes state instead of replaying sends. CallOverlay changed comments/padding; speech identity/budget wire unchanged. Owned mic helper now selects the actual input ID and DOM node; SideChat carries same user_message.meta and stable selected-server rules as main Chat.",
+    "checks": "8 helper/actual discovery/actual side-send cases;2 changed components compiled under exact lock Svelte5.57.2; prior98-component mainline syntax proof retained. Packaged Chromium still required."
+  }
 }

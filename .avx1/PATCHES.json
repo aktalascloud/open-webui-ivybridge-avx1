@@ -271,5 +271,10 @@
     "adaptation": "Per-card target list may only narrow the existing administrator allowlist plus user model ACL; cross-model child requests keep their own parameters. Browser tickets encrypt the issuing credential and revalidate it through central session/API-key auth, retaining revocation, owner binding and endpoint policy. Internal Terminal capabilities are encrypted inside the relay envelope, not readable in JWT payloads. Viewer tickets are mode-bound: proxy tickets cannot upgrade to Chrome/VNC and reverse.",
     "verification": "16 new offline policy boundaries,13 daily regressions,8 earlier daily regressions,7 upstream regressions,3 Responses and3 FreeLLM tests;304 Python files compile;96 changed Svelte components compile with exact lockfile compiler5.57.2;4461 WebUI locale keys/placeholders recorded separately. This is not a packaged browser/DB/runtime qualification.",
     "license": "noVNC1.7.0 source package verified against lockfile SHA512; vendor notices, authors and license texts retained in LICENSE-NOVNC.txt and copied by the existing package license gate."
+  },
+  {
+    "id": "WEB-COMPOSER-IDENTITY",
+    "description": "Bind existing microphone provenance to each actual composer inputId/DOM node after upstream introduced side chats. Preserve main default behavior, keep side transcripts from marking the main draft, and forward the same user_message.meta wire shape from SideChat. Reuse stable selected-tool-server identity checks in SideChat so an explicit ID cannot alias an array index. Refresh source-hook attestation only after reviewing the mainline showTabs/temporary-resume/model-control diffs.",
+    "verification": "8 helper/actual discovery/actual side-send contracts pass;2 changed components compile with exact lock Svelte5.57.2. Source-only frontend contract passes. Prior98-component compilation and backend policy checks retained; packaged browser proof remains mandatory."
   }
 ]

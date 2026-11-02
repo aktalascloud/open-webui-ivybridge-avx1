@@ -33,3 +33,28 @@ test('voice budget groups reports, stays message-scoped and preserves full text'
   assert.equal(voice.finish('one', 'chat-one'), null);
   assert.equal(voice.emoji('спасибо'), '😊');
 });
+
+test('simultaneous composer provenance is isolated by actual DOM node and input id', () => {
+  function editor(text) {
+    const callbacks = {};
+    const node = { textContent: text, innerText: text, contains: value => value === node,
+      addEventListener: (name, callback) => callbacks[name] = callback };
+    return { node, callbacks };
+  }
+  const main = editor('same'), side = editor('same');
+  const nodes = new Map([['chat-input', main.node], ['side-input', side.node]]);
+  globalThis.document = { getElementById: id => nodes.get(id) };
+  mic.mark('same');
+  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
+  assert.equal(mic.peek('same', 'side-input'), undefined);
+  mic.mark('same', 'side-input');
+  mic.change('side edited', 'side-input');
+  assert.deepEqual(mic.peek('side edited', 'side-input'), {input_source: 'microphone'});
+  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
+  globalThis.getSelection = () => ({ isCollapsed: false, anchorNode: side.node, focusNode: side.node, toString: () => 'same' });
+  side.callbacks.beforeinput();
+  assert.equal(mic.peek('side edited', 'side-input'), undefined);
+  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
+  nodes.set('chat-input', editor('same').node);
+  assert.equal(mic.peek('same'), undefined);
+});

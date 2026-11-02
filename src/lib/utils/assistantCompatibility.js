@@ -2,12 +2,12 @@
 /* assistant microphone input v1 */
 const __assistantMicOrigin = (() => {
   const drafts = new WeakMap(), bound = new WeakSet();
-  const editor = () => document.getElementById("chat-input");
+  const editor = (inputId = "chat-input") => document.getElementById(inputId);
   const normal = value => String(value || "").replace(/\s+/g, " ").trim();
   return {
-    clear() { const node = editor(); if (node) drafts.delete(node); },
-    mark(text) {
-      const node = editor(), draft = String(text || "");
+    clear(inputId) { const node = editor(inputId); if (node) drafts.delete(node); },
+    mark(text, inputId) {
+      const node = editor(inputId), draft = String(text || "");
       if (!node || !draft.trim()) return;
       drafts.set(node, draft);
       if (bound.has(node)) return;
@@ -23,14 +23,14 @@ const __assistantMicOrigin = (() => {
         if (!normal(node.textContent)) drafts.delete(node);
       });
     },
-    change(text) {
-      const node = editor();
+    change(text, inputId) {
+      const node = editor(inputId);
       if (!node || !drafts.has(node)) return;
       const draft = String(text || "");
       if (draft.trim()) drafts.set(node, draft); else drafts.delete(node);
     },
-    peek(text) {
-      const node = editor(), draft = node && drafts.get(node);
+    peek(text, inputId) {
+      const node = editor(inputId), draft = node && drafts.get(node);
       const content = String(text || "");
       if (!draft || (content !== draft && !content.startsWith(
           draft + "\n\nSelected note text for replace_note_content operations:\n"))) return;

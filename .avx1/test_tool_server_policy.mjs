@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {stripTypeScriptTypes} from 'node:module';
 import {filterToolServerSpecs, directToolServerKey, isSelectedDirectToolServer} from '../src/lib/utils/toolServerPolicy.js';
+import {__assistantMicOrigin as mic} from '../src/lib/utils/assistantCompatibility.js';
 
 const specs=[{name:'tool_search'},{name:'tool_delete'},{name:'tool_admin_delete'}];
 test('suffix allow/block and quoted entries match backend policy without mutating schemas',()=>{
@@ -40,4 +41,37 @@ test('actual discovery function filters advertised tools and preserves connectio
     config:{enable:true,function_name_filter_list:'search'}}]);
   assert.equal(result.length,1);
   assert.equal(result[0].id,'123abc');assert.deepEqual(result[0].specs,[specs[0]]);
+});
+
+test('actual side-chat send isolates mic metadata and cannot alias an explicit server id to its index', async () => {
+  const source=fs.readFileSync(new URL('../src/lib/components/chat/ChatTabs/SideChat.svelte',import.meta.url),'utf8');
+  const start=source.indexOf('\tconst send =');
+  const end=source.indexOf('\tconst stop =',start);
+  assert.ok(start>=0&&end>start);
+  const body=stripTypeScriptTypes(source.slice(start,end));
+  for(const sideVoice of [false,true]){
+    const nodes=new Map();
+    for(const id of ['chat-input','side-fixture'])nodes.set(id,{textContent:'same',addEventListener(){}});
+    globalThis.document={getElementById:id=>nodes.get(id)};
+    mic.mark('same');
+    if(sideVoice)mic.mark('same','side-fixture');
+    let payload;
+    const context={sideChatAllowed:true,draft:'same',files:[],busy:false,atSelectedModel:{id:'model'},
+      selectedModels:['model'],error:'',id:'temporary-fixture',inputId:'side-fixture',
+      $i18n:{t:value=>value},$socket:{connected:true,id:'fixture-socket'},sideModelId:'model',
+      tick:async()=>{},input:{uploadPendingFiles:async()=>true,setText(){}},uuidv4:()=>String(Math.random()),
+      messages:[],context:[],params:{},toolApprovalMode:'prompt',selectedToolIds:['direct_server:kept','direct_server:0'],
+      selectedSkillIds:[],selectedFilterIds:[],autoScroll:false,scroll:async()=>{},request:null,
+      localStorage:{token:'synthetic'},$models:[{id:'model'}],$config:{features:{enable_tool_servers:true}},
+      $toolServers:[{id:'wrong',url:'https://wrong.invalid'},{id:'kept',url:'https://kept.invalid'}],
+      $terminalServers:[],$selectedTerminalId:null,$settings:{},system:'',
+      webSearchEnabled:false,imageGenerationEnabled:false,codeInterpreterEnabled:false,
+      isRasterImageContentType:()=>false,__assistantMicOrigin:mic,isSelectedDirectToolServer,
+      generateOpenAIChatCompletion:async(_token,data)=>{payload=data;return{};},getErrorMessage:String};
+    const send=new Function('context',`with(context){${body};return send;}`)(context);
+    await send();
+    assert.deepEqual(payload.tool_servers,[{id:'kept',url:'https://kept.invalid'}]);
+    assert.deepEqual(payload.user_message.meta,sideVoice?{input_source:'microphone'}:undefined);
+    assert.deepEqual(mic.peek('same'),{input_source:'microphone'});
+  }
 });

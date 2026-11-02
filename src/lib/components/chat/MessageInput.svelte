@@ -1973,7 +1973,7 @@
 
 								await tick();
 								await insertTextAtCursor(`${text}`);
-								__assistantMicOrigin.mark(prompt);
+								__assistantMicOrigin.mark(prompt, inputId);
 								await tick();
 								focus({ preventScroll: true });
 
@@ -2287,7 +2287,7 @@
 													id={inputId}
 													editable={!showInputModal}
 													onChange={(content) => {
-														__assistantMicOrigin.change(content.md);
+														__assistantMicOrigin.change(content.md, inputId);
 														prompt = content.md;
 														inputContent = content;
 														command = getCommand();

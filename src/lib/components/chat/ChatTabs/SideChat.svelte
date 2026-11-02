@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
+	import { isSelectedDirectToolServer } from '$lib/utils/toolServerPolicy.js';
 	import { getContext, onMount, tick } from 'svelte';
 	import { v4 as uuidv4 } from 'uuid';
 	import {
@@ -229,6 +231,7 @@
 			childrenIds: [] as string[],
 			role: 'user',
 			content: question,
+			meta: __assistantMicOrigin.peek(draft, inputId),
 			files: [...files],
 			done: true,
 			timestamp: Math.floor(Date.now() / 1000),
@@ -301,7 +304,7 @@
 				? [
 						...($toolServers ?? []).filter(
 							(server: any, index) =>
-								directServers.includes(String(index)) || directServers.includes(server.id)
+								isSelectedDirectToolServer(server, index, directServers)
 						),
 						...($terminalServers ?? []).filter((server) => !server.id)
 					]
