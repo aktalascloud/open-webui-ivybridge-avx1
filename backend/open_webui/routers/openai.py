@@ -1394,12 +1394,6 @@ def convert_responses_result(response: dict) -> dict:
                 }
             )
 
-    if response.get('status') == 'incomplete':
-        incomplete_reason = (response.get('incomplete_details') or {}).get('reason')
-        finish_reason = 'content_filter' if incomplete_reason == 'content_filter' else 'length'
-    else:
-        finish_reason = 'tool_calls' if tool_calls else 'stop'
-
     return {
         'id': response.get('id', ''),
         'object': 'chat.completion',
