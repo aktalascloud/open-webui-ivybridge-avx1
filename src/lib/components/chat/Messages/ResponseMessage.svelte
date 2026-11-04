@@ -210,6 +210,7 @@
 	$: hasResponseContent = Boolean((message.content ?? '').trim() || message.output?.length);
 
 	let edit = false;
+	let editButtonElement: HTMLButtonElement;
 	let editedContent = '';
 	let editedOutput: any[] | null = null;
 	let editTextAreaElement: HTMLTextAreaElement;
@@ -476,11 +477,13 @@
 		editedContent = '';
 		editedOutput = null;
 		await tick();
+		editButtonElement?.focus();
 	};
 
 	let feedbackLoading = false;
 
 	const feedbackHandler = async (rating: number | null = null, details: object | null = null) => {
+		if (feedbackLoading && rating !== null) return;
 		feedbackLoading = true;
 		console.log('Feedback', rating, details);
 
@@ -761,7 +764,7 @@
 								{#each message.embeds as embed, idx}
 									<div class="my-2 w-full" id={`${message.id}-embeds-${idx}`}>
 										{#if typeof embed === 'object' && embed?.type === 'mcp_app'}
-											{#key embed}<MCPApp app={embed} />{/key}
+											{#key JSON.stringify(embed)}<MCPApp app={embed} />{/key}
 										{:else if typeof embed === 'string'}
 											<FullHeightIframe
 												src={embed}
@@ -1022,7 +1025,7 @@
 								<div class="flex self-center min-w-fit" dir="ltr">
 									<button
 										aria-label={$i18n.t('Previous message')}
-										class="self-center inline-flex size-7 shrink-0 items-center justify-center p-1.5 hover:bg-black/5 dark:hover:bg-white/5 dark:hover:text-gray-400 hover:text-gray-600 rounded-md transition"
+										class="self-center inline-flex size-7 shrink-0 items-center justify-center p-1.5 hover:bg-black/5 dark:hover:bg-white/5 dark:hover:text-gray-400 hover:text-gray-600 rounded-md transition previous-message-button"
 										on:click={() => {
 											showPreviousMessage(message);
 										}}
@@ -1077,7 +1080,7 @@
 									{/if}
 
 									<button
-										class="self-center inline-flex size-7 shrink-0 items-center justify-center p-1.5 hover:bg-black/5 dark:hover:bg-white/5 dark:hover:text-gray-400 hover:text-gray-600 rounded-md transition"
+										class="self-center inline-flex size-7 shrink-0 items-center justify-center p-1.5 hover:bg-black/5 dark:hover:bg-white/5 dark:hover:text-gray-400 hover:text-gray-600 rounded-md transition next-message-button"
 										on:click={() => {
 											showNextMessage(message);
 										}}
@@ -1094,6 +1097,7 @@
 										<Tooltip content={$i18n.t('Edit')} placement="bottom">
 											<button
 												aria-label={$i18n.t('Edit')}
+												bind:this={editButtonElement}
 												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'hover-reveal'} inline-flex size-7 shrink-0 items-center justify-center p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-gray-400 hover:text-gray-600 transition"
@@ -1333,8 +1337,8 @@
 													message?.annotation?.rating ?? ''
 												).toString() === '1'
 													? 'bg-gray-100 dark:bg-gray-800'
-													: ''} dark:hover:text-gray-400 hover:text-gray-600 transition disabled:cursor-progress disabled:hover:bg-transparent"
-												disabled={feedbackLoading}
+													: ''} dark:hover:text-gray-400 hover:text-gray-600 transition aria-disabled:cursor-progress aria-disabled:hover:bg-transparent"
+												aria-disabled={feedbackLoading}
 												on:click={async (e) => {
 													e.stopPropagation();
 													await feedbackHandler(1);
@@ -1377,8 +1381,8 @@
 													message?.annotation?.rating ?? ''
 												).toString() === '-1'
 													? 'bg-gray-100 dark:bg-gray-800'
-													: ''} dark:hover:text-gray-400 hover:text-gray-600 transition disabled:cursor-progress disabled:hover:bg-transparent"
-												disabled={feedbackLoading}
+													: ''} dark:hover:text-gray-400 hover:text-gray-600 transition aria-disabled:cursor-progress aria-disabled:hover:bg-transparent"
+												aria-disabled={feedbackLoading}
 												on:click={async (e) => {
 													e.stopPropagation();
 													await feedbackHandler(-1);
