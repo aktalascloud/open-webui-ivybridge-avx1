@@ -92,6 +92,7 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
         module=types.ModuleType('open_webui.models.files');module.Files=types.SimpleNamespace(get_file_by_id=AsyncMock(return_value=file))
         space={'JSONCodec':json,'VIEW_FILE_DEFAULT_MAX_CHARS':50,'VIEW_FILE_MAX_CHARS':100,
                '_has_read_access_to_file':AsyncMock(return_value=True),'log':types.SimpleNamespace(exception=lambda *_:None)}
+        space['_numbered_lines_within_cap']=function(Path('tools/builtin.py'),'_numbered_lines_within_cap',space)
         call=function(Path('tools/builtin.py'),'view_file',space)
         with patch.dict(sys.modules,{'open_webui.models.files':module}):
             return json.loads(await call('fixture',__request__=object(),__user__={'id':'fixture-user'},**options))
