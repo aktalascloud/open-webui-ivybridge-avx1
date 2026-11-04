@@ -6,7 +6,7 @@
 
 [Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](.avx1/PATCHES.json)
 
-Обновление official0.13.0/dev: учёт токенов Responses, compaction с учётом кэша, OAuth/PKCE, Session-авторизация Terminal и ограничение чтения файлов. Сохранены наши политики моделей/инструментов, микрофон/озвучивание/VRM и управление Strata.
+Обновление official 0.13.0/dev: учёт токенов Responses, compaction с учётом кэша, OAuth/PKCE, Session-авторизация Terminal и ограничение чтения файлов. Сохранены наши политики моделей/инструментов, микрофон/озвучивание/VRM и управление Strata.
 
 Новые карточки наследуют настроенный VRM; явный выбор сферы/своего файла и существующие карточки сохраняются. Общие инструкции храните в настройках аккаунта, отличающиеся — в карточках.
 
