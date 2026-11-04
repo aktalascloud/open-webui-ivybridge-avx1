@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
 	import type { TerminalContext } from '$lib/types';
+	import {
+		estimateTokens,
+		estimateMessagesTokens,
+		estimateUsageGrowth
+	} from '$lib/utils/contextUsage';
 	import { resolveLocalizedFunction } from '$lib/utils/localizedContent';
 	import { functions as localizedFunctions } from '$lib/stores';
 	import DOMPurify from 'dompurify';
@@ -51,6 +56,7 @@
 	import {
 		convertHeicToJpeg,
 		isHeicImage,
+		normalizeImageFile,
 		compressImage,
 		createMessagesList,
 		extractContentFromFile,
@@ -515,39 +521,12 @@
 	const trimNumber = (value: number) =>
 		value >= 10 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, '');
 
-	const estimateTokens = (value) => {
-		if (value === null || value === undefined || value === '') {
-			return 0;
-		}
-		if (typeof value !== 'string') {
-			try {
-				value = JSON.stringify(value);
-			} catch {
-				value = String(value);
-			}
-		}
-		return Math.max(1, Math.floor(value.length / 4));
-	};
-
-	const estimateMessagesTokens = (messages) =>
-		messages.reduce((total, message) => {
-			let next = total + 4 + estimateTokens(message.content);
-			next += estimateTokens(message.output);
-			next += estimateTokens(message.tool_calls);
-			if (message.files?.length) {
-				next += estimateTokens(
-					JSON.stringify(message.files).replace(/data:[\w/+.;=%-]*;base64,[A-Za-z0-9+/=]*/g, '')
-				);
-			}
-			return next;
-		}, 0);
-
-	const getLocalContextUsage = () => {
-		if (!history?.currentId) {
+	const getLocalContextUsage = (chatHistory: typeof history, system: string) => {
+		if (!chatHistory?.currentId) {
 			return null;
 		}
 
-		const messages = createMessagesList(history, history.currentId);
+		const messages = createMessagesList(chatHistory, chatHistory.currentId);
 		if (!messages.length) {
 			return null;
 		}
@@ -563,7 +542,7 @@
 		}
 
 		const activeMessages = messages.slice(startIdx);
-		let estimatedTokens = estimateTokens($settings?.system ?? '');
+		let estimatedTokens = estimateTokens(system);
 		let hasUsageCheckpoint = false;
 
 		for (let idx = activeMessages.length - 1; idx >= 0; idx -= 1) {
@@ -571,7 +550,10 @@
 			const usageTokens = getUsageTokenCount(usage);
 			if (usageTokens) {
 				hasUsageCheckpoint = true;
-				estimatedTokens = usageTokens + estimateMessagesTokens(activeMessages.slice(idx + 1));
+				estimatedTokens =
+					usageTokens +
+					estimateUsageGrowth(activeMessages[idx]) +
+					estimateMessagesTokens(activeMessages.slice(idx + 1));
 				break;
 			}
 		}
@@ -598,7 +580,7 @@
 		}, 1600);
 	};
 
-	$: statusContextUsage = contextUsage ?? getLocalContextUsage();
+	$: statusContextUsage = contextUsage ?? getLocalContextUsage(history, $settings?.system ?? '');
 	$: contextHasThreshold = Number(statusContextUsage?.threshold) > 0;
 	$: contextPercent = contextHasThreshold
 		? Math.max(0, Math.round(statusContextUsage?.percent ?? 0))
@@ -980,7 +962,13 @@
 	}
 
 	// Clear selected terminal when model doesn't support terminal
-	$: if (terminalSelectionEnabled && inputId === 'chat-input' && $selectedTerminalId && selectedModelIds.length > 0 && terminalCapableModels.length === 0) {
+	$: if (
+		terminalSelectionEnabled &&
+		inputId === 'chat-input' &&
+		$selectedTerminalId &&
+		selectedModelIds.length > 0 &&
+		terminalCapableModels.length === 0
+	) {
 		selectedTerminalId.set(null);
 	}
 
@@ -1290,6 +1278,7 @@
 				return;
 			}
 
+			file = await normalizeImageFile(file);
 			if (isRasterImageContentType(file['type']) || isHeicImage(file)) {
 				if (visionCapableModels.length === 0) {
 					toast.error($i18n.t('Selected model(s) do not support image inputs'));
@@ -1500,16 +1489,28 @@
 
 		if (
 			$settings?.keyboardShortcuts !== false &&
-			(recording || (document.activeElement?.closest('[data-composer-id]')?.getAttribute('data-composer-id') ?? 'chat-input') === inputId) &&
+			(recording ||
+				(document.activeElement?.closest('[data-composer-id]')?.getAttribute('data-composer-id') ??
+					'chat-input') === inputId) &&
 			matchKeybinding(e) === Shortcut.TOGGLE_DICTATION
 		) {
 			e.preventDefault();
 			if (recording) {
 				// Confirm and stop recording
-				document.getElementById(inputId === 'chat-input' ? 'confirm-recording-button' : `${inputId}-confirm-recording-button`)?.click();
+				document
+					.getElementById(
+						inputId === 'chat-input'
+							? 'confirm-recording-button'
+							: `${inputId}-confirm-recording-button`
+					)
+					?.click();
 			} else {
 				// Start recording (same logic as voice-input-button click)
-				document.getElementById(inputId === 'chat-input' ? 'voice-input-button' : `${inputId}-voice-input-button`)?.click();
+				document
+					.getElementById(
+						inputId === 'chat-input' ? 'voice-input-button' : `${inputId}-voice-input-button`
+					)
+					?.click();
 			}
 			return;
 		}
@@ -1958,7 +1959,9 @@
 
 					<div class={recording ? '' : 'hidden'}>
 						<VoiceRecording
-							confirmButtonId={inputId === 'chat-input' ? 'confirm-recording-button' : `${inputId}-confirm-recording-button`}
+							confirmButtonId={inputId === 'chat-input'
+								? 'confirm-recording-button'
+								: `${inputId}-confirm-recording-button`}
 							bind:recording
 							onCancel={async () => {
 								recording = false;
@@ -1990,7 +1993,9 @@
 						}}
 					>
 						<button
-							id={inputId === 'chat-input' ? 'generate-message-pair-button' : `${inputId}-generate-message-pair-button`}
+							id={inputId === 'chat-input'
+								? 'generate-message-pair-button'
+								: `${inputId}-generate-message-pair-button`}
 							type="button"
 							aria-label={$i18n.t('Generate message pair')}
 							class="hidden"
@@ -2357,13 +2362,17 @@
 															e.preventDefault();
 
 															const userMessageElement = [
-																...(document.getElementById(messagesContainerId)?.getElementsByClassName('user-message') ?? [])
+																...(document
+																	.getElementById(messagesContainerId)
+																	?.getElementsByClassName('user-message') ?? [])
 															]?.at(-1);
 
 															if (userMessageElement) {
 																userMessageElement.scrollIntoView({ block: 'center' });
 																const editButton = [
-																	...userMessageElement.getElementsByClassName('edit-user-message-button')
+																	...userMessageElement.getElementsByClassName(
+																		'edit-user-message-button'
+																	)
 																]?.at(-1);
 
 																editButton?.click();
@@ -2883,11 +2892,13 @@
 										</div>
 									{:else}
 										{#if !history?.currentId || history.messages[history.currentId]?.done == true}
-											{#if ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
+											{#if $_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true)}
 												<!-- {$i18n.t('Record voice')} -->
 												<Tooltip content={$i18n.t('Dictate')}>
 													<button
-														id={inputId === 'chat-input' ? 'voice-input-button' : `${inputId}-voice-input-button`}
+														id={inputId === 'chat-input'
+															? 'voice-input-button'
+															: `${inputId}-voice-input-button`}
 														class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 self-center mr-0.5"
 														type="button"
 														on:click={async () => {
@@ -3001,7 +3012,9 @@
 												<!-- Preserve the former upload label for i18n extraction: $i18n.t('Waiting for upload...') -->
 												<Tooltip content={$i18n.t('Send message')}>
 													<button
-														id={inputId === 'chat-input' ? 'send-message-button' : `${inputId}-send-message-button`}
+														id={inputId === 'chat-input'
+															? 'send-message-button'
+															: `${inputId}-send-message-button`}
 														aria-label={$i18n.t('Send message')}
 														class="{!(prompt === '' && files.length === 0)
 															? 'bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 '

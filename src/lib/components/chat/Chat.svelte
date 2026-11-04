@@ -3,6 +3,12 @@
 	import { isSelectedDirectToolServer } from '$lib/utils/toolServerPolicy.js';
 	import { applyStrataReasoning } from '$lib/utils/strataReasoning';
 	import type { TerminalContext } from '$lib/types';
+	import {
+		estimateTokens,
+		estimateMessagesTokens,
+		estimateUsageGrowth,
+		captureUsageCheckpoint
+	} from '$lib/utils/contextUsage';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
 
@@ -270,54 +276,31 @@
 		}
 	}
 
-	const estimateTokens = (value) => {
-		if (value === null || value === undefined || value === '') {
-			return 0;
-		}
-		if (typeof value !== 'string') {
-			try {
-				value = JSON.stringify(value);
-			} catch {
-				value = String(value);
-			}
-		}
-		return Math.max(1, Math.floor(value.length / 4));
-	};
-
-	const estimateMessagesTokens = (messages) =>
-		messages.reduce((total, message) => {
-			let next = total + 4 + estimateTokens(message.content);
-			next += estimateTokens(message.output);
-			next += estimateTokens(message.tool_calls);
-			if (message.files?.length) {
-				next += estimateTokens(
-					JSON.stringify(message.files).replace(/data:[\w/+.;=%-]*;base64,[A-Za-z0-9+/=]*/g, '')
-				);
-			}
-			return next;
-		}, 0);
-
 	$: contextCompactionEnabled = Boolean($config?.features?.enable_context_compaction);
 
-	const getContextThreshold = () => {
-		const modelId = atSelectedModel?.id ?? selectedModels.find((id) => id);
-		const model = $models.find((item) => item.id === modelId);
+	const getContextThreshold = (
+		modelId: string | undefined,
+		models: Model[],
+		params: { compact_token_threshold?: unknown }
+	) => {
+		const model = models.find((item) => item.id === modelId);
 		const threshold = Number(
 			model?.info?.params?.compact_token_threshold ?? params?.compact_token_threshold
 		);
 		return Number.isFinite(threshold) && threshold > 0 ? threshold : null;
 	};
 
-	const getContextUsage = () => {
-		if (!history?.currentId) {
+	const getContextUsage = (
+		chatHistory: typeof history,
+		system: string,
+		threshold: number | null
+	) => {
+		if (!chatHistory?.currentId) {
 			return null;
 		}
 
-		const messages = createMessagesList(history, history.currentId);
-		const threshold = contextCompactionEnabled
-			? (getContextThreshold() ?? serverContextUsage?.threshold ?? null)
-			: null;
-		const systemTokens = estimateTokens($settings?.system ?? '');
+		const messages = createMessagesList(chatHistory, chatHistory.currentId);
+		const systemTokens = estimateTokens(system);
 		let estimatedTokens = systemTokens;
 		let hasUsageCheckpoint = false;
 		let summary = '';
@@ -338,7 +321,10 @@
 			const usageTokens = getUsageTokenCount(usage);
 			if (usageTokens) {
 				hasUsageCheckpoint = true;
-				estimatedTokens = usageTokens + estimateMessagesTokens(activeMessages.slice(idx + 1));
+				estimatedTokens =
+					usageTokens +
+					estimateUsageGrowth(activeMessages[idx]) +
+					estimateMessagesTokens(activeMessages.slice(idx + 1));
 				break;
 			}
 		}
@@ -356,7 +342,18 @@
 		};
 	};
 
-	$: contextUsage = getContextUsage() ?? (contextCompactionEnabled ? serverContextUsage : null);
+	$: contextThreshold = contextCompactionEnabled
+		? (getContextThreshold(
+				atSelectedModel?.id ?? selectedModels.find((id) => id),
+				$models,
+				params
+			) ??
+			serverContextUsage?.threshold ??
+			null)
+		: null;
+	$: contextUsage =
+		getContextUsage(history, $settings?.system ?? '', contextThreshold) ??
+		(contextCompactionEnabled ? serverContextUsage : null);
 	$: embeddedHeaderTitle = embeddedTitle || $chatTitle || $i18n.t('Chat');
 
 	let selectedToolIds: string[] = [];
@@ -2652,7 +2649,10 @@
 
 	const initNewChat = async () => {
 		loading = true;
-		if (!embedded && ($showTabs === 'comments' || $showTabs === 'side' || typeof $showTabs === 'object'))
+		if (
+			!embedded &&
+			($showTabs === 'comments' || $showTabs === 'side' || typeof $showTabs === 'object')
+		)
 			showTabs.set(false);
 		const signal = startChatLoad();
 		modelDefaults = null;
@@ -2799,7 +2799,9 @@
 		autoScroll = true;
 
 		// resetInput() must stay last: the selected model's defaults override the draft's selection.
-		await restoreChatInput(sessionStorage.getItem('chat-input'));
+		const chatInputPrompt = (await restoreChatInput(sessionStorage.getItem('chat-input')))
+			? prompt
+			: null;
 		const previousChatId = $chatId;
 		const previousMessageId = history.currentId;
 		await resetInput();
@@ -2871,6 +2873,8 @@
 
 		loading = false;
 		await tick();
+		// Mounting the editor clears prompt, so apply the saved text afterward.
+		if (chatInputPrompt !== null) messageInput?.setText(chatInputPrompt);
 		if (modelSearch) await openModelSelectorWithSearch(modelSearch);
 
 		// Consume one-shot desktop event (e.g. Spotlight query, call shortcut)
@@ -3598,6 +3602,7 @@
 
 		if (usage) {
 			message.usage = usage;
+			captureUsageCheckpoint(message);
 		}
 
 		history.messages[message.id] = message;
@@ -3875,6 +3880,10 @@
 	};
 
 	let terminalTabs: ChatTabs;
+	let fullWidthTabs = false;
+	let mainChatActive = false;
+	let tabTitleEditor: import('svelte').Snippet | undefined;
+	let tabActions: import('svelte').Snippet | undefined;
 
 	const getChatId = async (_history: typeof history) => {
 		let _chatId = $chatId;
@@ -3956,7 +3965,9 @@
 			messageInput?.openComments();
 			return { status: 'rejected' };
 		}
-		const sideCommand = String(userPrompt).trim().match(/^\/(?:side|btw)(?:\s+([\s\S]*))?$/i);
+		const sideCommand = String(userPrompt)
+			.trim()
+			.match(/^\/(?:side|btw)(?:\s+([\s\S]*))?$/i);
 		if (sideCommand && !sideChatAllowed) {
 			toast.error($i18n.t('You do not have permission to use side chat.'));
 			return { status: 'rejected' };
@@ -5287,8 +5298,18 @@
 			></div>
 		{/if}
 
-		<div class="w-full h-full flex">
-			<div class="h-full flex relative max-w-full min-w-0 flex-1 flex-col">
+		<div
+			class="w-full h-full min-h-0 {fullWidthTabs
+				? 'grid grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto]'
+				: 'flex'}"
+		>
+			<div
+				class="h-full flex relative max-w-full min-w-0 min-h-0 flex-1 flex-col col-start-1 row-start-2"
+				class:hidden={fullWidthTabs && !mainChatActive}
+				id={fullWidthTabs ? 'chat-panel-main-chat-view' : undefined}
+				role={fullWidthTabs ? 'tabpanel' : undefined}
+				aria-labelledby={fullWidthTabs ? 'chat-panel-main-chat' : undefined}
+			>
 				{#if loading}
 					<div class="flex items-center justify-center h-full w-full">
 						<Spinner className="size-5" />
@@ -5324,6 +5345,9 @@
 						</div>
 					{:else}
 						<Navbar
+							tabbed={fullWidthTabs}
+							bind:tabTitleEditor
+							bind:tabActions
 							{liveParticipants}
 							bind:this={navbarElement}
 							readOnly={isShared}
@@ -5421,7 +5445,7 @@
 										}}
 										bind:selectedModels
 										{atSelectedModel}
-										className={embedded ? 'h-full flex pt-4' : 'h-full flex pt-18'}
+										className={embedded || fullWidthTabs ? 'h-full flex pt-4' : 'h-full flex pt-18'}
 										{sendMessage}
 										{showMessage}
 										{submitMessage}
@@ -5433,7 +5457,7 @@
 										{onToolCallResolved}
 										allowDelete={!(generating || taskIds?.length)}
 										forkHandler={$temporaryChatEnabled ? null : handleForkChat}
-										topPadding={!embedded}
+										topPadding={!embedded && !fullWidthTabs}
 										bottomPadding={files.length > 0}
 										{onSelect}
 										{onInsertToNote}
@@ -5695,6 +5719,11 @@
 
 			{#if !embedded}
 				<ChatTabs
+					bind:fullWidth={fullWidthTabs}
+					bind:mainChatActive
+					title={$chatTitle || $i18n.t('New Chat')}
+					tabTitleEditor={loading ? undefined : tabTitleEditor}
+					tabActions={loading ? undefined : tabActions}
 					bind:terminalContext
 					bind:history
 					bind:files

@@ -210,7 +210,7 @@ def apply_model_params_to_body_openai(params: dict, form_data: dict) -> dict:
         'presence_penalty': float,
         'reasoning_effort': str,
         'seed': lambda x: x,
-        'stop': lambda x: [bytes(s, 'utf-8').decode('unicode_escape') for s in x],
+        'stop': lambda x: [stop.encode('latin-1', 'backslashreplace').decode('unicode_escape') for stop in x],
         'logit_bias': lambda x: x,
         'response_format': dict,
     }
@@ -264,7 +264,7 @@ def apply_model_params_to_body_ollama(params: dict, form_data: dict) -> dict:
         'repeat_penalty': float,
         'presence_penalty': float,
         'frequency_penalty': float,
-        'stop': lambda x: [bytes(s, 'utf-8').decode('unicode_escape') for s in x],
+        'stop': lambda x: [stop.encode('latin-1', 'backslashreplace').decode('unicode_escape') for stop in x],
         'num_gpu': int,
         'use_mmap': bool,
         'use_mlock': bool,
@@ -297,7 +297,7 @@ def apply_model_params_to_body_ollama(params: dict, form_data: dict) -> dict:
     return form_data
 
 
-def convert_messages_openai_to_ollama(messages: list[dict]) -> list[dict]:
+def convert_chat_completions_messages_to_ollama(messages: list[dict]) -> list[dict]:
     ollama_messages = []
 
     for message in messages:
@@ -376,7 +376,7 @@ def convert_messages_openai_to_ollama(messages: list[dict]) -> list[dict]:
     return ollama_messages
 
 
-def convert_payload_openai_to_ollama(openai_payload: dict) -> dict:
+def convert_chat_completions_payload_to_ollama(openai_payload: dict) -> dict:
     """
     Converts a payload formatted for OpenAI's API to be compatible with Ollama's API endpoint for chat completions.
 
@@ -396,7 +396,7 @@ def convert_payload_openai_to_ollama(openai_payload: dict) -> dict:
 
     # Mapping basic model and message details
     ollama_payload['model'] = openai_payload.get('model')
-    ollama_payload['messages'] = convert_messages_openai_to_ollama(openai_payload.get('messages'))
+    ollama_payload['messages'] = convert_chat_completions_messages_to_ollama(openai_payload.get('messages'))
     ollama_payload['stream'] = openai_payload.get('stream', False)
     if 'tools' in openai_payload:
         ollama_payload['tools'] = openai_payload['tools']

@@ -7,7 +7,6 @@
 		socket,
 		user,
 		openTemporaryChatIds,
-		sideChatRequest,
 		models,
 		settings,
 		config,
@@ -26,7 +25,7 @@
 	import ElicitationDialog from '../ElicitationDialog.svelte';
 	import { isRasterImageContentType } from '$lib/utils';
 
-	export let parentId: string;
+	export let initialPrompt = '';
 	export let history;
 	export let modelId: string;
 	export let systemPrompt = '';
@@ -97,7 +96,6 @@
 	let draft = '';
 	let error = '';
 	let busy = false;
-	let ready = false;
 	let disposed = false;
 	let request: Promise<any> | null = null;
 	let scroller: HTMLDivElement;
@@ -359,23 +357,20 @@
 		if (busy) void stop();
 	}
 
-	$: if (ready && $sideChatRequest?.parentId === parentId) {
-		const pending = $sideChatRequest;
-		sideChatRequest.set(null);
-		if (sideChatAllowed && pending.prompt) {
-			draft = pending.prompt;
-			input?.setText(draft);
-			if (!busy) void send();
-		}
-		input?.focus();
-	}
 	onMount(() => {
 		const connection = $socket;
 		connection?.on('events', receive);
 		connection?.on('connect', reconnect);
 		connection?.on('disconnect', cancelInteractions);
-		ready = true;
-		input?.focus();
+		void tick().then(() => {
+			if (disposed) return;
+			if (sideChatAllowed && initialPrompt) {
+				draft = initialPrompt;
+				input?.setText(draft);
+				void send();
+			}
+			input?.focus();
+		});
 		return () => {
 			disposed = true;
 			connection?.off('events', receive);
@@ -441,7 +436,9 @@
 		{/if}
 	</div>
 	<div class="shrink-0 pb-2 z-10">
-		{#if error}<p role="alert" class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">{error}</p>{/if}
+		{#if error}<p role="alert" class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
+				{error}
+			</p>{/if}
 		{#if sideChatAllowed}
 			<MessageInput
 				bind:this={input}

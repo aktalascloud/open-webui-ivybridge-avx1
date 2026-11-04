@@ -15,8 +15,8 @@ def load(path,names):
     nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
     assert len(nodes)==len(names)
     exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),scope)
-load(Path('utils/misc.py'),{'openai_chat_message_template','openai_chat_chunk_message_template'})
-load(Path('utils/response.py'),{'convert_responses_usage_to_openai','convert_streaming_response_responses_to_openai'})
+load(Path('utils/misc.py'),{'chat_completion_template','chat_completion_message_template','chat_completion_chunk_template'})
+load(Path('utils/response.py'),{'usage_counter','normalize_usage','get_responses_finish_reason','convert_responses_usage_to_chat_completions','convert_responses_stream_to_chat_completions'})
 load(Path('routers/openai.py'),{'convert_responses_result'})
 
 class ResponsesClients(unittest.IsolatedAsyncioTestCase):
@@ -27,7 +27,7 @@ class ResponsesClients(unittest.IsolatedAsyncioTestCase):
             {'type':'response.incomplete','response':{'incomplete_details':{'reason':'max_output_tokens'},'usage':{'input_tokens':7,'output_tokens':3}}}]
         async def stream():
             for event in events:yield 'data: '+json.dumps(event)+'\n\n'
-        output=[line async for line in scope['convert_streaming_response_responses_to_openai'](stream())]
+        output=[line async for line in scope['convert_responses_stream_to_chat_completions'](stream())]
         chunks=[json.loads(line[6:]) for line in output if line.startswith('data: {')]
         self.assertEqual(chunks[0]['choices'][0]['delta']['tool_calls'][0]['id'],'call1')
         self.assertEqual(chunks[1]['choices'][0]['delta']['tool_calls'][0]['index'],0)
@@ -37,7 +37,7 @@ class ResponsesClients(unittest.IsolatedAsyncioTestCase):
     async def test_chat_completion_passes_through(self):
         value='data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
         async def stream():yield value
-        self.assertEqual([x async for x in scope['convert_streaming_response_responses_to_openai'](stream())],[value])
+        self.assertEqual([x async for x in scope['convert_responses_stream_to_chat_completions'](stream())],[value])
     def test_nonstream_usage_and_filter_reason(self):
         result=scope['convert_responses_result']({'model':'fixture','status':'incomplete','incomplete_details':{'reason':'content_filter'},'usage':{'input_tokens':8,'output_tokens':0},'output':[]})
         self.assertEqual(result['usage']['prompt_tokens'],8)
