@@ -6,6 +6,8 @@ Unofficial fork with reviewed agent/MCP fixes and extended Russian UI. One lates
 
 [Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](.avx1/PATCHES.json)
 
+Official0.13.0/dev refresh: improved Responses usage, cache-aware compaction, OAuth/PKCE startup, Session-auth Terminal and bounded file reads. Local model/tool policies, microphone/voice/VRM hooks and Strata controls are preserved.
+
 New model cards inherit the configured VRM; explicit sphere/custom choices and existing cards remain unchanged. Store shared instructions in account settings and only distinct rules in model cards.
 
 Mainstream dev updates retain the fork's Responses, Strata and avatar adapters. Per-card subagent choices narrow the administrator's allowlist and user access; other models use their own parameters. Terminal browser access remains tied to the issuing login/API key, including revocation and endpoint restrictions.
