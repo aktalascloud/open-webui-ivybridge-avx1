@@ -763,7 +763,7 @@ index 0000000000000000000000000000000000000000..9f13fa7d12cc39044fbd0b14721b40c4
 +OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 +SOFTWARE.
 diff --git a/README.md b/README.md
-index 82d20f3a2b4700c09bbfc25515869a279fd5334c..499ef82711e0df62b3cab46b7363075a6b556b50 100644
+index 82d20f3a2b4700c09bbfc25515869a279fd5334c..2055fbe87dd6d7b7e2dbabb6abf9bae46fd32e12 100644
 --- a/README.md
 +++ b/README.md
 @@ -1,134 +1,34 @@
@@ -798,7 +798,7 @@ index 82d20f3a2b4700c09bbfc25515869a279fd5334c..499ef82711e0df62b3cab46b7363075a
 +Unofficial fork with reviewed agent/MCP fixes and extended Russian UI. One latest ZIP + Install.cmd.
  
 -[![Open WebUI Demo](https://cdn.openwebui.com/open-webui-demo.gif)](https://docs.openwebui.com/)
-+[Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](.avx1/PATCHES.json)
++[Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](patches/README.md)
  
 -![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)
 -![GitHub forks](https://img.shields.io/github/forks/open-webui/open-webui?style=social)
@@ -920,7 +920,7 @@ index 82d20f3a2b4700c09bbfc25515869a279fd5334c..499ef82711e0df62b3cab46b7363075a
 -Created by [Timothy Jaeryang Baek](https://github.com/tjbck).
 +Current maintainer-only applied patches: [patches](patches/README.md).
 diff --git a/README.ru.md b/README.ru.md
-index c2b30fe1bcbf199df54ef9c16352920adf5cacc2..5b955eb8253c26e6b64ada231d89803586e27d69 100644
+index c2b30fe1bcbf199df54ef9c16352920adf5cacc2..450035d6cf109bb37ee9757358f731a472bd1499 100644
 --- a/README.ru.md
 +++ b/README.ru.md
 @@ -1,132 +1,34 @@
@@ -955,7 +955,7 @@ index c2b30fe1bcbf199df54ef9c16352920adf5cacc2..5b955eb8253c26e6b64ada231d898035
 +Неофициальный форк: проверенные исправления для агентов/MCP и дополненный русский интерфейс. Один актуальный ZIP + Install.cmd.
  
 -[![Демонстрация Open WebUI](https://cdn.openwebui.com/open-webui-demo.gif)](https://docs.openwebui.com/)
-+[Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](.avx1/PATCHES.json)
++[Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](patches/README.md)
  
 -![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)
 -![GitHub forks](https://img.shields.io/github/forks/open-webui/open-webui?style=social)

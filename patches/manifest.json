@@ -4,8 +4,8 @@
   "ownership": "applied-downstream-only",
   "project": "webui",
   "upstream": "055bd98f3a223cadd8be381422238ca9410cc9db",
-  "snapshot_source": "50e65d16eecd4040492d28a9e80581715bd7327b",
-  "downstream_tree_without_patches": "547b6c84be0be4a0a5bb773c11871a39ecb6d487",
+  "snapshot_source": "950aff1a53382a5831a304040c34681d04b93f86",
+  "downstream_tree_without_patches": "132eec3f594ad15f822e99af21dfa7e3cdd27554",
   "groups": [
     {
       "patch": "01-runtime.patch",
@@ -167,16 +167,16 @@
         "README.ru.md",
         "docs/provider-eligibility.md"
       ],
-      "sha256": "7eea219188ce90f06c2752a769026e0d378d8064761e7ceb6baa405e3c53abb0"
+      "sha256": "94fdd2f70ded4c2e04fd06f9658813c77baca46a8263db8cbe1d6e72ca9d7e9c"
     }
   ],
   "files": {
     "01-runtime.patch": "984c9b1e41337141014b9ae9fda8257e41306992959da043e4bfc7b4ef7c2afe",
     "02-build.patch": "05537a5052e131fcf193c89313cb5b6a5e5d674cc57170b1f2755457c5919b93",
     "03-tests.patch": "388a6ed81cdcdd722fbff015d173e6345410ba606e22a3714be97f992f89aaa4",
-    "04-documentation.patch": "7eea219188ce90f06c2752a769026e0d378d8064761e7ceb6baa405e3c53abb0",
+    "04-documentation.patch": "94fdd2f70ded4c2e04fd06f9658813c77baca46a8263db8cbe1d6e72ca9d7e9c",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "0de3cc8bf7284c341fd9a7217a5cc598d813b5a95bdebb6584f9a9c790128ada",
-    "README.md": "6392d1c615e26e27e8e5927cdb82e50128212544cb59b66268adc10e19c7d774"
+    "README.md": "82f1dae077aaa6230bbe2775283d817204d4dae31043bfc66217d0ec90bb6114"
   }
 }
