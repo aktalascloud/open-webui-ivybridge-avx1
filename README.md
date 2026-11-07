@@ -4,7 +4,7 @@
 
 Unofficial fork with reviewed agent/MCP fixes and extended Russian UI. One latest ZIP + Install.cmd.
 
-[Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](.avx1/PATCHES.json)
+[Upstream](https://github.com/open-webui/open-webui) · [Release](https://github.com/aktalascloud/open-webui-ivybridge-avx1/releases/latest) · [Patches](patches/README.md)
 
 Official 0.13.0/dev refresh: improved Responses usage, cache-aware compaction, OAuth/PKCE startup, Session-auth Terminal and bounded file reads. Local model/tool policies, microphone/voice/VRM hooks and Strata controls are preserved.
 
