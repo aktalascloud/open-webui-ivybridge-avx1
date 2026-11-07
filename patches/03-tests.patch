@@ -1,0 +1,2508 @@
+diff --git a/.avx1/frontend_contract.test.mjs b/.avx1/frontend_contract.test.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..b37391c6a152f7f1f95d2d9000c4aa14fd144bbb
+--- /dev/null
++++ b/.avx1/frontend_contract.test.mjs
+@@ -0,0 +1,60 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { __assistantMicOrigin as mic, __assistantVoiceBudget as voice } from '../src/lib/utils/assistantCompatibility.js';
++
++test('microphone provenance stays on the exact current draft and clears on replacement', () => {
++  let callbacks = {};
++  let node = {textContent: 'voice', innerText: 'voice', contains: () => true, addEventListener: (name, handler) => callbacks[name] = handler};
++  globalThis.document = {getElementById: () => node};
++  globalThis.getSelection = () => ({isCollapsed: false, anchorNode: node, focusNode: node, toString: () => 'voice'});
++  mic.mark('voice');
++  assert.deepEqual(mic.peek('voice'), {input_source: 'microphone'});
++  assert.equal(mic.peek('unrelated typed message'), undefined);
++  mic.change('voice edited');
++  assert.deepEqual(mic.peek('voice edited'), {input_source: 'microphone'});
++  callbacks.beforeinput();
++  assert.equal(mic.peek('voice edited'), undefined);
++  mic.mark('voice');
++  node = {...node};
++  assert.equal(mic.peek('voice'), undefined);
++});
++
++test('voice budget groups reports, stays message-scoped and preserves full text', () => {
++  voice.start('one', 1);
++  voice.start('two', 1);
++  assert.equal(voice.hold('one', '1С: выручка 100'), true);
++  assert.equal(voice.hold('two', 'Hello'), false);
++  assert.equal(voice.hold('one', 'Прибыль 20'), true);
++  const report = voice.finish('one', 'chat-one');
++  assert.equal(report.text, '1С: выручка 100 Прибыль 20');
++  assert.equal(report.options.speech_message_id, 'one');
++  assert.equal(report.options.speech_chat_id, 'chat-one');
++  assert.equal(voice.finish('two', 'chat-two'), null);
++  assert.equal(voice.finish('one', 'chat-one'), null);
++  assert.equal(voice.emoji('спасибо'), '😊');
++});
++
++test('simultaneous composer provenance is isolated by actual DOM node and input id', () => {
++  function editor(text) {
++    const callbacks = {};
++    const node = { textContent: text, innerText: text, contains: value => value === node,
++      addEventListener: (name, callback) => callbacks[name] = callback };
++    return { node, callbacks };
++  }
++  const main = editor('same'), side = editor('same');
++  const nodes = new Map([['chat-input', main.node], ['side-input', side.node]]);
++  globalThis.document = { getElementById: id => nodes.get(id) };
++  mic.mark('same');
++  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
++  assert.equal(mic.peek('same', 'side-input'), undefined);
++  mic.mark('same', 'side-input');
++  mic.change('side edited', 'side-input');
++  assert.deepEqual(mic.peek('side edited', 'side-input'), {input_source: 'microphone'});
++  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
++  globalThis.getSelection = () => ({ isCollapsed: false, anchorNode: side.node, focusNode: side.node, toString: () => 'same' });
++  side.callbacks.beforeinput();
++  assert.equal(mic.peek('side edited', 'side-input'), undefined);
++  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
++  nodes.set('chat-input', editor('same').node);
++  assert.equal(mic.peek('same'), undefined);
++});
+diff --git a/.avx1/test_agent_prs.py b/.avx1/test_agent_prs.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4b77458338c8c51c8f40f8d17ecaeb15d648b1e2
+--- /dev/null
++++ b/.avx1/test_agent_prs.py
+@@ -0,0 +1,250 @@
++"""Run actual patched function bodies with synthetic RPC/permission boundaries."""
++import ast
++import copy
++import json
++import math
++from pathlib import Path
++import types
++import time
++import sys
++import runpy
++import hashlib
++import re
++from uuid import uuid4
++import unittest
++from unittest.mock import AsyncMock, patch
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++
++def function(path,name,namespace,legacy=False):
++    tree=ast.parse((ROOT/path).read_text('utf-8'))
++    node=copy.deepcopy(next(n for n in ast.walk(tree) if isinstance(n,(ast.AsyncFunctionDef,ast.FunctionDef)) and n.name==name))
++    node.decorator_list=[];node.returns=None
++    for arg in [*node.args.posonlyargs,*node.args.args,*node.args.kwonlyargs]:arg.annotation=None
++    if legacy:
++        factory=ast.FunctionDef(name='factory',args=ast.arguments(posonlyargs=[],args=[],kwonlyargs=[],kw_defaults=[],defaults=[]),
++            body=[ast.Assign(targets=[ast.Name(id='skip_files',ctx=ast.Store())],value=ast.Constant(False)),node,ast.Return(ast.Name(id=name,ctx=ast.Load()))],decorator_list=[])
++        module=ast.Module(body=[factory],type_ignores=[])
++    else:module=ast.Module(body=[node],type_ignores=[])
++    exec(compile(ast.fix_missing_locations(module),str(path),'exec'),namespace)
++    return namespace['factory']() if legacy else namespace[name]
++
++def mcp_instance(session):
++    space={'AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER':None,'JSONCodec':json,'math':math,'ui_resource_uri':lambda _:None}
++    raw=function(Path('utils/mcp/client.py'),'call_tool_raw',space)
++    call=function(Path('utils/mcp/client.py'),'call_tool',space)
++    normalize=function(Path('utils/mcp/client.py'),'normalize_tool_result',space)
++    cls=type('ActualMCPAdapter',(),{'call_tool_raw':raw,'call_tool':call,'normalize_tool_result':staticmethod(normalize)})
++    instance=cls();instance.client=session;instance.tool_definitions={}
++    return instance
++
++
++def execution_scope(extra=None):
++    space={**runpy.run_path(str(ROOT/'utils/tool_calling.py')),'JSONCodec':json,'time':time,
++           'hashlib':hashlib,'re':re,'uuid4':uuid4,'is_saved_chat_id':lambda _:True}
++    space.update(extra or {})
++    for name in ['tool_permission_fingerprint','requires_tool_approval']:
++        function(Path('utils/tool_permissions.py'),name,space)
++    function(Path('utils/middleware.py'),'_is_tool_result_error',space)
++    function(Path('utils/middleware.py'),'execute_tool_call',space)
++    return space
++
++class AgentPRs(unittest.IsolatedAsyncioTestCase):
++    async def native(self,kind,params,spec):
++        captured=[]
++        async def target(**kwargs):captured.append(kwargs);return 'ok'
++        async def update(function,extra_params):return function
++        space={'resolve_tool_call':lambda *_:None,'JSONCodec':json,'ast':ast,'log':types.SimpleNamespace(debug=lambda *_:None),
++               'is_saved_chat_id':lambda _:True,'get_updated_tool_function':update,'time':time}
++        space=execution_scope(space);call=space['execute_tool_call']
++        tool={'type':kind,'callable':target,'spec':{'parameters':spec}}
++        result=await call({'messages':[]},{'tools':{'demo':tool}},None,{'type':'function_call','name':'demo','arguments':json.dumps(params),'call_id':'fixture-call'})
++        self.assertEqual(result[1],'ok');return captured[0]
++
++    async def test_native_mcp_alternative_schema_keeps_arguments(self):
++        params=await self.native('mcp',{'query':'kept'},{'anyOf':[{'properties':{'query':{'type':'string'}}}]})
++        self.assertEqual(params,{'query':'kept'})
++
++    async def test_native_functions_still_remove_unlisted_arguments(self):
++        params=await self.native('function',{'query':'kept','unlisted':'drop'},{'properties':{'query':{}}})
++        self.assertEqual(params,{'query':'kept'})
++
++    async def test_legacy_mcp_and_function_boundaries(self):
++        for kind,expected in [('mcp',{'query':'kept','other':1}),('function',{'query':'kept'})]:
++            captured=[]
++            async def target(**kwargs):captured.append(kwargs);return 'ok'
++            async def result(*args):return args[2],[],[]
++            space={'tools':{'demo':{'type':kind,'callable':target,'spec':{'parameters':{'properties':{'query':{}}}}}},
++                'log':types.SimpleNamespace(debug=lambda *_:None,warning=lambda *_:None),'process_tool_result':result,
++                'request':None,'metadata':{},'user':None,'event_emitter':None,'sources':[]}
++            space=execution_scope(space)
++            space.update(body={'messages':[]},event_caller=None,
++                         get_updated_tool_function=AsyncMock(side_effect=lambda function,extra_params:function))
++            call=function(Path('utils/middleware.py'),'tool_call_handler',space,legacy=True)
++            await call({'name':'demo','parameters':{'query':'kept','other':1}})
++            self.assertEqual(captured,[expected])
++
++    async def test_mcp_errors_are_plain_readable_text(self):
++        for content,expected in [([{'type':'text','text':'Permission denied'},{'type':'image','data':'synthetic'}],'Permission denied'),([], 'MCP tool call returned an error.')]:
++            reply=types.SimpleNamespace(is_error=True,model_dump=lambda **_: {'content':content,'isError':True})
++            session=types.SimpleNamespace(call_tool=AsyncMock(return_value=reply))
++            with self.assertRaisesRegex(Exception,expected):await mcp_instance(session).call_tool('demo',{})
++
++    async def test_ephemeral_native_call_cannot_execute_without_explicit_approval(self):
++        target=AsyncMock(return_value='must not execute')
++        call=execution_scope({'is_saved_chat_id':lambda _:False})['execute_tool_call']
++        metadata={'params':{'tool_approval_mode':'ask'},'tools':{'demo':{'type':'function','callable':target,'spec':{'parameters':{'properties':{}}}}}}
++        result=await call({'messages':[]},metadata,None,{'type':'function_call','name':'demo','arguments':'{}'})
++        self.assertIn('not approved',result[1]);target.assert_not_awaited()
++
++    async def test_mcp_success_content_remains_unchanged(self):
++        content=[{'type':'text','text':'[1, 2]'}]
++        reply=types.SimpleNamespace(is_error=False,model_dump=lambda **_: {'content':content,'structuredContent':{'result':[1,2]}})
++        rpc=AsyncMock(return_value=reply)
++        result=await mcp_instance(types.SimpleNamespace(call_tool=rpc)).call_tool('demo',{})
++        self.assertEqual(result,content)
++        self.assertEqual(rpc.call_args.kwargs['read_timeout_seconds'],math.inf)
++
++    async def file_view(self, content, **options):
++        file=types.SimpleNamespace(id='fixture',filename='fixture.txt',data={'content':content},updated_at=0,created_at=0)
++        module=types.ModuleType('open_webui.models.files');module.Files=types.SimpleNamespace(get_file_by_id=AsyncMock(return_value=file))
++        space={'JSONCodec':json,'VIEW_FILE_DEFAULT_MAX_CHARS':50,'VIEW_FILE_MAX_CHARS':100,
++               '_has_read_access_to_file':AsyncMock(return_value=True),'log':types.SimpleNamespace(exception=lambda *_:None)}
++        space['_numbered_lines_within_cap']=function(Path('tools/builtin.py'),'_numbered_lines_within_cap',space)
++        call=function(Path('tools/builtin.py'),'view_file',space)
++        with patch.dict(sys.modules,{'open_webui.models.files':module}):
++            return json.loads(await call('fixture',__request__=object(),__user__={'id':'fixture-user'},**options))
++
++    async def test_file_end_line_without_start_is_respected(self):
++        reply=await self.file_view('first\nsecond\nthird',end_line=2)
++        self.assertEqual(reply['showing_lines'],'1-2');self.assertEqual(reply['next_start_line'],3)
++        self.assertNotIn('third',reply['content'])
++
++    async def test_numbered_file_pagination_does_not_skip_original_characters(self):
++        text='alpha\nbeta\ngamma\ndelta';offset=0;pieces=[]
++        while offset<len(text):
++            reply=await self.file_view(text,offset=offset,max_chars=5,line_numbers=True)
++            self.assertLessEqual(reply['returned_chars'],5)
++            pieces.append('\n'.join(line.partition(': ')[2] for line in reply['content'].split('\n')))
++            if not reply.get('truncated'):break
++            self.assertEqual(reply['next_offset'],offset+reply['returned_chars']);offset=reply['next_offset']
++        self.assertEqual(''.join(pieces),text)
++
++    async def search_row(self, text, raw_history=False):
++        fields={'id':'fixture-chat','title':'Fixture','created_at':1,'updated_at':2,'last_read_at':0,'archived':False}
++        fields['snippet']=None
++        model=fields
++        query=AsyncMock(return_value=[model])
++        space={'Depends':lambda function:None,'get_verified_user':lambda:None,'get_async_session':lambda:None,
++               'Chats':types.SimpleNamespace(get_chats_by_user_id_and_search_text=query),
++               'chat_search_content_text':lambda value:value.strip(),'chat_search_terms':lambda value:[],
++               'ChatTitleIdResponse':lambda **value:value,'add_active_state_to_chat_list':AsyncMock(side_effect=lambda request,rows:rows)}
++        call=function(Path('routers/chats.py'),'search_user_chats',space)
++        result=await call(object(),text,user=types.SimpleNamespace(id='fixture-user'),db=object())
++        self.assertEqual(query.call_args.args[0],'fixture-user')
++        self.assertNotIn('chat',result[0])
++        return result
++
++    async def test_empty_chat_search_accepts_lightweight_rows_without_chat_blob(self):
++        result=await self.search_row('')
++        self.assertEqual(result[0]['id'],'fixture-chat');self.assertIsNone(result[0]['snippet'])
++
++    async def test_nonempty_chat_search_preserves_content_snippets(self):
++        result=await self.search_row('needle',raw_history=True)
++        self.assertIsNone(result[0]['snippet'])
++        space={'chat_search_content_query':lambda v:v.strip(),'chat_search_terms':lambda v:[],
++               'Depends':lambda _:None,'get_verified_user':object(),'get_async_session':object()}
++        function(Path('models/chats.py'),'chat_message_list',space)
++        snippet=function(Path('models/chats.py'),'chat_search_snippet',space)
++        snippets=AsyncMock(return_value={'fixture-chat':snippet({'messages':[{'content':'hello needle'}]},'needle')})
++        space['Chats']=types.SimpleNamespace(get_chat_search_snippets=snippets)
++        route=function(Path('routers/chats.py'),'get_chat_search_snippet',space)
++        value=await route('fixture-chat','needle',user=types.SimpleNamespace(id='fixture-user'),db=None)
++        self.assertIn('needle',value)
++        snippets.assert_awaited_once_with(['fixture-chat'],'fixture-user','needle',db=None)
++
++    def sharing(self, permissions):
++        path=Path('utils/access_control/__init__.py')
++        tree=ast.parse((ROOT/path).read_text('utf-8'))
++        policy=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_SHARING_PERMISSION_KEYS' for t in n.targets))
++        class Denied(Exception):
++            def __init__(self,status_code,detail):self.status_code=status_code;super().__init__(detail)
++        space={'_SHARING_PERMISSION_KEYS':ast.literal_eval(policy),'normalize_access_grants':lambda grants:[dict(g) for g in grants],
++               'strip_anyone_access_grants':lambda grants:[g for g in grants if g['principal_type']!='anyone'],
++               'get_permissions':AsyncMock(return_value=permissions),'HTTPException':Denied}
++        call=function(path,'filter_allowed_access_grants',space)
++        return call,space,Denied
++
++    async def test_api_sharing_permission_and_admin_behavior(self):
++        grants=[{'principal_type':'user','principal_id':'synthetic-other','permission':'read'}]
++        for role,allowed,expected in [('user',False,[]),('user',True,grants),('admin',False,grants)]:
++            call,space,_=self.sharing({'sharing':{'tools':allowed},'access_grants':{'allow_users':True}})
++            self.assertEqual(await call({},'synthetic-user',role,grants,resource_type='tool'),expected)
++            if role=='admin':space['get_permissions'].assert_not_awaited()
++
++    async def test_legacy_positional_database_parameter_stays_compatible(self):
++        call,space,_=self.sharing({'sharing':{'tools':True},'access_grants':{'allow_users':True}})
++        database=object();grants=[{'principal_type':'user','principal_id':'synthetic-other','permission':'read'}]
++        self.assertEqual(await call({},'synthetic','user',grants,'sharing.public_tools',None,database),grants)
++        self.assertIs(space['get_permissions'].call_args.kwargs['db'],database)
++
++    async def test_public_and_group_audiences_cannot_bypass_permissions(self):
++        grants=[{'principal_type':'user','principal_id':'*','permission':'read'},
++                {'principal_type':'group','principal_id':'group-1','permission':'write'},
++                {'principal_type':'user','principal_id':'user-1','permission':'read'}]
++        call,_,_=self.sharing({'sharing':{'tools':True,'public_tools':False},'access_grants':{'allow_users':True,'allow_groups':False}})
++        self.assertEqual(await call({},'synthetic','user',grants,'tool'),grants[2:])
++
++    async def test_resource_policy_rejects_mismatch_and_unknown_type(self):
++        call,_,_=self.sharing({})
++        for kind,sharing in [('unknown',None),('tool','sharing.models')]:
++            with self.assertRaises(ValueError):
++                await call({},'synthetic','admin',[],kind,sharing_permission_key=sharing)
++
++    async def test_unsupported_public_or_anonymous_audience_is_removed_even_for_admin(self):
++        call,_,_=self.sharing({})
++        grants=[{'principal_type':'anyone','principal_id':'*','permission':'read'},
++                {'principal_type':'user','principal_id':'*','permission':'read'},
++                {'principal_type':'user','principal_id':'user-1','permission':'read'}]
++        self.assertEqual(await call({},'synthetic','admin',grants,'folder'),grants[2:])
++
++    async def test_update_validation_denies_unauthorized_changes_instead_of_silently_stripping(self):
++        call,space,Denied=self.sharing({'sharing':{'tools':False},'access_grants':{'allow_users':True}})
++        validate=function(Path('utils/access_control/__init__.py'),'validate_access_grants',space)
++        grants=[{'principal_type':'user','principal_id':'other','permission':'read'}]
++        with self.assertRaises(Denied) as error:await validate({},'synthetic','user',grants,'tool')
++        self.assertEqual(error.exception.status_code,403)
++        self.assertEqual(grants[0]['principal_id'],'other')
++
++class UsageCompactionTests(unittest.TestCase):
++    def usage(self):
++        from numbers import Number
++        tree=ast.parse((ROOT/'utils/response.py').read_text('utf-8'))
++        nodes=[]
++        for node in tree.body:
++            if isinstance(node,(ast.FunctionDef,ast.Assign)):
++                nodes.append(node)
++            if isinstance(node,ast.FunctionDef) and node.name=='merge_usage':break
++        space={'Number':Number}
++        exec(compile(ast.Module(body=nodes,type_ignores=[]),'actual_response_usage','exec'),space)
++        return space['merge_usage']
++
++    def test_tool_loop_keeps_latest_context_size_and_cumulative_totals(self):
++        merge=self.usage()
++        value=merge({'prompt_tokens':100,'completion_tokens':8},
++                    {'prompt_tokens':120,'completion_tokens':12})
++        self.assertEqual((value['input_tokens'],value['output_tokens']),(220,20))
++        self.assertEqual((value['prompt_tokens'],value['completion_tokens']),(120,12))
++        value=merge(value,{'input_tokens':130,'output_tokens':4})
++        self.assertEqual((value['input_tokens'],value['prompt_tokens']),(350,130))
++
++    def test_measured_zero_is_latest_context_size(self):
++        value=self.usage()({'input_tokens':20,'output_tokens':5},
++                          {'input_tokens':0,'output_tokens':0})
++        self.assertEqual((value['input_tokens'],value['prompt_tokens']),(20,0))
++        self.assertEqual(value['completion_tokens'],0)
++
++    def test_missing_provider_usage_keeps_last_known_measurement(self):
++        value=self.usage()({'prompt_tokens':20,'completion_tokens':5},{})
++        self.assertEqual(value['prompt_tokens'],20)
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_audit_requirements.py b/.avx1/test_audit_requirements.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..9931a4e24ec1235562ef65446191dd2c6409cc37
+--- /dev/null
++++ b/.avx1/test_audit_requirements.py
+@@ -0,0 +1,39 @@
++from pathlib import Path
++import tempfile
++import unittest
++from audit_requirements import resolved_requirements
++
++
++class ResolvedAuditTests(unittest.TestCase):
++    def setUp(self):
++        temp = tempfile.TemporaryDirectory()
++        self.addCleanup(temp.cleanup)
++        self.root = Path(temp.name)
++
++    def package(self, folder, name, version):
++        info = self.root / (folder + '.dist-info')
++        info.mkdir()
++        (info / 'METADATA').write_text(f'Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n', encoding='utf-8')
++
++    def test_local_app_is_separate_but_every_library_is_retained(self):
++        self.package('app', 'Open_WebUI', '0.13.0')
++        self.package('direct', 'direct', '1.2.3')
++        self.package('transitive', 'transitive', '4.5.6')
++        libraries, own = resolved_requirements(self.root, 'open-webui', '0.13.0')
++        self.assertEqual(libraries, [{'name': 'direct', 'version': '1.2.3'}, {'name': 'transitive', 'version': '4.5.6'}])
++        self.assertEqual(own, {'name': 'open-webui', 'version': '0.13.0'})
++
++    def test_missing_wrong_or_duplicate_app_metadata_blocks_audit(self):
++        self.package('direct', 'direct', '1')
++        with self.assertRaisesRegex(RuntimeError, 'missing'):
++            resolved_requirements(self.root, 'open-webui', '0.13.0')
++        self.package('app', 'open-webui', '0.12.5')
++        with self.assertRaisesRegex(RuntimeError, 'version differs'):
++            resolved_requirements(self.root, 'open-webui', '0.13.0')
++        self.package('duplicate', 'direct', '2')
++        with self.assertRaises(RuntimeError):
++            resolved_requirements(self.root, 'open-webui', '0.12.5')
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/test_authlib_security.py b/.avx1/test_authlib_security.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..9904348fb2a2dea98e9ebb2e265a906e6a003fcb
+--- /dev/null
++++ b/.avx1/test_authlib_security.py
+@@ -0,0 +1,46 @@
++"""Offline Authlib upgrade gates: signing, audience and OAuth request setup."""
++import time
++import unittest
++from urllib.parse import parse_qs,urlsplit
++from authlib.integrations.starlette_client import OAuth
++from authlib.jose import JsonWebToken
++from authlib.jose.errors import JoseError
++
++class AuthlibSecurity(unittest.IsolatedAsyncioTestCase):
++    def fixture(self):
++        jwt=JsonWebToken(['HS256'])
++        key=b'x'*32
++        token=jwt.encode({'alg':'HS256'},{'sub':'fixture','aud':'intended','exp':int(time.time())+60},key)
++        return jwt,key,token
++
++    def test_valid_signed_claims(self):
++        jwt,key,token=self.fixture()
++        claims=jwt.decode(token,key,claims_options={'aud':{'essential':True,'value':'intended'}})
++        claims.validate();self.assertEqual(claims['sub'],'fixture')
++
++    def test_wrong_signature_rejected(self):
++        jwt,key,token=self.fixture()
++        with self.assertRaises(JoseError):jwt.decode(token,b'y'*32)
++
++    def test_wrong_audience_rejected(self):
++        jwt,key,token=self.fixture()
++        claims=jwt.decode(token,key,claims_options={'aud':{'essential':True,'value':'other'}})
++        with self.assertRaises(JoseError):claims.validate()
++
++    def test_algorithm_allowlist_enforced(self):
++        _,key,token=self.fixture()
++        with self.assertRaises(JoseError):JsonWebToken(['RS256']).decode(token,key)
++
++    async def test_starlette_oauth_authorization_request_without_network(self):
++        oauth=OAuth()
++        client=oauth.register('fixture',client_id='fixture',client_secret='fixture',
++            authorize_url='https://example.invalid/authorize',access_token_url='https://example.invalid/token',
++            client_kwargs={'scope':'openid profile email'})
++        result=await client.create_authorization_url('https://callback.invalid/callback')
++        url=urlsplit(result['url']);values=parse_qs(url.query)
++        self.assertEqual((url.netloc,url.path),('example.invalid','/authorize'))
++        self.assertEqual(values['client_id'],['fixture'])
++        self.assertEqual(values['redirect_uri'],['https://callback.invalid/callback'])
++        self.assertTrue(values['state']);self.assertTrue(values['nonce'])
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_avatar_defaults.mjs b/.avx1/test_avatar_defaults.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..d4ee63283f1cee6ae73e802a7e4b0d499a1f14b4
+--- /dev/null
++++ b/.avx1/test_avatar_defaults.mjs
+@@ -0,0 +1,20 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { resolveModelAvatar } from '../src/lib/utils/voice-avatar.ts';
++
++const fallback = { file_id: 'default', states: {}, gestures: [] };
++test('blank and provider-based new cards inherit the default', () => {
++  assert.deepEqual(resolveModelAvatar(null, false, fallback), fallback);
++  assert.deepEqual(resolveModelAvatar({}, false, fallback), fallback);
++  assert.notEqual(resolveModelAvatar({}, false, fallback), fallback);
++});
++test('editing existing unassigned cards does not change them', () => {
++  assert.equal(resolveModelAvatar({}, true, fallback), null);
++});
++test('explicit sphere and custom choices survive create, clone and edit', () => {
++  const custom = { file_id: 'custom' };
++  for (const editing of [false, true]) {
++    assert.equal(resolveModelAvatar({ voice_avatar: null }, editing, fallback), null);
++    assert.deepEqual(resolveModelAvatar({ voice_avatar: custom }, editing, fallback), custom);
++  }
++});
+diff --git a/.avx1/test_avatar_limits.py b/.avx1/test_avatar_limits.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..00bf5b456b41c1637c05405f193d325a5b07aaf1
+--- /dev/null
++++ b/.avx1/test_avatar_limits.py
+@@ -0,0 +1,52 @@
++"""Upload-size and high-resolution texture limits; no model inference."""
++import importlib.util
++import ast
++import io
++from pathlib import Path
++import unittest
++from PIL import Image
++
++source=Path(__file__).resolve().parents[1]/'backend/open_webui/utils/voice_avatar.py'
++spec=importlib.util.spec_from_file_location('avatar_limits',source)
++module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
++
++
++class Limits(unittest.TestCase):
++    def test_catalog_defaults_do_not_retroactively_assign_avatars(self):
++        path=source.parent/'models.py'
++        tree=ast.parse(path.read_text('utf-8'))
++        assignments=[n for n in ast.walk(tree) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='default_metadata' for t in n.targets)]
++        self.assertEqual(len(assignments),1)
++        defaults={'voice_avatar':{'file_id':'fixture'},'capabilities':{'vision':True}}
++        namespace={'config':{'models.default_metadata':defaults}}
++        exec(compile(ast.Module(body=assignments,type_ignores=[]),str(path),'exec'),namespace)
++        self.assertEqual(namespace['default_metadata'],{'capabilities':{'vision':True}})
++        self.assertIn('voice_avatar',defaults)
++
++    def test_new_card_inherits_avatar_without_overwriting_explicit_choices(self):
++        chosen={'file_id':'fixture','states':{},'gestures':[]}
++        self.assertEqual(module.new_model_avatar_default({}, {'voice_avatar':chosen}), chosen)
++        self.assertIsNone(module.new_model_avatar_default({'voice_avatar':None}, {'voice_avatar':chosen}))
++        self.assertIsNone(module.new_model_avatar_default({'voice_avatar':{'file_id':'custom'}}, {'voice_avatar':chosen}))
++        self.assertIsNone(module.new_model_avatar_default({}, {}))
++
++    def texture(self,size,count=1):
++        output=io.BytesIO();Image.new('L',size).save(output,format='PNG');data=output.getvalue()
++        model={'images':[{'bufferView':0,'mimeType':'image/png'} for _ in range(count)],
++               'bufferViews':[{'buffer':0,'byteOffset':0,'byteLength':len(data)}]}
++        return model,data
++
++    def test_upload_is_twenty_mib(self):
++        self.assertEqual(module.AVATAR_MAX_BYTES,20*1024*1024)
++        with self.assertRaisesRegex(ValueError,'20 MiB'):
++            module.validate_voice_avatar(bytes(20*1024*1024+1))
++
++    def test_4k_and_8k_are_allowed_with_a_total_budget(self):
++        for size,count in [((4096,4096),4),((8192,8192),1)]:
++            model,data=self.texture(size,count);module._validate_textures(model,data,0,len(data))
++        model,data=self.texture((8192,8192),3)
++        with self.assertRaisesRegex(ValueError,'128 megapixel'):
++            module._validate_textures(model,data,0,len(data))
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_brotli.py b/.avx1/test_brotli.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..cb4f766053337f2720c42c2c9de18346c96087e8
+--- /dev/null
++++ b/.avx1/test_brotli.py
+@@ -0,0 +1,16 @@
++import unittest
++import brotli
++import brotlicffi
++
++class BrotliCompatibility(unittest.TestCase):
++    def test_valid_payloads_match_across_bindings(self):
++        for data in (b'',b'hello',bytes(range(256))*8,'Русский интерфейс'.encode()):
++            for encoder in (brotli,brotlicffi):
++                packed=encoder.compress(data)
++                for decoder in (brotli,brotlicffi):self.assertEqual(decoder.decompress(packed),data)
++
++    def test_both_bindings_reject_trailing_data(self):
++        for module in (brotli,brotlicffi):
++            with self.assertRaises(module.error):module.decompress(module.compress(b'valid stream')+b'trailing junk')
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_build_inputs.py b/.avx1/test_build_inputs.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..ecce1bfed1c03926187ae2a16fc5fb4e14d25316
+--- /dev/null
++++ b/.avx1/test_build_inputs.py
+@@ -0,0 +1,14 @@
++"""Catch missing recipe inputs and contradictory dependency pins before compiling."""
++import re
++import tomllib
++from pathlib import Path
++root=Path(__file__).resolve().parents[1]
++seen={}
++for requirement in tomllib.loads((root/'pyproject.toml').read_text('utf-8'))['project']['dependencies']:
++    if ';' in requirement:continue
++    name=re.match(r'[A-Za-z0-9_.-]+',requirement).group().lower().replace('_','-')
++    if name in seen:raise RuntimeError('Duplicate unconditional dependency: '+name)
++    seen[name]=requirement
++for name in ('Install.cmd','Install.ps1','bench_json.py','test_brotli.py','test_suggestions.mjs','test_frontend_browser.py','test_mcp_compat.py','native_json.py','security_scope.py'):
++    if not (root/'.avx1'/name).is_file():raise RuntimeError('Missing build input: '+name)
++print('WEBUI_BUILD_INPUTS_AND_DEPENDENCY_NAMES_VERIFIED')
+diff --git a/.avx1/test_chat_model_preservation.mjs b/.avx1/test_chat_model_preservation.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..8442249144e75b96c43c9660f80b66890488c9f8
+--- /dev/null
++++ b/.avx1/test_chat_model_preservation.mjs
+@@ -0,0 +1,24 @@
++import fs from 'node:fs';
++import assert from 'node:assert/strict';
++import {test} from 'node:test';
++const source=fs.readFileSync(new URL('../src/lib/components/chat/Chat.svelte',import.meta.url),'utf8');
++const body=source.match(/const saveControls = async \(models: string\[\] \| null = null\) => \{([\s\S]*?)\n\t\};/)?.[1];
++assert.ok(body,'Actual saveControls callback must be found');
++const AsyncFunction=Object.getPrototypeOf(async()=>{}).constructor;
++async function execute(overrides={},models=null){
++ const calls=[];
++ const context={models,isShared:false,$chatId:'saved',$temporaryChatEnabled:false,chat:{id:'saved',chat:{models:['original'],files:[]}},
++  selectedModels:['fallback'],$models:[{id:'fallback'}],chatFiles:[],equal:(a,b)=>JSON.stringify(a)===JSON.stringify(b),
++  localStorage:{token:'fixture'},console:{error(){}},updateChatById:async(token,id,params)=>{calls.push(params);return null;},...overrides};
++ await new AsyncFunction(...Object.keys(context),body)(...Object.values(context));return calls;
++}
++test('temporary provider outage cannot autosave fallback over the saved model',async()=>{assert.equal((await execute()).length,0);});
++test('file edits during outage save files without rewriting the model',async()=>{
++ const calls=await execute({chatFiles:[{id:'file'}]});assert.equal(calls.length,1);assert.deepEqual(calls[0].files,[{id:'file'}]);assert.equal(calls[0].models,undefined);
++});
++test('explicit model selection still saves when original is available',async()=>{
++ const calls=await execute({},['fallback']);assert.deepEqual(calls[0].models,['fallback']);
++});
++test('shared/read-only chat causes no autosave',async()=>{assert.equal((await execute({isShared:true})).length,0);});
++
++test('background provider recovery does not autosave fallback either',async()=>{assert.equal((await execute({$models:[{id:'original'},{id:'fallback'}]})).length,0);});
+diff --git a/.avx1/test_daily_20261029.py b/.avx1/test_daily_20261029.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ef93ec56afe196a781d65b8bf8fa8dbe5e34656
+--- /dev/null
++++ b/.avx1/test_daily_20261029.py
+@@ -0,0 +1,130 @@
++"""Targeted gates for reviewed KB, tool-image, auth and embedding changes."""
++import ast
++import asyncio
++import copy
++import logging
++from pathlib import Path
++import threading
++import time
++from types import SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock
++import uuid
++from contextlib import asynccontextmanager
++from typing import Optional
++from fastapi import HTTPException,status,Response
++from pydantic import BaseModel,ConfigDict
++from sqlalchemy import create_engine,Column,Text,Integer,JSON,select
++from sqlalchemy.orm import declarative_base,Session
++
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++def functions(path,names,scope,owner=None):
++    tree=ast.parse((ROOT/path).read_text('utf-8'))
++    nodes=tree.body if owner is None else next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name==owner).body
++    chosen=[copy.deepcopy(n) for n in nodes if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
++    assert {n.name for n in chosen}==set(names)
++    for n in chosen:n.decorator_list=[]
++    future=ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future,*chosen],type_ignores=[])),str(path),'exec'),scope)
++    return scope
++
++class ToolImages(unittest.TestCase):
++    def test_disabled_vision_strips_only_tool_images_without_mutating_saved_output(self):
++        f=functions('utils/middleware.py',['strip_tool_images'],{})['strip_tool_images']
++        original=[{'type':'function_call_output','call_id':'call1','output':[{'type':'input_image','image_url':'data:image/png;base64,fixture'},{'type':'input_text','text':'keep'}]}]
++        before=copy.deepcopy(original);result=f(original,{'info':{'meta':{'capabilities':{'vision':False}}}})
++        self.assertEqual(original,before);self.assertEqual(result[0]['call_id'],'call1')
++        self.assertEqual(result[0]['output'],[{'type':'input_text','text':'\n[image]'},{'type':'input_text','text':'keep'}])
++        self.assertIs(f(original,{}),original)
++    def test_text_null_outputs_and_null_metadata_remain_valid(self):
++        f=functions('utils/middleware.py',['strip_tool_images'],{})['strip_tool_images']
++        rows=[{'type':'function_call_output','output':'plain text'},{'type':'function_call_output','output':None},{'type':'message','content':'keep'}]
++        self.assertEqual(f(rows,{'info':{'meta':{'capabilities':{'vision':False}}}}),rows)
++        self.assertIs(f(rows,{'info':None}),rows)
++
++class KnowledgeProjection(unittest.IsolatedAsyncioTestCase):
++    async def test_metadata_query_does_not_select_extracted_text(self):
++        Base=declarative_base()
++        class File(Base):
++            __tablename__='file';id=Column(Text,primary_key=True);user_id=Column(Text);hash=Column(Text);filename=Column(Text);path=Column(Text);meta=Column(JSON);created_at=Column(Integer);updated_at=Column(Integer);data=Column(JSON)
++        class KnowledgeFile(Base):
++            __tablename__='knowledge_file';id=Column(Integer,primary_key=True);file_id=Column(Text);knowledge_id=Column(Text);directory_id=Column(Text)
++        class DTO(BaseModel):
++            model_config=ConfigDict(from_attributes=True)
++            id:str;user_id:str;hash:str;filename:str;path:str;meta:dict;created_at:int;updated_at:int;data:dict|None=None
++        engine=create_engine('sqlite://');Base.metadata.create_all(engine);queries=[]
++        with Session(engine) as database:
++            database.add(File(id='f',user_id='u',hash='h',filename='document.txt',path='/fixture',meta={'size':4},created_at=1,updated_at=2,data={'content':'x'*1000000}))
++            database.add(KnowledgeFile(file_id='f',knowledge_id='kb',directory_id='dir'));database.commit()
++            class AsyncDB:
++                async def execute(self,query):queries.append(str(query));return database.execute(query)
++            @asynccontextmanager
++            async def context(_):yield AsyncDB()
++            scope={'get_async_db_context':context,'select':select,'File':File,'KnowledgeFile':KnowledgeFile,'FileModel':DTO}
++            f=functions('models/knowledge.py',['get_files_with_directory_ids'],scope,'KnowledgeTable')['get_files_with_directory_ids']
++            rows=await f(None,'kb')
++            self.assertEqual(len(rows),1);self.assertEqual(rows[0][0].filename,'document.txt');self.assertEqual(rows[0][1],'dir')
++            self.assertIsNone(rows[0][0].data);self.assertNotIn('file.data',queries[0])
++        engine.dispose()
++
++class AdminKeyRoutes(unittest.IsolatedAsyncioTestCase):
++    def fixture(self,enabled=True,permission=True,target='owner'):
++        users=NS(get_user_by_id=AsyncMock(return_value=NS(id=target,role='user')),get_first_user=AsyncMock(return_value=NS(id='owner')),
++                 update_user_api_key_by_id=AsyncMock(),delete_user_api_key_by_id=AsyncMock())
++        scope={'Depends':lambda _:None,'get_admin_user':object(),'get_async_session':object(),'HTTPException':HTTPException,'status':status,
++               'Users':users,'Config':NS(get=AsyncMock(side_effect=lambda key:enabled if key=='auth.enable_api_keys' else {})),
++               'has_permission':AsyncMock(return_value=permission),'create_api_key':lambda:'fixture-new-key','publish_event':AsyncMock(),
++               'EVENTS':NS(AUTH_API_KEY_CREATED='created',AUTH_API_KEY_DELETED='deleted'),
++               'ERROR_MESSAGES':NS(USER_NOT_FOUND='missing',ACTION_PROHIBITED='denied',API_KEY_CREATION_NOT_ALLOWED='disabled')}
++        functions('routers/users.py',['rotate_user_api_key_by_id','delete_user_api_key_by_id'],scope)
++        tree=ast.parse((ROOT/'routers/users.py').read_text('utf-8'))
++        for node in tree.body:
++            if isinstance(node,ast.AsyncFunctionDef) and node.name in ('rotate_user_api_key_by_id','delete_user_api_key_by_id'):
++                self.assertTrue(any(isinstance(x,ast.Call) and isinstance(x.func,ast.Name) and x.func.id=='Depends' and isinstance(x.args[0],ast.Name) and x.args[0].id=='get_admin_user' for x in node.args.defaults))
++        return scope,users
++    async def test_another_admin_cannot_rotate_first_owner(self):
++        s,u=self.fixture()
++        with self.assertRaises(HTTPException) as error:await s['rotate_user_api_key_by_id'](None,Response(),'owner',session_user=NS(id='other'),db=None)
++        self.assertEqual(error.exception.status_code,403);u.update_user_api_key_by_id.assert_not_awaited()
++    async def test_owner_rotation_no_store_and_disabled_creation(self):
++        s,u=self.fixture();response=Response();result=await s['rotate_user_api_key_by_id'](None,response,'owner',session_user=NS(id='owner'),db=None)
++        self.assertEqual(result,{'api_key':'fixture-new-key'});self.assertEqual(response.headers['Cache-Control'],'no-store')
++        s,u=self.fixture(enabled=False)
++        with self.assertRaises(HTTPException):await s['rotate_user_api_key_by_id'](None,Response(),'owner',session_user=NS(id='owner'),db=None)
++        u.update_user_api_key_by_id.assert_not_awaited()
++    async def test_revocation_stays_available_when_creation_disabled(self):
++        s,u=self.fixture(enabled=False,permission=False,target='member')
++        self.assertTrue(await s['delete_user_api_key_by_id'](None,'member',session_user=NS(id='owner'),db=None));u.delete_user_api_key_by_id.assert_awaited_once_with('member',db=None)
++
++class EmbeddingBuffers(unittest.TestCase):
++    def exercise(self,fail=False,add=False):
++        loop=asyncio.new_event_loop();thread=threading.Thread(target=loop.run_forever,daemon=True);thread.start()
++        calls=[];inserted=[];deleted=[]
++        async def embedding(texts,**kwargs):
++            calls.append(texts)
++            if fail and len(calls)==2:raise RuntimeError('synthetic provider failure')
++            return [[1,2] for _ in texts]
++        client=NS(has_collection=lambda **_:False,insert=lambda **kwargs:inserted.extend(kwargs['items']),
++                  delete=lambda **kwargs:deleted.append(('ids',kwargs['ids'])),delete_collection=lambda **_:deleted.append(('collection',None)))
++        log=logging.getLogger('silent-embedding-fixture');log.disabled=True
++        scope={'log':log,'sanitize_text_for_db':lambda s:s,'get_vector_db_client':lambda:client,'get_embedding_function':lambda *a,**k:embedding,
++               'RAG_EMBEDDING_BUFFER_SIZE':3,'RAG_EMBEDDING_TIMEOUT':5,'asyncio':asyncio,'time':time,'uuid':uuid}
++        f=functions('routers/retrieval.py',['save_docs_to_vector_db'],scope)['save_docs_to_vector_db']
++        config={'rag.embedding_engine':'openai','rag.embedding_model':'fixture','rag.openai.api_base_url':'http://fixture.invalid',
++                'rag.openai.api_key':'fixture','rag.embedding_batch_size':2,'rag.embedding_content_prefix':'','rag.embedding_concurrent_requests':1,'rag.enable_async_embedding':True}
++        request=NS(app=NS(state=NS(ef=None,main_loop=loop)));docs=[NS(page_content='chunk'+str(i),metadata={'position':i}) for i in range(5)]
++        try:
++            if fail:
++                with self.assertRaisesRegex(RuntimeError,'synthetic'):f(request,docs,'fixture',config,split=False,add=add)
++            else:self.assertTrue(f(request,docs,'fixture',config,split=False))
++            return calls,inserted,deleted
++        finally:loop.call_soon_threadsafe(loop.stop);thread.join();loop.close()
++    def test_buffered_batches_keep_all_text_and_metadata_in_order(self):
++        calls,items,deleted=self.exercise();self.assertEqual(list(map(len,calls)),[4,1]);self.assertEqual([x['metadata']['position'] for x in items],list(range(5)));self.assertEqual(deleted,[])
++    def test_partial_failure_rolls_back_only_new_items_or_new_collection(self):
++        for add in (True,False):
++            calls,items,deleted=self.exercise(fail=True,add=add)
++            self.assertEqual(len(items),4);self.assertEqual(deleted[0][0],'ids' if add else 'collection')
++            if add:self.assertEqual(set(deleted[0][1]),{x['id'] for x in items})
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_daily_20261030.py b/.avx1/test_daily_20261030.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..077d35fa7e7306641bbcdb6f1b7fcfd84aab435a
+--- /dev/null
++++ b/.avx1/test_daily_20261030.py
+@@ -0,0 +1,194 @@
++"""Offline regressions for new MCP app authorization, KB limits and tool rounds."""
++import ast
++import asyncio
++import copy
++import hmac
++import json
++from pathlib import Path
++import re
++from types import SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, Mock
++
++from fastapi import HTTPException
++from pydantic import BaseModel, ConfigDict, Field, model_validator, ValidationError
++from typing import Literal
++
++ROOT = Path(__file__).resolve().parents[1] / 'backend/open_webui'
++
++
++def load(path, names, scope, owner=None):
++    tree = ast.parse((ROOT / path).read_text('utf-8'))
++    nodes = tree.body if owner is None else next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == owner).body
++    chosen = [copy.deepcopy(n) for n in nodes if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
++    assert {n.name for n in chosen} == set(names)
++    for node in chosen:
++        node.decorator_list = []
++    future = ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future, *chosen], type_ignores=[])), path, 'exec'), scope)
++    return scope
++
++
++class MCPApps(unittest.IsolatedAsyncioTestCase):
++    def fixture(self, binding=True, app_visible=True):
++        definitions = {'origin': {'name': 'origin', '_meta': {'ui': {'resourceUri': 'ui://fixture'}}},
++                       'action': {'name': 'action', '_meta': {'ui': {'visibility': ['app'] if app_visible else ['model']}}}}
++        client = NS(tool_definitions=definitions, disconnect=AsyncMock(), call_tool_raw=AsyncMock(return_value={'content': []}),
++                    read_resource=AsyncMock(return_value={'contents': []}))
++        scope = {'BaseModel': BaseModel, 'ConfigDict': ConfigDict, 'Field': Field, 'model_validator': model_validator,
++                 'Literal': Literal, 'Depends': lambda _: None, 'get_verified_user': object(),
++                 'HTTPException': HTTPException, 'asyncio': asyncio,
++                 'verify_app_binding': lambda *args: binding,
++                 'connect_mcp_server': AsyncMock(return_value=(client, []))}
++        load('utils/mcp/apps.py', ['ui_metadata', 'ui_resource_uri'], scope)
++        load('utils/mcp/client.py', ['tool_visible_to'], scope)
++        load('routers/tools.py', ['MCPAppRPCForm', 'mcp_app_rpc'], scope)
++        scope['MCPAppRPCForm'].model_rebuild(_types_namespace=scope)
++        return scope, client
++
++    def form(self, scope, **values):
++        return scope['MCPAppRPCForm'](tool_name='origin', binding='a' * 64,
++                                    method='tools/call', params={'name': 'action', 'arguments': {}}, **values)
++
++    async def test_bad_binding_never_opens_mcp_connection(self):
++        s, client = self.fixture(binding=False)
++        with self.assertRaises(HTTPException) as error:
++            await s['mcp_app_rpc'](None, 'server:mcp:fixture', self.form(s), NS(id='viewer'))
++        self.assertEqual(error.exception.status_code, 403)
++        s['connect_mcp_server'].assert_not_awaited()
++        client.call_tool_raw.assert_not_awaited()
++
++    async def test_app_cannot_call_model_only_tool_and_connection_closes(self):
++        s, client = self.fixture(app_visible=False)
++        with self.assertRaises(HTTPException) as error:
++            await s['mcp_app_rpc'](None, 'server:mcp:fixture', self.form(s), NS(id='viewer'))
++        self.assertEqual(error.exception.status_code, 403)
++        client.call_tool_raw.assert_not_awaited()
++        client.disconnect.assert_awaited_once()
++
++    async def test_allowed_call_uses_current_user_once(self):
++        s, client = self.fixture()
++        user = NS(id='viewer')
++        await s['mcp_app_rpc'](None, 'server:mcp:fixture', self.form(s), user)
++        s['connect_mcp_server'].assert_awaited_once_with(None, 'fixture', user, {})
++        client.call_tool_raw.assert_awaited_once_with('action', {})
++        client.disconnect.assert_awaited_once()
++
++    async def test_failed_uncertain_call_is_not_replayed(self):
++        s, client = self.fixture()
++        s['log'] = NS(warning=lambda *args: None)
++        client.call_tool_raw.side_effect = RuntimeError('synthetic uncertain outcome')
++        with self.assertRaises(HTTPException) as error:
++            await s['mcp_app_rpc'](None, 'server:mcp:fixture', self.form(s), NS(id='viewer'))
++        self.assertEqual(error.exception.status_code, 502)
++        self.assertEqual(client.call_tool_raw.await_count, 1)
++        client.disconnect.assert_awaited_once()
++
++    def test_form_rejects_arbitrary_rpc_and_extra_arguments(self):
++        s, _ = self.fixture()
++        for method, params in [('shell/exec', {}), ('tools/call', {'name': 'action', 'shell': 'bad'}), ('resources/read', {'uri': 42})]:
++            with self.assertRaises(ValidationError):
++                s['MCPAppRPCForm'](tool_name='origin', binding='a'*64, method=method, params=params)
++
++    def test_csp_injection_and_cross_tool_binding_rejected(self):
++        s = {'hmac': hmac, 'JSONCodec': json, 'WEBUI_SECRET_KEY': 'synthetic',
++             '_DOMAIN': re.compile(r'(?:https?|wss?)://(?:\*\.)?(?:[a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\])(?::[0-9]{1,5})?')}
++        load('utils/mcp/apps.py', ['app_csp', 'app_binding', 'verify_app_binding'], s)
++        token = s['app_binding']('server1', 'tool1')
++        self.assertFalse(s['verify_app_binding']('server2', 'tool1', token))
++        self.assertFalse(s['verify_app_binding']('server1', 'tool2', token))
++        for domain in ["https://example.org; script-src *", 'javascript:alert(1)', 'https://example.org/path']:
++            with self.assertRaises(ValueError):
++                s['app_csp']({'csp': {'connectDomains': [domain]}})
++        self.assertIn("connect-src 'none'", s['app_csp']({}))
++
++
++class KnowledgeLimits(unittest.IsolatedAsyncioTestCase):
++    async def test_pending_uploads_count_and_existing_files_are_excluded(self):
++        config = NS(get=AsyncMock(return_value=None))
++        knowledge = NS(get_knowledge_by_id=AsyncMock(return_value=NS(meta={})),
++                       get_file_limits=AsyncMock(return_value={'max_file_count': 2, 'max_file_size': None}),
++                       get_file_count_by_id=AsyncMock(return_value=2))
++        s = {'Config': config, 'Knowledges': knowledge, 'HTTPException': HTTPException}
++        load('routers/knowledge.py', ['check_knowledge_upload_limits'], s)
++        with self.assertRaises(HTTPException) as error:
++            await s['check_knowledge_upload_limits']('kb', 1, exclude_file_ids=['already-pending'])
++        self.assertEqual(error.exception.status_code, 400)
++        knowledge.get_file_count_by_id.assert_awaited_once_with('kb', include_pending=True, exclude_file_ids=['already-pending'], db=None)
++
++    async def test_oversized_file_rejected_before_embedding(self):
++        s = {'Config': NS(get=AsyncMock(return_value=None)), 'HTTPException': HTTPException,
++             'ERROR_MESSAGES': NS(FILE_TOO_LARGE=lambda **_: 'too large'),
++             'Knowledges': NS(get_knowledge_by_id=AsyncMock(return_value=NS(meta={})),
++                             get_file_limits=AsyncMock(return_value={'max_file_count': None, 'max_file_size': 1}))}
++        load('routers/knowledge.py', ['check_knowledge_upload_limits'], s)
++        with self.assertRaises(HTTPException) as error:
++            await s['check_knowledge_upload_limits']('kb', 1, file_size=1024*1024+1)
++        self.assertEqual(error.exception.status_code, 413)
++
++
++class ToolRounds(unittest.TestCase):
++    def test_reused_call_id_does_not_merge_separate_rounds(self):
++        s = load('utils/session_records.py', ['normalize_tool_output', 'pair_results'], {})
++        rows = [{'type': 'function_call', 'call_id': 'same', 'status': 'completed'},
++                {'type': 'function_call_output', 'call_id': 'same', 'output': 'first', 'duration': 1},
++                {'type': 'function_call', 'call_id': 'same', 'status': 'rejected'},
++                {'type': 'function_call_output', 'call_id': 'same', 'output': 'second', 'duration': 2}]
++        before = copy.deepcopy(rows)
++        result = s['normalize_tool_output'](rows)
++        self.assertEqual(rows, before)
++        self.assertEqual(len(result), 4)
++        self.assertEqual(result[0]['duration'], 1)
++        self.assertEqual(result[2]['duration'], 2)
++        self.assertEqual(result[2]['status'], 'rejected')
++
++
++class SubagentModels(unittest.IsolatedAsyncioTestCase):
++    async def test_admin_allowlist_is_intersected_with_current_user_model_access(self):
++        user=NS(id='viewer')
++        all_models=[{'id':'visible','info':None},{'id':'private','name':'Private'}]
++        s={'Config':NS(get=AsyncMock(return_value=[{'id':'visible'},{'id':'private'},'invalid'])),
++           'get_all_models':AsyncMock(return_value=all_models),
++           'get_filtered_models':AsyncMock(return_value=[all_models[0]])}
++        load('utils/subagents.py',['get_subagent_models'],s)
++        result=await s['get_subagent_models'](None,user)
++        self.assertEqual([m['id'] for m in result],['visible'])
++        s['get_filtered_models'].assert_awaited_once_with(all_models,user)
++
++    def test_author_modes_and_parent_controls_do_not_leak_to_different_model(self):
++        s=load('utils/subagents.py',['subagent_request_params'],{})
++        parent={'reasoning_effort':'ultra','temperature':.7,'custom_params':{'reason_mode':'auto'}}
++        before=copy.deepcopy(parent)
++        self.assertEqual(s['subagent_request_params']('davidau','deepseek',parent),{})
++        self.assertEqual(parent,before)
++        same=s['subagent_request_params']('davidau','davidau',parent)
++        self.assertEqual(same,parent);self.assertIsNot(same,parent)
++
++    async def test_unlisted_child_never_creates_a_chat_or_runs_model(self):
++        s={'Config':NS(get_many=AsyncMock(return_value={})),
++           'Chats':NS(get_chat_folder_id=AsyncMock(return_value=None),insert_new_chat=AsyncMock()),
++           'copy':copy,'UserModel':lambda **d:NS(**d),
++           'get_subagent_models':AsyncMock(return_value=[{'id':'allowed'}])}
++        load('utils/subagents.py',['delegate'],s)
++        metadata={'model_id':'parent','chat_context':{'params':{'temperature':.5}}}
++        before=copy.deepcopy(metadata)
++        result=await s['delegate']('task','context',False,model_id='private',request=None,
++                                   user_data={'id':'viewer'},metadata=metadata,parent_chat_id='chat',parent_message_id='message')
++        self.assertIn('not available',result);s['Chats'].insert_new_chat.assert_not_awaited()
++        self.assertEqual(metadata,before)
++
++
++class RemovedProvider(unittest.TestCase):
++    def test_browser_account_provider_and_native_host_are_not_shipped(self):
++        root=ROOT.parent.parent
++        self.assertFalse((ROOT/'providers').exists())
++        self.assertFalse((ROOT/'routers/local_providers.py').exists())
++        self.assertNotIn('local_providers', (ROOT/'main.py').read_text('utf-8'))
++        self.assertNotIn('dsw2api', (root/'src/lib/components/AddConnectionModal.svelte').read_text('utf-8'))
++        build=(root/'.avx1/build.py').read_text('utf-8')
++        self.assertNotIn('build_browser_bridge',build)
++        self.assertNotIn('owui-native-host.exe',build)
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/test_free_llm.mjs b/.avx1/test_free_llm.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..899cc8b746eaff7119b3f3438bff83098df0b225
+--- /dev/null
++++ b/.avx1/test_free_llm.mjs
+@@ -0,0 +1,14 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import {freeLlmPreset,FREE_LLM_CATALOG} from '../src/lib/utils/freeLlm.js';
++
++test('one anonymous preset exposes two fixed models without changing the catalog',()=>{
++ const preset=freeLlmPreset();
++ assert.equal(preset.key,'');assert.equal(preset.auth_type,'none');
++ assert.equal(preset.forward_cookies,false);assert.deepEqual(preset.headers,{});
++ assert.equal(preset.provider,'freellm');assert.equal(preset.prefix_id,'FreeLLM');
++ assert.equal(preset.model_ids.length,2);assert.equal(FREE_LLM_CATALOG.hourly_requests_per_ip,200);
++ assert.equal(new Set(FREE_LLM_CATALOG.models.map(m=>m.vendor)).size,2);
++ preset.model_ids.length=0;assert.equal(freeLlmPreset().model_ids.length,2);
++ assert.equal(FREE_LLM_CATALOG.research_sources.length,3);
++});
+diff --git a/.avx1/test_free_llm.py b/.avx1/test_free_llm.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2bf22d93f95cb9614c65eee2bd42d1c9ac897b13
+--- /dev/null
++++ b/.avx1/test_free_llm.py
+@@ -0,0 +1,59 @@
++"""Free-model allowlist and actual outbound identity isolation; offline only."""
++import copy
++import importlib.util
++from pathlib import Path
++import sys
++import unittest
++from unittest.mock import AsyncMock, patch
++from types import SimpleNamespace as NS
++from fastapi import HTTPException
++from test_daily_20261030 import load
++
++ROOT = Path(__file__).resolve().parents[1]
++spec = importlib.util.spec_from_file_location('free_llm_policy', ROOT/'backend/open_webui/utils/free_llm.py')
++policy = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(policy)
++
++
++class FreeLLM(unittest.IsolatedAsyncioTestCase):
++    def test_only_two_reviewed_models_and_no_paid_or_credential_fallback(self):
++        cfg={'provider':'freellm','auth_type':'none'}
++        models=[m['id'] for m in policy.CATALOG['models']]
++        self.assertEqual(len(set(models)),2)
++        self.assertEqual(len({m['vendor'] for m in policy.CATALOG['models']}),2)
++        for model in models:policy.check_free_llm_request(cfg,policy.CATALOG['base_url'],'',model)
++        for override in ({'auth_type':'session'},{'headers':{'Authorization':'secret'}},
++                         {'forward_cookies':True},{'azure':True},{'api_type':'responses'}):
++            with self.assertRaises(HTTPException):policy.check_free_llm_request({**cfg,**override},policy.CATALOG['base_url'])
++        for url,key,model in [('http://127.0.0.1/v1','',models[0]),
++                              (policy.CATALOG['base_url'],'secret',models[0]),
++                              (policy.CATALOG['base_url'],'','paid/model')]:
++            with self.assertRaises(HTTPException):policy.check_free_llm_request(cfg,url,key,model)
++        policy.check_free_llm_request({'provider':'other'},'http://local','unchanged','other-model')
++
++    def test_private_routing_identity_is_not_part_of_the_cloud_payload(self):
++        body={'model':policy.CATALOG['models'][0]['id'],'messages':[{'role':'user','content':'fixture'}],
++              'user':'private-user','metadata':{'chat_id':'private-chat'},'temperature':.6}
++        before=copy.deepcopy(body)
++        clean=policy.prepare_free_llm_payload({'provider':'freellm','auth_type':'none'},policy.CATALOG['base_url'],'',body)
++        self.assertNotIn('user',clean);self.assertNotIn('metadata',clean)
++        self.assertEqual(clean['messages'],body['messages']);self.assertEqual(clean['temperature'],.6)
++        self.assertEqual(body,before)
++        self.assertIs(policy.prepare_free_llm_payload({'provider':'other'},'local','key',body),body)
++
++    async def test_actual_header_builder_never_reads_or_forwards_private_identity(self):
++        scope={'ENABLE_FORWARD_USER_INFO_HEADERS':True,
++               'get_custom_headers':AsyncMock(side_effect=AssertionError('Private headers evaluated')),
++               'get_system_oauth_token':AsyncMock(side_effect=AssertionError('OAuth evaluated'))}
++        load('utils/headers.py',['get_headers_and_cookies'],scope)
++        request=NS(cookies={'private':'cookie'},state=NS(token=NS(credentials='private-session')))
++        user=NS(id='private-user',email='private@example.invalid',name='Private',role='admin')
++        config={'provider':'freellm','auth_type':'none'};before=copy.deepcopy(config)
++        with patch.dict(sys.modules,{'open_webui.utils.free_llm':policy}):
++            headers,cookies=await scope['get_headers_and_cookies'](request,policy.CATALOG['base_url'],'',config,{'chat_id':'private-chat'},user=user)
++        self.assertEqual(headers,{'Content-Type':'application/json'});self.assertEqual(cookies,{})
++        self.assertEqual(config,before)
++        scope['get_custom_headers'].assert_not_awaited();scope['get_system_oauth_token'].assert_not_awaited()
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_frontend_browser.py b/.avx1/test_frontend_browser.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..dd07968300e97c387791c21b024674c345a3d8b5
+--- /dev/null
++++ b/.avx1/test_frontend_browser.py
+@@ -0,0 +1,80 @@
++"""Boot the packaged UI in Chromium against an isolated, offline backend."""
++import json
++import argparse
++import os
++from pathlib import Path
++import socket
++import subprocess
++import sys
++import time
++import urllib.request
++import uuid
++from common import ROOT,WORK
++
++parser=argparse.ArgumentParser()
++parser.add_argument('--check-bundle-only',action='store_true')
++parser.add_argument('--frontend',type=Path,default=ROOT/'build')
++args=parser.parse_args()
++# The previous regression resolved Svelte's server context into the client bundle.
++maps=list((args.frontend/'_app/immutable').rglob('*.js.map'))
++if not maps:raise RuntimeError('Browser sourcemaps missing from the test input')
++for mapping in maps:
++    data=json.loads(mapping.read_text('utf-8'))
++    if any('/svelte/src/internal/server/context.js' in source.replace('\\','/') for source in data.get('sources',[])):
++        raise RuntimeError('Svelte server context was included in the browser bundle')
++if args.check_bundle_only:
++    print('CLIENT_BUNDLE_USES_NO_SVELTE_SERVER_CONTEXT')
++    raise SystemExit(0)
++
++subprocess.run([sys.executable,'-m','pip','install','playwright>=1.58,<2'],check=True)
++subprocess.run([sys.executable,'-m','playwright','install','chromium'],check=True)
++from playwright.sync_api import sync_playwright
++with socket.socket() as probe:
++    probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
++from strata_reasoning_browser import ReasoningProvider
++reasoning_provider=ReasoningProvider()
++environment=dict(os.environ,DATA_DIR=str(WORK/('browser-smoke-data-'+uuid.uuid4().hex[:12])),WEBUI_SECRET_KEY='ci-local-browser-fixture-key',
++    OPENAI_API_BASE_URL=reasoning_provider.url,OPENAI_API_BASE_URLS=reasoning_provider.url,
++    OPENAI_API_KEY='ci-fixture-no-model',OPENAI_API_KEYS='ci-fixture-no-model',
++    OFFLINE_MODE='true',HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',ENABLE_VERSION_UPDATE_CHECK='false',
++    RAG_EMBEDDING_ENGINE='openai',RAG_OPENAI_API_BASE_URL='http://127.0.0.1:1/v1',
++    RAG_OPENAI_API_KEY='ci-fixture-no-network',RAG_EMBEDDING_MODEL_AUTO_UPDATE='false',WHISPER_MODEL_AUTO_UPDATE='false')
++launcher="import site,sys;site.addsitedir(sys.argv[1]);sys.path.insert(0,sys.argv[1]);sys.argv=['open-webui','serve','--host','127.0.0.1','--port',sys.argv[2]];from open_webui import app;app()"
++log=(WORK/'browser-smoke-server.log').open('w',encoding='utf-8')
++process=subprocess.Popen([sys.executable,'-c',launcher,str(WORK/'audit-packages'),str(port)],env=environment,stdout=log,stderr=log)
++try:
++    deadline=time.monotonic()+240
++    while True:
++        if process.poll() is not None:raise RuntimeError('Browser test backend exited; inspect the CI-only smoke log')
++        try:
++            with urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=2) as response:
++                if json.load(response).get('status') is True:break
++        except Exception:pass
++        if time.monotonic()>deadline:raise RuntimeError('Browser test backend startup timed out')
++        time.sleep(1)
++    with sync_playwright() as playwright:
++        browser=playwright.chromium.launch(headless=True)
++        page=browser.new_page()
++        errors=[]
++        page.on('pageerror',lambda error:errors.append(str(error)))
++        page.goto(f'http://127.0.0.1:{port}',wait_until='domcontentloaded')
++        form=page.locator('input[type="email"],input[type="password"]').first
++        onboarding=page.get_by_role('button',name='Get started',exact=True)
++        form.or_(onboarding).first.wait_for(state='visible',timeout=45000)
++        if onboarding.is_visible():onboarding.click()
++        form.wait_for(state='visible',timeout=45000)
++        if errors:raise RuntimeError('Packaged frontend JavaScript failed: '+errors[0])
++        from strata_reasoning_browser import check_strata_reasoning
++        check_strata_reasoning(browser,f'http://127.0.0.1:{port}',WORK,reasoning_provider)
++        browser.close()
++    print('CHROMIUM_PACKAGED_LOGIN_RENDERED_NO_PAGE_ERRORS')
++except Exception:
++    log.flush()
++    print((WORK/'browser-smoke-server.log').read_text('utf-8',errors='replace')[-6000:])
++    raise
++finally:
++    reasoning_provider.close()
++    process.terminate()
++    try:process.wait(timeout=20)
++    except subprocess.TimeoutExpired:process.kill();process.wait()
++    log.close()
+diff --git a/.avx1/test_locales.py b/.avx1/test_locales.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c08ce8b6cabbd90f797e706467133345703b5fca
+--- /dev/null
++++ b/.avx1/test_locales.py
+@@ -0,0 +1,35 @@
++"""Reject missing Russian UI keys or changed interpolation parameters."""
++import json
++from pathlib import Path
++import re
++from common import ROOT
++
++project=json.loads((ROOT/'.avx1/project.json').read_text('utf-8'))['id']
++paths={
++ 'webui':('src/lib/i18n/locales/en-US/translation.json','src/lib/i18n/locales/ru-RU/translation.json'),
++ 'desktop':('src/renderer/src/lib/i18n/locales/en-US/translation.json','src/renderer/src/lib/i18n/locales/ru-RU/translation.json'),
++ 'conduit':('lib/l10n/app_en.arb','lib/l10n/app_ru.arb')
++}
++if project not in paths:
++    print('Terminal UI is localized in its host applications; command output is unchanged.')
++    raise SystemExit(0)
++en,ru=[json.loads((ROOT/path).read_text('utf-8')) for path in paths[project]]
++allow=json.loads((ROOT/'.avx1/locale-allowlist.json').read_text('utf-8'))
++checked=0
++for key,source in en.items():
++    if key.startswith('@') or not isinstance(source,str):continue
++    if project=='webui' and not source:source=key
++    target=ru.get(key)
++    if not isinstance(target,str) or not target.strip():raise RuntimeError('Missing Russian UI string: '+key)
++    expression=r'\{\{\s*([^{}]+?)\s*\}\}' if project!='conduit' else r'\{([A-Za-z_]\w*)\}'
++    if project=='conduit' and en.get('@'+key,{}).get('placeholders'):
++        names=set(en['@'+key]['placeholders'])
++        if set(ru.get('@'+key,{}).get('placeholders',{}))!=names or any(not re.search(r'\{'+re.escape(name)+r'\s*[,}]',target) for name in names):
++            raise RuntimeError('Russian ICU parameters changed: '+key)
++    elif set(re.findall(expression,source))!=set(re.findall(expression,target)):
++        raise RuntimeError('Russian interpolation mismatch: '+key)
++    visible=re.sub(expression,'',source)
++    if source==target and re.search('[A-Za-z]',visible) and allow.get(key)!=source:
++        raise RuntimeError('Unreviewed English UI string: '+key)
++    checked+=1
++print('RUSSIAN_LOCALE_KEYS_AND_PARAMETERS_VERIFIED='+str(checked))
+diff --git a/.avx1/test_mainstream_policy.py b/.avx1/test_mainstream_policy.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..eae02c123a0879b661850db8f04b4340e16c2155
+--- /dev/null
++++ b/.avx1/test_mainstream_policy.py
+@@ -0,0 +1,277 @@
++"""Offline regressions for mainstream browser and subagent trust boundaries."""
++import ast
++import copy
++import asyncio
++from contextlib import suppress
++from datetime import datetime, timedelta, timezone
++import json
++from pathlib import Path
++import re
++import sys
++from types import ModuleType, SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, Mock, patch
++import uuid
++from urllib.parse import quote
++
++from cryptography.fernet import Fernet, InvalidToken
++from fastapi import HTTPException, Request
++from fastapi.security import HTTPAuthorizationCredentials
++from fastapi.security.utils import get_authorization_scheme_param
++import jwt
++from starlette.middleware.cors import CORSMiddleware
++
++ROOT = Path(__file__).resolve().parents[1] / 'backend/open_webui'
++
++
++def load(path, names, scope):
++    tree = ast.parse((ROOT / path).read_text('utf-8'))
++    nodes = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.name in names]
++    assert len(nodes) == len(names)
++    for node in nodes:
++        node.decorator_list = []
++    future = ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[])), path, 'exec'), scope)
++    return scope
++
++
++class SubagentPolicy(unittest.IsolatedAsyncioTestCase):
++    def policy(self, configured):
++        models = [{'id': 'a', 'name': 'A'}, {'id': 'b', 'name': 'B'}, {'id': 'private'}]
++        return load('utils/subagents.py', {'get_subagent_models', 'subagent_request_params'}, {
++            'Config': NS(get=AsyncMock(return_value=configured)),
++            'get_all_models': AsyncMock(return_value=models),
++            'get_filtered_models': AsyncMock(return_value=models[:2]),
++        })
++
++    async def test_old_call_keeps_admin_policy_and_user_acl(self):
++        scope = self.policy([{'id': 'a'}, {'id': 'private'}, {'id': 'missing'}])
++        result = await scope['get_subagent_models'](None, NS(id='user'))
++        self.assertEqual([m['id'] for m in result], ['a'])
++
++    async def test_card_can_only_narrow_admin_list(self):
++        scope = self.policy([{'id': 'a'}, {'id': 'b'}])
++        card = {'info': {'meta': {'subagents': {'model_ids': ['b', 'private']}}}}
++        before = copy.deepcopy(card)
++        result = await scope['get_subagent_models'](None, NS(id='user'), card)
++        self.assertEqual([m['id'] for m in result], ['b'])
++        self.assertEqual(card, before)
++
++    async def test_card_cannot_expand_or_enable_an_empty_admin_list(self):
++        for configured in ([], [{'id': 'a'}]):
++            scope = self.policy(configured)
++            card = {'info': {'meta': {'subagents': {'model_ids': ['b']}}}}
++            self.assertEqual(await scope['get_subagent_models'](None, NS(id='user'), card), [])
++
++    async def test_explicit_empty_card_disables_other_models(self):
++        scope = self.policy([{'id': 'a'}])
++        self.assertEqual(await scope['get_subagent_models'](None, NS(id='user'), {'info': {'meta': {'subagents': {'model_ids': []}}}}), [])
++
++    def test_different_model_does_not_inherit_author_modes(self):
++        scope = self.policy([])
++        params = {'reasoning_effort': 'ultra', 'temperature': 0.7}
++        self.assertEqual(scope['subagent_request_params']('parent', 'child', params), {})
++        same = scope['subagent_request_params']('parent', 'parent', params)
++        self.assertEqual(same, params)
++        self.assertIsNot(same, params)
++
++
++class BrowserOwner(unittest.IsolatedAsyncioTestCase):
++    def setUp(self):
++        self.user = NS(id='owner', role='user')
++        self.users = {'owner': self.user, 'other': NS(id='other', role='user')}
++        self.revoked = set()
++        self.api_keys = {'sk-synthetic-owner': self.user}
++        self.redis = object()
++        self.path = '/api/v1/terminals/server/browser/view/session/ticket/page'
++        self.allowed_api_paths = {self.path}
++        self.last_api_path = None
++        self.last_api_method = None
++        async def valid(decoded, redis):
++            self.assertIs(redis, self.redis)
++            return decoded.get('jti') not in self.revoked
++        async def by_key(request, key):
++            self.last_api_path = request.url.path
++            self.last_api_method = request.method
++            if key not in self.api_keys or request.url.path not in self.allowed_api_paths:
++                raise HTTPException(401)
++            return self.api_keys[key]
++        self.scope = {'jwt': jwt, 'uuid': uuid, 'datetime': datetime, 'UTC': timezone.utc,
++                      'SESSION_SECRET': 'synthetic-browser-signing-key-' * 3, 'ALGORITHM': 'HS256',
++                      'log': Mock(), 'HTTPException': HTTPException, 'Request': Request,
++                      'HTTPAuthorizationCredentials': HTTPAuthorizationCredentials,
++                      'get_authorization_scheme_param': get_authorization_scheme_param,
++                      'is_valid_token': valid, 'get_current_user_by_api_key': by_key,
++                      'Users': NS(get_user_by_id=AsyncMock(side_effect=lambda identity: self.users.get(identity))),
++                      'VERIFIED_USER_ROLES': {'user', 'admin'}, 'InvalidToken': InvalidToken}
++        load('utils/auth.py', {'create_token', 'decode_token', 'get_http_authorization_cred', 'get_verified_user_by_token', 'get_optional_verified_user_from_request'}, self.scope)
++        load('utils/browser.py', {'browser_ticket', 'browser_access'}, self.scope)
++        fernet = Fernet(Fernet.generate_key())
++        oauth = ModuleType('open_webui.utils.oauth')
++        oauth.encrypt_data = lambda data: fernet.encrypt(json.dumps(data).encode()).decode()
++        oauth.decrypt_data = lambda data: json.loads(fernet.decrypt(data.encode()))
++        self.modules = patch.dict(sys.modules, {'open_webui.utils.oauth': oauth})
++        self.modules.start()
++        self.addCleanup(self.modules.stop)
++
++    def parent(self, identity='owner', expired=False):
++        return self.scope['create_token']({'id': identity}, expires_delta=timedelta(seconds=-1 if expired else 3600))
++
++    def ticket(self, parent, identity='owner'):
++        return self.scope['browser_ticket']('server', identity, 'chat', {'id': 'session', 'token': 'synthetic-capability'},
++                                            {'Authorization': 'Bearer synthetic-terminal-key'}, {'cookie': 'synthetic-cookie'}, owner_token=parent)
++
++    def context(self, websocket=False):
++        return NS(scope={'type': 'websocket' if websocket else 'http', 'method': 'GET', 'scheme': 'http',
++                         'server': ('127.0.0.1', 8080), 'path': self.path, 'query_string': b'', 'headers': [],
++                         'app': NS(state=NS(redis=self.redis)), 'state': {}})
++
++    async def access(self, ticket, websocket=False):
++        return await self.scope['browser_access']('server', 'session', ticket, self.context(websocket))
++
++    async def test_parent_secret_is_encrypted_and_not_forwarded(self):
++        parent = self.parent()
++        ticket = self.ticket(parent)
++        decoded = self.scope['decode_token'](ticket)
++        self.assertNotIn(parent, json.dumps(decoded))
++        self.assertNotIn('synthetic-terminal-key', json.dumps(decoded))
++        self.assertNotIn('synthetic-capability', json.dumps(decoded))
++        user, data = await self.access(ticket)
++        self.assertEqual(user.id, 'owner')
++        self.assertNotIn('owner_token', data['relay'])
++        self.assertNotIn('capability', data['relay'])
++        self.assertEqual(data['capability'], 'synthetic-capability')
++        self.assertEqual(data['relay']['authorization'], 'Bearer synthetic-terminal-key')
++
++    async def test_expired_parent_is_rejected_even_when_ticket_is_signed(self):
++        with self.assertRaises(HTTPException) as error:
++            await self.access(self.ticket(self.parent(expired=True)))
++        self.assertEqual(error.exception.status_code, 401)
++
++    async def test_revocation_is_rechecked_on_http_and_websocket(self):
++        parent = self.parent()
++        ticket = self.ticket(parent)
++        await self.access(ticket)
++        self.revoked.add(self.scope['decode_token'](parent)['jti'])
++        for websocket in (False, True):
++            with self.assertRaises(HTTPException):
++                await self.access(ticket, websocket)
++
++    async def test_api_key_rotation_and_endpoint_policy_are_rechecked(self):
++        ticket = self.ticket('sk-synthetic-owner')
++        await self.access(ticket, True)
++        self.assertEqual(self.last_api_path, self.path)
++        self.assertEqual(self.last_api_method, 'GET')
++        self.allowed_api_paths.clear()
++        with self.assertRaises(HTTPException):
++            await self.access(ticket)
++        self.allowed_api_paths.add(self.path)
++        self.api_keys.clear()
++        with self.assertRaises(HTTPException):
++            await self.access(ticket)
++
++    async def test_http_method_is_preserved_for_central_key_policy(self):
++        request = self.context()
++        request.scope['method'] = 'POST'
++        await self.scope['browser_access']('server', 'session', self.ticket('sk-synthetic-owner'), request)
++        self.assertEqual(self.last_api_method, 'POST')
++
++    async def test_wrong_owner_and_unverified_role_are_rejected(self):
++        with self.assertRaises(HTTPException):
++            await self.access(self.ticket(self.parent('other')))
++        self.users['owner'] = NS(id='owner', role='pending')
++        with self.assertRaises(HTTPException):
++            await self.access(self.ticket(self.parent()))
++
++    async def test_purpose_server_session_cipher_and_old_tickets_fail_closed(self):
++        ticket = self.ticket(self.parent())
++        base = self.scope['decode_token'](ticket)
++        for field, value in [('purpose', 'wrong'), ('server', 'other'), ('session', 'other'), ('relay', 'invalid'), ('mode', 'invalid')]:
++            payload = {**base, field: value}
++            with self.subTest(field=field), self.assertRaises(HTTPException):
++                await self.access(self.scope['create_token'](payload))
++        from open_webui.utils.oauth import encrypt_data
++        with self.assertRaises(HTTPException):
++            await self.access(self.scope['create_token']({**base, 'relay': encrypt_data({'cookies': {}})}))
++
++
++class BrowserMode(unittest.IsolatedAsyncioTestCase):
++    def route_scope(self, mode):
++        self.connection = Mock()
++        class Context:
++            def __init__(self, value): self.value = value
++            async def __aenter__(self): return self.value
++            async def __aexit__(self, *args): return False
++        def connect(*args, **kwargs):
++            self.connection(*args, **kwargs)
++            return Context(object())
++        client = NS(ws_connect=connect)
++        data = {'mode': mode, 'relay': {'authorization': 'Bearer synthetic-terminal-key'},
++                'capability': 'synthetic-capability', 'chat': 'chat'}
++        self.proxy = AsyncMock(return_value='response')
++        return load('routers/terminals.py', {'browser_http', 'browser_ws'}, {
++            'HTTPException': HTTPException, 'browser_access': AsyncMock(return_value=(NS(id='owner'), data)),
++            'proxy_terminal': self.proxy, 'Config': NS(get=AsyncMock(return_value=[{'id': 'server'}])),
++            'get_terminal_connections': AsyncMock(return_value=[{'id':'server'}]),
++            'get_terminal_client':lambda *a,**k:Context(client),
++            'ENABLE_TOOL_SERVERS': True, 'has_connection_access': AsyncMock(return_value=True),
++            'terminal_context_available': lambda *a: True, 'terminal_context_id': lambda *a: None,
++            'terminal_context_config': lambda *a: {}, 'get_terminal_server_url': lambda *a: 'http://127.0.0.1:1',
++            'quote': quote, 'AIOHTTP_CLIENT_SESSION_SSL': True, 'TERMINAL_CONTEXT_HEADER': 'context',
++            'aiohttp': NS(ClientSession=lambda **k: Context(client), WSServerHandshakeError=type('HandshakeError', (Exception,), {})),
++            'asyncio': asyncio, 'suppress': suppress, 'log': Mock(),
++            'relay_from_browser': AsyncMock(), 'relay_to_browser': AsyncMock(), 'watch_access': AsyncMock(),
++        })
++
++    async def test_proxy_ticket_cannot_upgrade_to_chrome_and_reverse(self):
++        for mode, kind in [('proxy', 'stream'), ('proxy', 'vnc'), ('chrome', 'ws')]:
++            with self.subTest(mode=mode, kind=kind):
++                scope = self.route_scope(mode)
++                ws = NS(close=AsyncMock(), accept=AsyncMock())
++                await scope['browser_ws'](ws, 'server', 'session', 'ticket', kind)
++                ws.accept.assert_not_awaited()
++                ws.close.assert_awaited_once_with(code=4001)
++                self.connection.assert_not_called()
++
++    async def test_each_authorized_websocket_mode_still_connects(self):
++        for mode, kind in [('proxy', 'ws'), ('chrome', 'stream'), ('chrome', 'vnc')]:
++            with self.subTest(mode=mode, kind=kind):
++                scope = self.route_scope(mode)
++                ws = NS(close=AsyncMock(), accept=AsyncMock())
++                await scope['browser_ws'](ws, 'server', 'session', 'ticket', kind)
++                ws.accept.assert_awaited_once()
++                self.connection.assert_called_once()
++                self.assertEqual(self.connection.call_args.kwargs['headers']['Authorization'], 'Bearer synthetic-terminal-key')
++
++    async def test_http_view_is_proxy_only(self):
++        for mode in ('proxy', 'chrome'):
++            scope = self.route_scope(mode)
++            request = NS(state=NS(), scope={'path_params': {}})
++            if mode == 'chrome':
++                with self.assertRaises(HTTPException):
++                    await scope['browser_http'](request, 'server', 'session', 'ticket', 'frame/page')
++                self.proxy.assert_not_awaited()
++            else:
++                self.assertEqual(await scope['browser_http'](request, 'server', 'session', 'ticket', 'frame/page'), 'response')
++                self.proxy.assert_awaited_once()
++
++
++class BrowserCors(unittest.IsolatedAsyncioTestCase):
++    async def test_opaque_view_origin_does_not_relax_normal_api_cors(self):
++        scope = load('utils/asgi_middleware.py', {'BrowserCORSMiddleware'}, {'CORSMiddleware': CORSMiddleware, 're': re})
++        seen = []
++        async def app(request, receive, send):
++            seen.append(request['path'])
++            await send({'type': 'http.response.start', 'status': 200, 'headers': []})
++            await send({'type': 'http.response.body', 'body': b''})
++        middleware = scope['BrowserCORSMiddleware'](app, allow_origins=['https://approved.example'])
++        for path, expected in [('/api/v1/terminals/server/browser/view/session/ticket/page', 200), ('/api/v1/users', 400)]:
++            sent = []
++            request = {'type': 'http', 'method': 'OPTIONS', 'path': path, 'headers': [(b'origin', b'null'), (b'access-control-request-method', b'GET')]}
++            await middleware(request, AsyncMock(), AsyncMock(side_effect=sent.append))
++            self.assertEqual(sent[0]['status'], expected)
++        self.assertEqual(seen, ['/api/v1/terminals/server/browser/view/session/ticket/page'])
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/test_mcp_compat.py b/.avx1/test_mcp_compat.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c693cad825b9656f45c0d079de13771d6cc5c7f9
+--- /dev/null
++++ b/.avx1/test_mcp_compat.py
+@@ -0,0 +1,31 @@
++"""Check actual MCP 2 imports, constructor signatures and wire aliases."""
++import argparse
++import ast
++import inspect
++import importlib
++import json
++from pathlib import Path
++
++parser=argparse.ArgumentParser();parser.add_argument('--source',type=Path,required=True);args=parser.parse_args()
++bindings={}
++checked=[]
++for relative in ('utils/mcp/client.py','utils/oauth.py'):
++    tree=ast.parse((args.source/relative).read_text('utf-8'))
++    for node in ast.walk(tree):
++        if isinstance(node,ast.ImportFrom) and (node.module or '').startswith('mcp'):
++            module=importlib.import_module(node.module)
++            for alias in node.names:bindings[alias.asname or alias.name]=getattr(module,alias.name)
++    for node in ast.walk(tree):
++        if not isinstance(node,ast.Call) or not isinstance(node.func,ast.Name) or node.func.id not in bindings:continue
++        if any(isinstance(value,ast.Starred) for value in node.args) or any(item.arg is None for item in node.keywords):
++            raise RuntimeError('MCP call argument expansion requires a new compatibility review')
++        inspect.signature(bindings[node.func.id]).bind(*[object() for _ in node.args],**{item.arg:object() for item in node.keywords})
++        checked.append({'symbol':node.func.id,'source':relative})
++if not {'Client','streamable_http_client'}.issubset({item['symbol'] for item in checked}):
++    raise RuntimeError('MCP transport/client constructor was not checked')
++from mcp.types import CallToolResult,TextContent,Tool
++reply=CallToolResult(content=[TextContent(type='text',text='synthetic')],isError=True)
++assert reply.is_error and reply.model_dump(mode='json',by_alias=True)['isError'] is True
++tool=Tool(name='synthetic',inputSchema={'type':'object','properties':{}})
++assert tool.input_schema=={'type':'object','properties':{}}
++print(json.dumps({'mcp_symbols':'imported','calls_checked':checked,'wire_aliases':'passed'}))
+diff --git a/.avx1/test_mcp_protocol.py b/.avx1/test_mcp_protocol.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c0bea93e5198df5bd2cb44e9ca2a385c8b5f73d4
+--- /dev/null
++++ b/.avx1/test_mcp_protocol.py
+@@ -0,0 +1,154 @@
++"""Exercise the shipped MCP adapter against a real SDK ASGI server, offline."""
++import ast
++import asyncio
++import functools
++import json
++from pathlib import Path
++import unittest
++from contextlib import asynccontextmanager
++
++import httpx2
++import mcp
++from mcp.server import MCPServer
++
++SOURCE=Path(__file__).resolve().parents[1]/'backend/open_webui/utils/mcp/client.py'
++
++
++def adapter():
++    tree=ast.parse(SOURCE.read_text('utf-8'))
++    tree.body=[node for node in tree.body if not (
++        isinstance(node,ast.ImportFrom) and (node.module or '').startswith('open_webui'))]
++    scope={'AIOHTTP_CLIENT_SESSION_TOOL_SERVER_SSL':True,
++           'AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER':None,'MCP_INITIALIZE_TIMEOUT':5,'JSONCodec':json}
++    apps=SOURCE.with_name('apps.py')
++    app_tree=ast.parse(apps.read_text('utf-8'))
++    app_tree.body=[node for node in app_tree.body if not (
++        isinstance(node,ast.ImportFrom) and (node.module or '').startswith('open_webui'))]
++    scope['WEBUI_SECRET_KEY']='synthetic-mcp-app-secret'
++    exec(compile(app_tree,str(apps),'exec'),scope)
++    exec(compile(tree,str(SOURCE),'exec'),scope)
++    return scope
++
++
++class ProtocolCompatibility(unittest.IsolatedAsyncioTestCase):
++    async def test_real_sdk_transport_failure_does_not_cancel_chat_or_replay(self):
++        server=MCPServer('synthetic-transport-fault',log_level='ERROR')
++        @server.tool()
++        def echo(query:str)->str:return query
++        app=server.streamable_http_app(json_response=True,stateless_http=True)
++        attempts=[]
++        class FaultTransport(httpx2.ASGITransport):
++            async def handle_async_request(self,request):
++                body=await request.aread()
++                if b'tools/call' in body:
++                    attempts.append(True)
++                    raise httpx2.ReadError('synthetic transport EOF',request=request)
++                return await super().handle_async_request(request)
++        scope=adapter()
++        scope['create_httpx_client']=lambda **_:httpx2.AsyncClient(transport=FaultTransport(app=app),timeout=2)
++        client=scope['MCPClient']();owner=asyncio.current_task()
++        async with app.router.lifespan_context(app):
++            try:
++                await client.connect('http://127.0.0.1:8765/mcp')
++                try:await asyncio.wait_for(client.call_tool('echo',{'query':'fixture'}),5)
++                except Exception:pass
++                await asyncio.sleep(.05)
++                self.assertEqual(owner.cancelling(),0)
++                self.assertEqual(len(attempts),1,'Uncertain tool request must not be replayed')
++            finally:await client.disconnect()
++
++    def lifecycle_fixture(self,*,fail=False,opening=None,closing=None):
++        scope=adapter();owners=[]
++        @asynccontextmanager
++        async def http_client(**_):yield object()
++        class Session:
++            instructions='fixture'
++            async def __aenter__(self):
++                owners.append(('enter',asyncio.current_task()))
++                if opening:await opening.wait()
++                if fail:raise ValueError('synthetic connect failure')
++                return self
++            async def __aexit__(self,*_):
++                owners.append(('exit',asyncio.current_task()))
++                if closing:await closing.wait()
++        scope.update(create_httpx_client=http_client,Client=lambda *a,**k:Session(),streamable_http_client=lambda *a,**k:object())
++        return scope['MCPClient'](),owners
++
++    async def test_disconnect_from_other_task_closes_in_session_owner(self):
++        client,owners=self.lifecycle_fixture()
++        await client.connect('http://127.0.0.1:8765/mcp')
++        await asyncio.gather(client.disconnect(),client.disconnect())
++        self.assertEqual([v[0] for v in owners],['enter','exit'])
++        self.assertIs(owners[0][1],owners[1][1])
++        self.assertIsNone(client.client);self.assertIsNone(client.session_task)
++
++    async def test_failed_connect_is_clean_and_keeps_original_error(self):
++        client,_=self.lifecycle_fixture(fail=True)
++        with self.assertRaisesRegex(ValueError,'synthetic connect failure'):
++            await client.connect('http://127.0.0.1:8765/mcp')
++        self.assertIsNone(client.client);self.assertIsNone(client.session_task)
++
++    async def test_user_cancel_during_connect_propagates_without_leak(self):
++        client,_=self.lifecycle_fixture(opening=asyncio.Event())
++        task=asyncio.create_task(client.connect('http://127.0.0.1:8765/mcp'))
++        await asyncio.sleep(.01);task.cancel()
++        with self.assertRaises(asyncio.CancelledError):await task
++        self.assertIsNone(client.client);self.assertIsNone(client.session_task)
++
++    async def test_user_cancel_during_disconnect_is_not_suppressed(self):
++        gate=asyncio.Event();client,owners=self.lifecycle_fixture(closing=gate)
++        await client.connect('http://127.0.0.1:8765/mcp');session=client.session_task
++        task=asyncio.create_task(client.disconnect())
++        for _ in range(100):
++            if len(owners)>1:break
++            await asyncio.sleep(.001)
++        task.cancel()
++        with self.assertRaises(asyncio.CancelledError):await task
++        self.assertTrue(session.done());self.assertIsNone(client.session_task)
++
++    async def exercise(self,mode):
++        server=MCPServer('synthetic-compatibility',log_level='ERROR')
++
++        @server.tool()
++        def echo(query:str)->str:
++            return query
++
++        @server.tool()
++        def failure()->str:
++            raise ValueError('synthetic failure')
++
++        @server.resource('synthetic://fixture')
++        def fixture()->str:
++            return 'synthetic resource'
++
++        app=server.streamable_http_app(json_response=True,stateless_http=True)
++        scope=adapter()
++        scope['Client']=functools.partial(mcp.Client,mode=mode)
++        scope['create_httpx_client']=lambda **_:httpx2.AsyncClient(
++            transport=httpx2.ASGITransport(app=app),timeout=5)
++        client=scope['MCPClient']()
++        async with app.router.lifespan_context(app):
++            try:
++                await client.connect('http://127.0.0.1:8765/mcp')
++                tools=await client.list_tool_specs()
++                self.assertIn('echo',{item['name'] for item in tools})
++                content=await client.call_tool('echo',{'query':'Русский текст'})
++                self.assertTrue(any(item.get('text')=='Русский текст' for item in content))
++                with self.assertRaisesRegex(Exception,'Error executing tool failure'):
++                    await client.call_tool('failure',{})
++                resources=await client.list_resources()
++                self.assertTrue(any(str(item['uri'])=='synthetic://fixture' for item in resources))
++                result=await client.read_resource('synthetic://fixture')
++                self.assertIn('synthetic resource',str(result))
++            finally:
++                await client.disconnect()
++        self.assertIsNone(client.client)
++
++    async def test_auto_discovery_and_wire_aliases(self):
++        await asyncio.wait_for(self.exercise('auto'),30)
++
++    async def test_legacy_initialize_fallback(self):
++        await asyncio.wait_for(self.exercise('legacy'),30)
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_native_cache.py b/.avx1/test_native_cache.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..abbcac3ae65c395a6a3e2571be3f61a30a21607f
+--- /dev/null
++++ b/.avx1/test_native_cache.py
+@@ -0,0 +1,25 @@
++"""Never reuse an unmatching native input or corrupted cached wheel."""
++import json
++from pathlib import Path
++import tempfile
++import unittest
++from unittest.mock import patch
++import native_cache as cache
++from common import sha256,write_json
++
++class NativeCacheGates(unittest.TestCase):
++    def test_exact_cache_reuses_bytes_but_wrong_input_and_corruption_do_not(self):
++        with tempfile.TemporaryDirectory(prefix='native-cache-fixture-') as name:
++            root=Path(name);source=root/'produced';source.mkdir();destination=root/'restored';destination.mkdir()
++            wheel=source/'orjson-fixture.whl';wheel.write_bytes(b'fixture-native-binary')
++            write_json(source/'native-build.json',{'wheel_sha256':sha256(wheel),'pgo':False,'lto':'fat'})
++            (source/'wheel.sha256').write_text(sha256(wheel)+'  '+wheel.name)
++            with patch.object(cache,'ROOT',root):
++                cache.store(source,'input-a',wheel)
++                self.assertIsNone(cache.restore(destination,'input-b'))
++                result=cache.restore(destination,'input-a')
++                self.assertTrue(result['native_qualification_reuse']);self.assertEqual((destination/wheel.name).read_bytes(),wheel.read_bytes())
++                (root/'.avx1-native-cache'/wheel.name).write_bytes(b'corrupt')
++                self.assertIsNone(cache.restore(destination,'input-a'))
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_oauthlib_security.py b/.avx1/test_oauthlib_security.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c35cf15c9199ec69c26e9acb6f1e0264a91e33bd
+--- /dev/null
++++ b/.avx1/test_oauthlib_security.py
+@@ -0,0 +1,33 @@
++"""Synthetic device-code rejection and authorized-scope regressions for4.0.1."""
++import unittest
++from unittest.mock import Mock
++from oauthlib.common import Request
++from oauthlib.oauth2.rfc8628.grant_types.device_code import DeviceCodeGrant
++from oauthlib.oauth2.rfc6749.errors import InvalidRequestError, InvalidGrantError
++
++
++class DeviceCodeSecurity(unittest.TestCase):
++    def request(self, code='fixture'):
++        return Request('https://fixture.invalid/token',http_method='POST',
++                       body='grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=fixture&device_code='+code)
++
++    def test_missing_and_bogus_codes_are_rejected(self):
++        validator=Mock();validator.validate_device_code.return_value=None
++        grant=DeviceCodeGrant(validator)
++        with self.assertRaises(InvalidRequestError):grant.validate_device_code(self.request(''))
++        validator.validate_device_code.assert_not_called()
++        with self.assertRaises(InvalidGrantError):grant.validate_device_code(self.request('bogus'))
++
++    def test_validation_populates_authorized_scopes_before_scope_checks(self):
++        validator=Mock();grant=DeviceCodeGrant(validator)
++        def authorize(client,code,request):
++            request.user='synthetic-user';request.scopes=['authorized-scope']
++            return grant.DEVICE_CODE_AUTHORIZED
++        validator.validate_device_code.side_effect=authorize
++        grant.validate_client_authentication=Mock();grant.validate_grant_type=Mock()
++        seen=[];grant.validate_scopes=lambda request:seen.append(request.scopes)
++        grant.validate_token_request(self.request())
++        self.assertEqual(seen,[['authorized-scope']])
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_public_gate.py b/.avx1/test_public_gate.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..47c838c134e28d50bc0af648203721f193559e63
+--- /dev/null
++++ b/.avx1/test_public_gate.py
+@@ -0,0 +1,18 @@
++import unittest
++from common import scan_bytes
++
++
++class PublicGateTests(unittest.TestCase):
++    def test_tailwind_mask_classes_are_not_api_keys(self):
++        scan_bytes(b'.mask-linear-from-transparent-to-transparent{mask-type:luminance}', 'fixture.css')
++
++    def test_real_token_shapes_and_utf16_private_keys_still_fail_closed(self):
++        for prefix, length in ((b'sk-', 48), (b'sk-proj-', 64), (b'ghp_', 40), (b'hf_', 36)):
++            value = b'"' + prefix + b'a' * length + b'"'
++            with self.subTest(prefix=prefix):
++                with self.assertRaises(ValueError): scan_bytes(value, 'credential fixture')
++                with self.assertRaises(ValueError): scan_bytes(value.decode().encode('utf-16-le'), 'UTF16 fixture')
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/test_responses_clients.py b/.avx1/test_responses_clients.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e40fd5e7c85e95b890ab434d1d4381481fc69267
+--- /dev/null
++++ b/.avx1/test_responses_clients.py
+@@ -0,0 +1,48 @@
++"""Exercise actual Responses-to-OpenAI adapter functions with synthetic events."""
++import ast
++import asyncio
++import json
++from pathlib import Path
++import time
++import unittest
++import uuid
++from typing import AsyncIterator
++
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++scope={'JSONCodec':json,'time':time,'uuid':uuid,'uuid4':uuid.uuid4,'AsyncIterator':AsyncIterator}
++def load(path,names):
++    tree=ast.parse((ROOT/path).read_text('utf-8'))
++    nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
++    assert len(nodes)==len(names)
++    exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),scope)
++load(Path('utils/misc.py'),{'chat_completion_template','chat_completion_message_template','chat_completion_chunk_template'})
++load(Path('utils/response.py'),{'usage_counter','normalize_usage','get_responses_finish_reason','convert_responses_usage_to_chat_completions','convert_responses_stream_to_chat_completions'})
++load(Path('routers/openai.py'),{'convert_responses_result'})
++
++class ResponsesClients(unittest.IsolatedAsyncioTestCase):
++    async def test_stream_tool_arguments_usage_and_length(self):
++        events=[{'type':'response.created','response':{'model':'fixture'}},
++            {'type':'response.output_item.added','output_index':3,'item':{'type':'function_call','call_id':'call1','name':'lookup','arguments':''}},
++            {'type':'response.function_call_arguments.delta','output_index':3,'delta':'{"x":1}'},
++            {'type':'response.incomplete','response':{'incomplete_details':{'reason':'max_output_tokens'},'usage':{'input_tokens':7,'output_tokens':3}}}]
++        async def stream():
++            for event in events:yield 'data: '+json.dumps(event)+'\n\n'
++        output=[line async for line in scope['convert_responses_stream_to_chat_completions'](stream())]
++        chunks=[json.loads(line[6:]) for line in output if line.startswith('data: {')]
++        self.assertEqual(chunks[0]['choices'][0]['delta']['tool_calls'][0]['id'],'call1')
++        self.assertEqual(chunks[1]['choices'][0]['delta']['tool_calls'][0]['index'],0)
++        self.assertEqual(chunks[-1]['usage']['prompt_tokens'],7)
++        self.assertEqual(chunks[-1]['choices'][0]['finish_reason'],'length')
++        self.assertEqual(output[-1],'data: [DONE]\n\n')
++    async def test_chat_completion_passes_through(self):
++        value='data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
++        async def stream():yield value
++        self.assertEqual([x async for x in scope['convert_responses_stream_to_chat_completions'](stream())],[value])
++    def test_nonstream_usage_and_filter_reason(self):
++        result=scope['convert_responses_result']({'model':'fixture','status':'incomplete','incomplete_details':{'reason':'content_filter'},'usage':{'input_tokens':8,'output_tokens':0},'output':[]})
++        self.assertEqual(result['usage']['prompt_tokens'],8)
++        self.assertEqual(result['usage']['completion_tokens'],0)
++        self.assertEqual(result['choices'][0]['finish_reason'],'content_filter')
++        self.assertIsInstance(result['created'],int)
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_security_scope.py b/.avx1/test_security_scope.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..89aba843a47b2bb538a04896319cc374cad379da
+--- /dev/null
++++ b/.avx1/test_security_scope.py
+@@ -0,0 +1,32 @@
++import json
++from pathlib import Path
++import tempfile
++import unittest
++from security_scope import review,verify_boundary
++
++
++class SecurityScopeTests(unittest.TestCase):
++    def setUp(self):
++        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
++        self.root=Path(temporary.name);self.backend=self.root/'backend/open_webui'
++        path=self.backend/'retrieval/vector/dbs/chroma.py';path.parent.mkdir(parents=True)
++        path.write_text('client.get_collection(name="fixture",embedding_function=None)',encoding='utf-8')
++
++    def test_unrelated_or_new_chroma_findings_never_get_exempted(self):
++        for package,identifier in [('chromadb','NEW-UNREVIEWED'),('other','CVE-2026-45829')]:
++            with self.assertRaisesRegex(RuntimeError,'Unresolved'):
++                review({'dependencies':[{'name':package,'version':'1.5.9','vulns':[{'id':identifier}]}]},self.root)
++
++    def test_exact_http_server_advisory_has_an_explicit_scope_record(self):
++        result=review({'dependencies':[{'name':'chromadb','version':'1.5.9','vulns':[{'id':'CVE-2026-45829'}]}]},self.root)
++        self.assertEqual(len(result['reviewed_not_applicable']),1)
++        self.assertEqual(result['boundary_proof']['collection_calls_with_embedding_function_none'],1)
++
++    def test_server_import_or_remote_embedding_loading_invalidates_the_review(self):
++        path=self.backend/'retrieval/vector/dbs/chroma.py'
++        for source in ['from chromadb.server.fastapi import FastAPI','client.get_collection(embedding_function=untrusted)']:
++            path.write_text(source,encoding='utf-8')
++            with self.assertRaises(RuntimeError):verify_boundary(self.root)
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_strata_reasoning.mjs b/.avx1/test_strata_reasoning.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..652ab1c7a60358678b63036ff947473bde49b314
+--- /dev/null
++++ b/.avx1/test_strata_reasoning.mjs
+@@ -0,0 +1,70 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { applyStrataReasoning, isStrataModel, selectedStrataReasoning } from '../src/lib/utils/strataReasoning.js';
++
++const strata = {id: 'strata.test-model', name: 'Strata DavidAU Qwen3.8-Flash-Next', owned_by: 'openai'};
++test('Strata aliases are detected without enabling controls for another provider', () => {
++  assert.equal(isStrataModel(strata), true);
++  assert.equal(isStrataModel({id: 'model', owned_by: 'strata'}), true);
++  assert.equal(isStrataModel({id: 'other', name: 'Other provider'}), false);
++  assert.equal(isStrataModel({...strata, pipe: true}), false);
++});
++test('automatic mode and other models preserve existing chat parameters by identity', () => {
++  const params = {temperature: .7, reasoning_effort: 'medium', seed: 4};
++  assert.equal(applyStrataReasoning(params, strata, {}), params);
++  assert.equal(applyStrataReasoning(params, strata, {[strata.id]: 'auto'}), params);
++  assert.equal(applyStrataReasoning(params, {id:'other'}, {[strata.id]:'low'}), params);
++  assert.equal(selectedStrataReasoning(strata, {[strata.id]:'unsupported'}), 'auto');
++});
++test('every explicit level reaches both standard and template fields without mutating input', () => {
++  const params = {temperature: .7, top_p:.95, custom_params:{min_p:.05,
++    reasoning_effort:'high', chat_template_kwargs:'{"enable_thinking":false,"reasoning_effort":"high","keep":7}'}};
++  const original = structuredClone(params);
++  for (const level of ['none','low','medium','high','xhigh']) {
++    const out = applyStrataReasoning(params, strata, {[strata.id]:level});
++    assert.equal(out.reasoning_effort, level);
++    assert.equal(out.custom_params.reasoning_effort, level);
++    assert.equal(out.custom_params.chat_template_kwargs.reasoning_effort, level);
++    assert.equal(out.custom_params.chat_template_kwargs.enable_thinking, level !== 'none');
++    assert.equal(out.custom_params.chat_template_kwargs.keep, 7);
++    assert.equal(out.custom_params.min_p, .05);
++    assert.equal(out.temperature, .7);
++  }
++  assert.deepEqual(params, original);
++});
++test('a different selected model never receives the Strata override', () => {
++  const params={custom_params:{keep:true}};
++  assert.equal(applyStrataReasoning(params, {id:'other'}, {[strata.id]:'none'}),params);
++});
++test('Ultra is an explicit author mode; High/XHigh keep their standard transport values', () => {
++  const author={...strata,info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:strata.id}}};
++  for (const level of ['high','xhigh','ultra']) {
++    const out=applyStrataReasoning({},author,{[author.id]:level});
++    assert.equal(out.reasoning_effort,level==='ultra'?'xhigh':level);
++    assert.equal(out.custom_params._strata_reasoning_mode,level);
++  }
++  assert.equal(selectedStrataReasoning(strata,{[strata.id]:'ultra'}),'auto');
++});
++test('Adaptive is independently gated and sends a real task-router control', () => {
++  const model={...strata,info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:strata.id,strata_adaptive_enabled:true}}};
++  const params=applyStrataReasoning({},model,{[model.id]:'adaptive'});
++  assert.equal(params.reasoning_effort,'xhigh');
++  assert.equal(params.custom_params._strata_reasoning_mode,'adaptive');
++  assert.equal(params.custom_params.chat_template_kwargs.enable_thinking,true);
++  assert.equal(selectedStrataReasoning(strata,{[strata.id]:'adaptive'}),'auto');
++});
++
++test('author modes reject another alias, family or rebound base while sampling stays unchanged', () => {
++ const model={...strata,info:{base_model_id:'qwen-next',meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:strata.id,strata_reasoning_base_model_id:'qwen-next',strata_adaptive_enabled:true}}};
++ const params={temperature:.6,top_p:.9,seed:42};
++ for(const candidate of [{...model,id:'strata.other'},{...model,info:{...model.info,base_model_id:'another-model'}},{...model,info:{...model.info,meta:{...model.info.meta,strata_reasoning_family:'deepseek'}}}]) {
++   for(const level of ['ultra','adaptive']) assert.equal(applyStrataReasoning(params,candidate,{[candidate.id]:level}),params);
++ }
++ assert.equal(applyStrataReasoning(params,model,{[model.id]:'ultra'}).temperature,.6);
++});
++
++test('Swift cannot acquire author controls even through copied enrollment metadata', () => {
++ const id='strata.davidau-qwen3.8-next-swift';const model={...strata,id,name:'Strata Swift Qwen3.8-Next',info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:id,strata_adaptive_enabled:true}}};
++ for(const mode of ['ultra','adaptive']) assert.equal(selectedStrataReasoning(model,{[model.id]:mode}),'auto');
++ const params={temperature:.55,top_p:.8};assert.equal(applyStrataReasoning(params,model,{[model.id]:'ultra'}),params);
++});
+diff --git a/.avx1/test_strata_reasoning.py b/.avx1/test_strata_reasoning.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..221f2bde101fe48c8832afbd525fe1d31b3ba929
+--- /dev/null
++++ b/.avx1/test_strata_reasoning.py
+@@ -0,0 +1,146 @@
++"""Run real OWUI parameter conversion; optional pinned Strata parser, no model calls."""
++import argparse
++import ast
++import collections.abc
++import copy
++import hashlib
++import json
++from pathlib import Path
++import subprocess
++from typing import Callable
++import types
++import runpy
++import sys
++
++ROOT=Path(__file__).resolve().parents[1]
++parser=argparse.ArgumentParser()
++parser.add_argument('--strata-source',type=Path)
++parser.add_argument('--node',default='node')
++parser.add_argument('--template',type=Path)
++parser.add_argument('--receipt',type=Path)
++args=parser.parse_args()
++
++def functions(path,names,namespace):
++    tree=ast.parse(path.read_text('utf-8'))
++    nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in names]
++    if {n.name for n in nodes}!=set(names):raise RuntimeError('Actual parameter functions changed')
++    exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),namespace)
++    return tree
++
++namespace={'Callable':Callable,'collections':collections,'JSONCodec':json,
++           'log':types.SimpleNamespace(exception=lambda *a:None)}
++functions(ROOT/'backend/open_webui/utils/misc.py',['deep_update'],namespace)
++functions(ROOT/'backend/open_webui/utils/payload.py',
++          ['apply_params_to_form_data','apply_model_params_to_body','remove_open_webui_params','apply_model_params_to_body_openai'],namespace)
++script="""import {applyStrataReasoning} from './src/lib/utils/strataReasoning.js';
++const model={id:'strata.fixture',name:'DavidAU Qwen3.8-Flash-Next',info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:'strata.fixture'}}};
++console.log(JSON.stringify(['none','low','medium','high','xhigh','ultra'].map(level=>({level,
++params:applyStrataReasoning({temperature:.7,custom_params:{min_p:.05}},model,{[model.id]:level})}))));"""
++vectors=json.loads(subprocess.check_output([args.node,'--input-type=module','-e',script],cwd=ROOT,text=True))
++package=types.ModuleType('strata_reasoning_fixture')
++package.__path__=[str(ROOT/'backend/open_webui/utils')]
++sys.modules[package.__name__]=package
++module=runpy.run_path(str(ROOT/'backend/open_webui/utils/strata_reasoning.py'),run_name='strata_reasoning_fixture.strata_reasoning')
++adapter=module['apply_strata_reasoning_profile']
++picker=module['adaptive_reasoning_mode']
++meta=types.SimpleNamespace(strata_reasoning_profile='davidau',strata_reasoning_family='qwen3.8-next',strata_reasoning_model_id='strata.davidau-qwen3.8-next',strata_reasoning_base_model_id=None)
++info=types.SimpleNamespace(id=meta.strata_reasoning_model_id,name='DavidAU Qwen3.8-Next',base_model_id=None,meta=meta)
++assert module['has_strata_author_template'](info)
++info.name='Swift DavidAU Qwen3.8-Next'
++assert not module['has_strata_author_template'](info)
++info.name='DavidAU Qwen3.8-Next';info.base_model_id='swift-qwen'
++assert not module['has_strata_author_template'](info)
++
++supported=['coder','comedy','vader','spoon','ultra','curie','teacher','off','low','medium','xhigh']
++adaptive_vectors=[]
++for text,expected in [('fix the python bug and refactor the parser module','coder'),
++                      ('tell me a funny joke about my job','comedy'),
++                      ('we must decide whether to commit to the acquisition','vader'),
++                      ('research the sources and cite the papers','spoon'),
++                      ('исправь ошибку в Python и доработай парсер','coder'),
++                      ('исследуй источники и процитируй научные статьи','spoon'),
++                      ('flurb the wibbit qzpzz',None),('',None)]:
++    assert picker(text,supported)==expected,(text,picker(text,supported),expected)
++    source={'_strata_reasoning_mode':'adaptive','messages':[{'role':'user','content':text}]}
++    result=adapter(source,True,supported_modes=supported)
++    adaptive_vectors.append((source,result,expected))
++    if expected:assert result['messages'][0]['content']=='{REASON:'+expected+'}\n'+text
++    else:assert result['messages']==source['messages']
++assert picker('fix the python bug and refactor the parser module',[]) is None
++strata=None
++template=None
++proof=[]
++if args.template:
++    from jinja2.sandbox import ImmutableSandboxedEnvironment
++    env=ImmutableSandboxedEnvironment(trim_blocks=True,lstrip_blocks=True,extensions=['jinja2.ext.loopcontrols'])
++    env.filters['tojson']=lambda value,**kwargs:json.dumps(value,ensure_ascii=kwargs.pop('ensure_ascii',False),**kwargs)
++    env.filters['from_json']=json.loads
++    def invalid(value):raise ValueError(value)
++    env.globals['raise_exception']=invalid
++    template=env.from_string(args.template.read_text('utf-8'))
++if args.strata_source:
++    strata={'ENV_TO_USER':False,'_NUMERIC_EFFORT':False,'_BINARY_THINKING':False}
++    tree=functions(args.strata_source,['effort_kwargs','_object_list','_tool_list','_env_to_user','_late_system_to_user','openai_to_messages'],strata)
++    strata['EFFORT']=ast.literal_eval(next(n.value for n in tree.body if isinstance(n,ast.Assign)
++        and any(isinstance(t,ast.Name) and t.id=='EFFORT' for t in n.targets)))
++for vector in vectors:
++    level=vector['level'];params=vector['params']
++    transport='xhigh' if level=='ultra' else level
++    for converter in ['apply_params_to_form_data','apply_model_params_to_body_openai']:
++        body={'model':'fixture','messages':[]}
++        if converter=='apply_params_to_form_data':
++            body['params']=copy.deepcopy(params)
++            out=namespace[converter](body,{'owned_by':'openai'})
++        else:out=namespace[converter](copy.deepcopy(params),body)
++        assert out['reasoning_effort']==transport
++        assert out['chat_template_kwargs']['enable_thinking']==(level!='none')
++        assert out['temperature']==.7 and out['min_p']==.05
++        original={**out,'messages':[{'role':'system','content':'Preserve the application instructions.'},
++                                  {'role':'user','content':'reasoning probe'}]}
++        frozen=copy.deepcopy(original)
++        wire=adapter(original,author_template=True)
++        assert original==frozen and '_strata_reasoning_mode' not in wire
++        tag={'none':'ioff','high':'off','xhigh':'off'}.get(level,level)
++        assert wire['messages'][-1]['content']=='{REASON:'+tag+'}\nreasoning probe'
++        assert wire['messages'][0]==original['messages'][0]
++        if strata:
++            _,_,kwargs=strata['openai_to_messages'](out)
++            if level=='none':assert kwargs=={'enable_thinking':False}
++            else:assert kwargs['reasoning_effort']==('xhigh' if level in ('high','xhigh','ultra') else level)
++            if level=='ultra':assert kwargs['reasoning_effort']=='xhigh'
++            if template:
++                rendered=template.render(messages=wire['messages'],tools=None,add_generation_prompt=True,**kwargs)
++                reference_effort='off' if level in ('none','high','xhigh') else level
++                reference=template.render(messages=frozen['messages'],tools=None,add_generation_prompt=True,
++                    reasoning_effort=reference_effort,enable_thinking=level!='none')
++                assert rendered==reference,(level,'template mode differs from real reference')
++                proof.append({'mode':level,'converter':converter,'wire_effort':transport,
++                              'render_sha256':hashlib.sha256(rendered.encode()).hexdigest(),'reference_match':True})
++if template:
++    for original,wire,expected in adaptive_vectors:
++        if not original['messages'][0]['content']:continue
++        rendered=template.render(messages=wire['messages'],tools=None,add_generation_prompt=True,
++                                 reasoning_effort='xhigh',enable_thinking=True)
++        reference=template.render(messages=original['messages'],tools=None,add_generation_prompt=True,
++                                  reasoning_effort=expected or 'xhigh',enable_thinking=True)
++        assert rendered==reference,'Adaptive did not activate the actual selected template construct'
++        proof.append({'mode':'adaptive','selected_reasoning_mode':expected,'reference_match':True,
++                      'render_sha256':hashlib.sha256(rendered.encode()).hexdigest()})
++# Profile controls never affect tool records, original user content, or unrelated providers.
++body={'_strata_reasoning_mode':'ultra','messages':[{'role':'user','content':[{'type':'text','text':'probe'},
++      {'type':'image_url','image_url':{'url':'data:image/png;base64,fixture'}}]},
++      {'role':'assistant','tool_calls':[{'id':'call-1'}]},{'role':'tool','content':'result','tool_call_id':'call-1'}]}
++before=copy.deepcopy(body);wire=adapter(body,True)
++assert body==before and wire['messages'][1:]==body['messages'][1:]
++assert wire['messages'][0]['content'][1:]==body['messages'][0]['content']
++assert adapter(wire,True) is wire
++for invalid_mode in [None,{},[],42,'unknown']:
++    assert '_strata_reasoning_mode' not in adapter({**body,'_strata_reasoning_mode':invalid_mode},True)
++manual={'_strata_reasoning_mode':'high','messages':[{'role':'user','content':'{REASON:coder} probe'}]}
++assert adapter(manual,True)['messages']==manual['messages']
++assert adapter(body,False)['messages']==body['messages']
++if args.receipt:
++    args.receipt.write_text(json.dumps({'model_requests':0,'filter_checks':False,'vectors':proof,
++        'strata_parser_sha256':hashlib.sha256(args.strata_source.read_bytes()).hexdigest(),
++        'template_sha256':hashlib.sha256(args.template.read_bytes()).hexdigest()},indent=2)+'\n')
++print('STRATA_REASONING_6_LEVELS_2_REAL_OWUI_CONVERTERS_PASSED'+('_ACTUAL_STRATA_PARSER_PASSED' if strata else ''))
+diff --git a/.avx1/test_suggestions.mjs b/.avx1/test_suggestions.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..70387d4f118d1e5c48144b62ec90089cc155e5d9
+--- /dev/null
++++ b/.avx1/test_suggestions.mjs
+@@ -0,0 +1,25 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import { resolveLocalizedPromptSuggestions as resolve } from '../src/lib/utils/localizedContent.ts';
++const ru = JSON.parse(fs.readFileSync(new URL('../src/lib/i18n/locales/ru-RU/translation.json', import.meta.url), 'utf8'));
++const t = (key) => ru[key] || key;
++test('stored stock English suggestions render in Russian without changing user records', () => {
++ const original = resolve(null, null, 'en-US');
++ const before = JSON.stringify(original);
++ const localized = resolve(original, null, 'ru-RU', t);
++ assert.equal(JSON.stringify(original), before);
++ assert.equal(localized.length, 6);
++ for (const prompt of localized) {
++  assert.match(prompt.title.join(' '), /[А-Яа-яЁё]/u);
++  assert.match(prompt.content, /[А-Яа-яЁё]/u);
++ }
++});
++test('custom prompts, explicit locale overrides and disabled suggestions are preserved', () => {
++ const stock = resolve(null, null, 'en-US')[0];
++ const custom = { ...stock, id: 'custom', title: ['My title', 'My subtitle'] };
++ assert.strictEqual(resolve([custom], null, 'ru-RU', t)[0], custom);
++ assert.deepEqual(resolve([], null, 'ru-RU', t), []);
++ const explicit = [{title: ['Авторский', 'запрос'], content: 'Текст пользователя'}];
++ assert.strictEqual(resolve(null, {'ru-RU': explicit}, 'ru-RU', t), explicit);
++});
+diff --git a/.avx1/test_terminal.py b/.avx1/test_terminal.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ec126684bc9f321e9e9b492c742cdb32b933d4a
+--- /dev/null
++++ b/.avx1/test_terminal.py
+@@ -0,0 +1,34 @@
++"""Behavior tests for the fork's child-environment and MCP fixes."""
++import os
++import subprocess
++import sys
++import types
++import unittest
++from unittest.mock import patch
++
++
++class TerminalTests(unittest.TestCase):
++    def test_child_cannot_read_inherited_terminal_credentials(self):
++        from open_terminal.env import sanitized_environ
++        environment = {**os.environ, "OPEN_TERMINAL_API_KEY": "synthetic-secret",
++                       "open_terminal_private": "synthetic-secret", "KEEP_APPLICATION_SETTING": "kept"}
++        with patch.dict(os.environ, environment, clear=True):
++            child_env = sanitized_environ({"EXTRA_SETTING": "extra"})
++        result = subprocess.run([sys.executable, "-c", "import os; assert not any(k.upper().startswith('OPEN_TERMINAL_') for k in os.environ); assert os.environ['KEEP_APPLICATION_SETTING']=='kept'; assert os.environ['EXTRA_SETTING']=='extra'"],
++                                env=child_env, capture_output=True)
++        self.assertEqual(result.returncode, 0)
++
++    def test_stdio_passes_no_network_arguments(self):
++        from click.testing import CliRunner
++        from open_terminal.cli import main
++        received = []
++        fake = types.ModuleType("open_terminal.mcp_server")
++        fake.mcp = types.SimpleNamespace(run=lambda **kwargs: received.append(kwargs))
++        with patch.dict(sys.modules, {"open_terminal.mcp_server": fake}), patch("open_terminal.config.init", return_value={}):
++            result = CliRunner().invoke(main, ["mcp", "--transport", "stdio"])
++        self.assertEqual(result.exit_code, 0, repr(result.exception))
++        self.assertEqual(received, [{"transport": "stdio"}])
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/.avx1/test_tool_server_policy.mjs b/.avx1/test_tool_server_policy.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..ce239e2810a1e035a49fbf2c45f0b37fdca62167
+--- /dev/null
++++ b/.avx1/test_tool_server_policy.mjs
+@@ -0,0 +1,77 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import {stripTypeScriptTypes} from 'node:module';
++import {filterToolServerSpecs, directToolServerKey, isSelectedDirectToolServer} from '../src/lib/utils/toolServerPolicy.js';
++import {__assistantMicOrigin as mic} from '../src/lib/utils/assistantCompatibility.js';
++
++const specs=[{name:'tool_search'},{name:'tool_delete'},{name:'tool_admin_delete'}];
++test('suffix allow/block and quoted entries match backend policy without mutating schemas',()=>{
++  const before=JSON.stringify(specs);
++  assert.deepEqual(filterToolServerSpecs(specs,'search, delete, !admin_delete'),specs.slice(0,2));
++  assert.deepEqual(filterToolServerSpecs(specs,[' "!delete" ',' search ']),specs.slice(0,1));
++  assert.deepEqual(filterToolServerSpecs(specs,'!delete'),specs.slice(0,1));
++  assert.equal(JSON.stringify(specs),before);
++});
++test('malformed filter does not expose every function',()=>{
++  assert.deepEqual(filterToolServerSpecs(specs,{}),[]);
++  assert.deepEqual(filterToolServerSpecs(specs,[4]),[]);
++  assert.deepEqual(filterToolServerSpecs(specs,''),specs);
++});
++test('stable explicit id survives reorder and cannot alias an array index',()=>{
++  const server={id:'123abc'};
++  assert.equal(directToolServerKey(server,0),directToolServerKey(server,7));
++  assert.equal(isSelectedDirectToolServer(server,0,['123abc']),true);
++  assert.equal(isSelectedDirectToolServer(server,123,[123]),false);
++  assert.equal(isSelectedDirectToolServer({id:'01'},3,['01']),true);
++  assert.equal(isSelectedDirectToolServer({},3,['3']),true);
++});
++test('actual discovery function filters advertised tools and preserves connection identity',async()=>{
++  const source=fs.readFileSync(new URL('../src/lib/apis/index.ts',import.meta.url),'utf8');
++  const start=source.indexOf('export const getToolServersData =');
++  const end=source.indexOf('export const executeToolServer =',start);
++  assert.ok(start>=0&&end>start);
++  const body=stripTypeScriptTypes(source.slice(start,end).replace('export const','const'));
++  const discover=new Function('get','config','getToolServerData','convertOpenApiToToolPayload',
++    'filterToolServerSpecs','fetch','TOOL_SERVER_FETCH_TIMEOUT','localStorage',
++    body+';return getToolServersData;')(
++      ()=>({features:{enable_tool_servers:true}}),{},async()=>({paths:{},info:{title:'Fixture'}}),
++      ()=>specs,filterToolServerSpecs,async()=>({ok:false}),1000,{token:'fixture'});
++  const result=await discover([{id:'123abc',url:'https://fixture.invalid',path:'/openapi.json',auth_type:'none',
++    config:{enable:true,function_name_filter_list:'search'}}]);
++  assert.equal(result.length,1);
++  assert.equal(result[0].id,'123abc');assert.deepEqual(result[0].specs,[specs[0]]);
++});
++
++test('actual side-chat send isolates mic metadata and cannot alias an explicit server id to its index', async () => {
++  const source=fs.readFileSync(new URL('../src/lib/components/chat/ChatTabs/SideChat.svelte',import.meta.url),'utf8');
++  const start=source.indexOf('\tconst send =');
++  const end=source.indexOf('\tconst stop =',start);
++  assert.ok(start>=0&&end>start);
++  const body=stripTypeScriptTypes(source.slice(start,end));
++  for(const sideVoice of [false,true]){
++    const nodes=new Map();
++    for(const id of ['chat-input','side-fixture'])nodes.set(id,{textContent:'same',addEventListener(){}});
++    globalThis.document={getElementById:id=>nodes.get(id)};
++    mic.mark('same');
++    if(sideVoice)mic.mark('same','side-fixture');
++    let payload;
++    const context={canSend:true,disposed:false,sending:false,recovering:false,temporary:true,isShared:false,originalChatId:null,parentFolderId:null,sideChatAllowed:true,draft:'same',files:[],busy:false,atSelectedModel:{id:'model'},
++      selectedModels:['model'],error:'',id:'temporary-fixture',inputId:'side-fixture',
++      $i18n:{t:value=>value},$socket:{connected:true,id:'fixture-socket'},sideModelId:'model',
++      tick:async()=>{},input:{uploadPendingFiles:async()=>true,setText(){}},uuidv4:()=>String(Math.random()),
++      messages:[],context:[],params:{},toolApprovalMode:'prompt',selectedToolIds:['direct_server:kept','direct_server:0'],
++      selectedSkillIds:[],selectedFilterIds:[],autoScroll:false,scroll:async()=>{},request:null,
++      localStorage:{token:'synthetic'},$models:[{id:'model'}],$config:{features:{enable_tool_servers:true}},
++      $toolServers:[{id:'wrong',url:'https://wrong.invalid'},{id:'kept',url:'https://kept.invalid'}],
++      $terminalServers:[],$selectedTerminalId:null,$settings:{},system:'',
++      webSearchEnabled:false,imageGenerationEnabled:false,codeInterpreterEnabled:false,
++      isRasterImageContentType:()=>false,__assistantMicOrigin:mic,isSelectedDirectToolServer,
++      generateOpenAIChatCompletion:async(_token,data)=>{payload=data;return{};},getErrorMessage:String};
++    const send=new Function('context',`with(context){${body};return send;}`)(context);
++    await send();
++    assert.deepEqual(payload.tool_servers,[{id:'kept',url:'https://kept.invalid'}]);
++    assert.deepEqual(payload.user_message.meta,sideVoice?{input_source:'microphone'}:undefined);
++    assert.deepEqual(mic.peek('same'),{input_source:'microphone'});
++  }
++});
+diff --git a/.avx1/test_upstream_20261104.py b/.avx1/test_upstream_20261104.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0908d58fef7e4f78ed4503ab7d7bd7e5475ecf76
+--- /dev/null
++++ b/.avx1/test_upstream_20261104.py
+@@ -0,0 +1,83 @@
++"""Synthetic gates for upstream compaction, OAuth and bounded file reads."""
++import ast
++import asyncio
++import copy
++import json
++from pathlib import Path
++import sys
++from types import ModuleType, SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, patch
++
++ROOT = Path(__file__).resolve().parents[1] / 'backend/open_webui'
++
++
++def load(path, names, scope):
++    tree = ast.parse((ROOT / path).read_text('utf-8'))
++    nodes = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
++    assert {n.name for n in nodes} == names
++    future = ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[])), path, 'exec'), scope)
++    return scope
++
++
++class UpstreamChecks(unittest.IsolatedAsyncioTestCase):
++    def test_numbered_read_is_bounded_and_resumable(self):
++        fn = load('tools/builtin.py', {'_numbered_lines_within_cap'}, {'VIEW_FILE_MAX_CHARS': 12})['_numbered_lines_within_cap']
++        text, end = fn(['abcd', 'efgh', 'ijkl'], 0, 3)
++        self.assertLessEqual(len(text), 12)
++        self.assertEqual((text, end), ('1: abcd', 1))
++        text, end = fn(['x' * 100], 0, 1)
++        self.assertEqual((len(text), end), (12, 1))
++
++    def test_pkce_rejects_plain_and_keeps_timeout(self):
++        fn = load('config.py', {'oauth_client_kwargs'}, {})['oauth_client_kwargs']
++        self.assertEqual(fn('openid', '10', 'S256'), {'scope': 'openid', 'timeout': 10, 'code_challenge_method': 'S256'})
++        with self.assertRaises(ValueError):
++            fn('openid', 10, 'plain')
++
++    async def test_summary_preserves_tools_and_original_payload(self):
++        await self.summary_case(False)
++
++    async def test_tool_summary_response_falls_back_without_replaying_tools(self):
++        await self.summary_case(True)
++
++    async def summary_case(self, fallback):
++        module = ModuleType('open_webui.utils.chat')
++        module.generate_chat_completion = AsyncMock(side_effect=[
++            {'choices': [{'message': {'tool_calls': [{'id': 'unexpected'}]}}]} if fallback else
++            {'choices': [{'message': {'content': 'summary'}}]},
++            {'choices': [{'message': {'content': 'fallback summary'}}]},
++        ])
++        async def identity(value, user):
++            return value
++        scope = load('utils/context_compaction.py', {'_generate_summary', '_message_prefix', '_response_text'}, {
++            'copy': copy, 'JSONCodec': json, 'JSONResponse': type('UnusedResponse', (), {}),
++            'Config': NS(get_many=AsyncMock(return_value={})),
++            'DEFAULT_CONTEXT_COMPACTION_PROMPT': 'Summarize',
++            'get_content_from_message': lambda m: m.get('content', ''),
++            'get_last_user_message': lambda messages: 'question',
++            'replace_prompt_variable': lambda text, _: text,
++            'replace_messages_variable': lambda text, *args: text,
++            'prompt_variables_template': lambda text, _: text,
++            'prompt_template': identity,
++            'apply_params_to_form_data': lambda payload, *args: payload,
++        })
++        messages = [{'role': 'user', 'content': 'old'}, {'role': 'user', 'content': 'unique recent'}]
++        form = {'messages': messages, 'tools': [{'type': 'function', 'function': {'name': 'lookup'}}], 'tool_choice': 'required'}
++        before = copy.deepcopy(form)
++        with patch.dict(sys.modules, {'open_webui.utils.chat': module}):
++            result = await scope['_generate_summary'](NS(state=NS()), form, NS(), 'm', {'m': {}}, messages[:1], messages[1:], None, 'summary', True)
++        self.assertEqual(form, before)
++        calls = module.generate_chat_completion.call_args_list
++        self.assertEqual(calls[0].kwargs['form_data']['tools'], form['tools'])
++        self.assertNotIn('tool_choice', calls[0].kwargs['form_data'])
++        self.assertTrue(calls[0].kwargs['bypass_system_prompt'])
++        self.assertEqual(result, 'fallback summary' if fallback else 'summary')
++        self.assertEqual(len(calls), 2 if fallback else 1)
++        if fallback:
++            self.assertNotIn('tools', calls[1].kwargs['form_data'])
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/test_upstream_20261107.py b/.avx1/test_upstream_20261107.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..de5103b7368199a733ee917a607ad4970484c53e
+--- /dev/null
++++ b/.avx1/test_upstream_20261107.py
+@@ -0,0 +1,78 @@
++"""Synthetic native-login and tool-approval boundaries; no agents or providers started."""
++import ast
++import base64
++import hashlib
++import hmac
++import json
++from pathlib import Path
++import time
++from types import SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, MagicMock, Mock
++from urllib.parse import urlsplit
++from uuid import UUID
++from fastapi import HTTPException
++from pydantic import BaseModel, ConfigDict, Field, field_validator, ValidationError
++
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++
++
++def load(path,names,scope):
++    nodes=[n for n in ast.parse((ROOT/path).read_text('utf-8')).body
++           if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and n.name in names]
++    assert {n.name for n in nodes}==names
++    for n in nodes:n.decorator_list=[]
++    future=ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future,*nodes],type_ignores=[])),path,'exec'),scope)
++    return scope
++
++
++class UpstreamBoundaries(unittest.IsolatedAsyncioTestCase):
++    async def test_disabled_auto_preserves_ask_and_invalid_modes_fail(self):
++        s=load('utils/tool_permissions.py',{'resolve_tool_approval_mode'},
++               {'Config':NS(get_many=AsyncMock(return_value={'chat.tool_permissions.enable':True,'chat.tool_permissions.auto.enable':False})),
++                'HTTPException':HTTPException})
++        self.assertEqual(await s['resolve_tool_approval_mode']('auto'),'ask')
++        self.assertEqual(await s['resolve_tool_approval_mode']('ask'),'ask')
++        with self.assertRaises(HTTPException):await s['resolve_tool_approval_mode']('unknown')
++        with self.assertRaises(HTTPException):await s['resolve_tool_approval_mode']('auto',is_channel_chat=True)
++
++    async def test_changed_approved_call_always_requires_fresh_human_approval(self):
++        post=AsyncMock(side_effect=AssertionError('no provider request'))
++        s=load('utils/tool_permissions.py',{'requires_tool_approval','tool_permission_fingerprint'},
++               {'hashlib':hashlib,'JSONCodec':json,'post_decisions':post})
++        call={'name':'write','approved':True,'approval_fingerprint':'old'}
++        self.assertTrue(await s['requires_tool_approval']({}, {'params':{'tool_approval_mode':'auto'}},call,{'type':'builtin','spec':{}},{'path':'fixture'}))
++        self.assertEqual(call['permission_review']['reason'],'call_changed');post.assert_not_awaited()
++
++    def test_native_login_callback_accepts_only_exact_loopback_without_credentials(self):
++        scope={'BaseModel':BaseModel,'ConfigDict':ConfigDict,'Field':Field,'field_validator':field_validator,'urlsplit':urlsplit}
++        s=load('routers/sessions.py',{'SessionForm','AuthorizationRequest'},scope)
++        args={'name':'synthetic','state':'s'*32,'code_challenge':'c'*43}
++        s['AuthorizationRequest'](**args,redirect_uri='http://127.0.0.1:1234/callback')
++        for url in ['https://example.invalid/callback','http://localhost:1234/callback','http://user@127.0.0.1:1234/','http://127.0.0.1:1234/?q=x','http://127.0.0.1:1234/#x']:
++            with self.assertRaises(ValidationError):s['AuthorizationRequest'](**args,redirect_uri=url)
++
++    async def exchange_case(self,wrong_owner):
++        sid=UUID('12345678-1234-1234-1234-123456789abc');verifier='v'*43;code='synthetic-code'
++        authorization={'code_hash':hashlib.sha256(code.encode()).hexdigest(),'redirect_uri':'http://127.0.0.1:1234/callback',
++                       'code_challenge':base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()}
++        row=NS(user_id='owner',refresh_token_id=None,data={'authorization':authorization},expires_at=time.time()+600,id=str(sid))
++        sessions=NS(get=AsyncMock(return_value=row),change=AsyncMock(return_value=False))
++        proof=AsyncMock(return_value={});credentials=Mock();columns=MagicMock();columns.expires_at.__gt__.return_value=True
++        s=load('routers/sessions.py',{'exchange','digest','challenge'},
++               {'hashlib':hashlib,'base64':base64,'hmac':hmac,'time':time,'AuthSessions':sessions,'AuthSession':columns,
++                'decode_token':lambda _: {'typ':'session_code','sid':str(sid),'id':'intruder' if wrong_owner else 'owner'},
++                'HTTPException':HTTPException,'verify_proof':proof,'idle_expiry':AsyncMock(return_value=int(time.time())+600),
++                'throttle':AsyncMock(),'uuid4':lambda:'next-id','credentials':credentials})
++        with self.assertRaises(HTTPException) as failure:
++            await s['exchange'](NS(session_id=sid,code=code,code_verifier=verifier,redirect_uri=authorization['redirect_uri']),NS())
++        self.assertEqual(failure.exception.status_code,401);credentials.assert_not_called()
++        if wrong_owner:sessions.change.assert_not_awaited();proof.assert_not_awaited()
++        else:sessions.change.assert_awaited_once()
++
++    async def test_native_exchange_rejects_other_owner(self):await self.exchange_case(True)
++    async def test_native_exchange_rejects_already_consumed_atomic_claim(self):await self.exchange_case(False)
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_upstream_daily.py b/.avx1/test_upstream_daily.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4374f9b7c623aa2872c8f51df1e948f669875db6
+--- /dev/null
++++ b/.avx1/test_upstream_daily.py
+@@ -0,0 +1,90 @@
++"""Target the new note migration/concurrency, attachment ACL and URL boundary."""
++import ast
++import copy
++from html import escape
++import json
++import logging
++from pathlib import Path
++import re
++import time
++from types import SimpleNamespace
++import unittest
++from unittest.mock import AsyncMock
++import uuid
++import markdown
++from bs4 import BeautifulSoup
++
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++
++def load(path,names,space):
++    tree=ast.parse((ROOT/path).read_text('utf-8'))
++    nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and n.name in names]
++    assert {n.name for n in nodes}==set(names)
++    future=ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future,*nodes],type_ignores=[])),str(path),'exec'),space)
++    return space
++
++class DailyRegressions(unittest.IsolatedAsyncioTestCase):
++    def notes(self):
++        names=['NotePageConflict','order_pages','subtree_ids','page_paths','get_content_files','migrate_page_files',
++               'get_note_files','normalize_pages','get_page','document_page','apply_page_operation','update_page_content']
++        return load('models/notes.py',names,dict(deepcopy=copy.deepcopy,json=json,re=re,uuid=uuid,
++            markdown=markdown,BeautifulSoup=BeautifulSoup,escape=escape,time=time))
++
++    def test_legacy_content_and_versions_migrate_without_mutating_original(self):
++        s=self.notes();data={'content':{'md':'Original','html':'','json':None},'versions':[{'md':'Earlier'}]}
++        frozen=copy.deepcopy(data);value=s['normalize_pages'](data,'Title')
++        self.assertEqual(data,frozen);self.assertEqual(value['pages'][0]['content']['md'],'Original')
++        self.assertEqual(value['pages'][0]['versions'],[{'md':'Earlier'}])
++        self.assertEqual(s['normalize_pages'](value),value)
++
++    def test_file_migration_and_html_reference_boundaries(self):
++        s=self.notes();value=s['normalize_pages']({'content':{'md':'Original'},'files':[{'id':'file-1','name':'A.pdf'}]})
++        self.assertEqual({f['id'] for f in s['get_note_files'](value)},{'file-1'})
++        self.assertEqual(s['get_content_files']({'html':'<a href="https://example.com/api/v1/files/foreign/content">x</a>'}),[])
++        self.assertEqual(s['get_content_files']({'json':{'type':'fileAttachment','attrs':{'id':'../foreign'}}}),[])
++
++    def test_cycle_and_duplicate_pages_rejected(self):
++        s=self.notes()
++        for pages in [[{'id':'x','parent_id':'x'}],[{'id':'main'},{'id':'main'}]]:
++            with self.assertRaises(ValueError):s['order_pages'](pages)
++
++    def test_stale_generation_document_rejected(self):
++        s=self.notes();data=s['normalize_pages']({'content':{'md':'A'}})
++        data['pages'][0]['generation']=1
++        for identifier in ['note:n','note:n:page:main:0']:
++            with self.assertRaises(s['NotePageConflict']):s['document_page'](data,identifier)
++        self.assertEqual(s['document_page'](data,'note:n:page:main:1')['id'],'main')
++
++    def test_revisions_prevent_lost_updates_and_require_page_selection(self):
++        s=self.notes();data=s['normalize_pages']({'content':{'md':'A'}})
++        newer=s['update_page_content'](data,'main',{'content':{'md':'B'}},revision=0)
++        self.assertEqual(s['get_page'](newer,'main')['content']['md'],'B')
++        with self.assertRaises(s['NotePageConflict']):s['update_page_content'](newer,'main',{'content':{'md':'C'}},revision=0)
++        op=SimpleNamespace(action='create',new_id=str(uuid.uuid4()),parent_id=None,title='Second',revision=0)
++        pages=s['apply_page_operation'](newer,op)
++        with self.assertRaises(s['NotePageConflict']):s['get_page'](pages)
++        op=SimpleNamespace(action='delete',page_id='main',revision=1)
++        with self.assertRaises(ValueError):s['apply_page_operation'](pages,op)
++
++    async def test_new_note_attachment_requires_read_access(self):
++        s=self.notes();groups=SimpleNamespace(get_groups_by_member_id=AsyncMock(return_value=[]))
++        access=AsyncMock(return_value=False)
++        s.update(Groups=groups,has_access_to_file=access)
++        load('utils/access_control/files.py',['get_note_file_ids','has_access_to_note_files'],s)
++        user=SimpleNamespace(id='editor',role='user')
++        self.assertFalse(await s['has_access_to_note_files'](None,[{'type':'file','id':'foreign-file'}],user))
++        access.assert_awaited_once()
++        access.reset_mock()
++        existing=SimpleNamespace(data=s['normalize_pages']({'content':{'html':'<a href="/api/v1/files/existing/content">A</a>'}}))
++        self.assertTrue(await s['has_access_to_note_files'](existing,[{'type':'file','id':'existing'}],user))
++        access.assert_not_awaited()
++
++    def test_compressed_remote_bodies_rejected(self):
++        s=load('retrieval/web/utils.py',['is_identity_encoding','assert_identity_encoding'],
++               {'log':logging.getLogger('fixture'),'ERROR_MESSAGES':SimpleNamespace(COMPRESSED_RESPONSE='blocked')})
++        for headers in [[],['identity'],['Identity','']]:s['assert_identity_encoding'](headers)
++        for headers in [['gzip'],['br'],['identity','deflate'],['gzip, identity']]:
++            with self.assertRaises(ValueError):s['assert_identity_encoding'](headers)
++
++if __name__=='__main__':unittest.main()
+diff --git a/src/lib/utils/protectedFiles.test.ts b/src/lib/utils/protectedFiles.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..bc9c093bfa170d4afef6e2c90b6dc5aab55ae0cb
+--- /dev/null
++++ b/src/lib/utils/protectedFiles.test.ts
+@@ -0,0 +1,62 @@
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import { mediaSource, protectedFileUrl, protectedFileBlob } from './protectedFiles';
++import { Marked } from 'marked';
++import { mediaExtension } from './marked/media-extension';
++
++const origin = 'http://localhost:8080';
++const path = '/api/v1/files/owned-file/content';
++afterEach(() => vi.unstubAllGlobals());
++
++describe('authenticated generated media', () => {
++	it('passes a complete token from the real lexer into the HTML renderer', () => {
++		const parser = new Marked({ extensions: [mediaExtension('block'), mediaExtension('inline')] });
++		for (const text of [`<video>${path}</video>`, `<video controls src="${path}"></video>`, `<audio>${path}</audio>`]) {
++			const tokens = parser.lexer(text+'\n\n');
++			expect(tokens[0].type).toBe('html');
++			expect((tokens[0] as any).text).toBe(text);
++		}
++		expect(parser.lexer('```html\n<video>'+path+'</video>\n```')[0].type).toBe('code');
++		const paragraph = parser.lexer('Video: <video>'+path+'</video>')[0] as any;
++		expect(paragraph.tokens.some((t: any) => t.type === 'html' && t.text.includes('</video>'))).toBe(true);
++	});
++	it('reads attribute, source-child and legacy inner-URL media', () => {
++		expect(mediaSource(`<video src="${path}"></video>`, 'video')).toBe(path);
++		expect(mediaSource(`<video>${path}</video>`, 'video')).toBe(path);
++		expect(mediaSource(`<video><source src="${path}"></video>`, 'video')).toBe(path);
++		expect(mediaSource(`<audio>${path}</audio>`, 'audio')).toBe(path);
++	});
++	it('allows only local file content URLs without credential parameters', () => {
++		expect(protectedFileUrl(path, origin)?.pathname).toBe(path);
++		for (const value of ['https://other.test'+path, 'http://user:pass@localhost:8080'+path,
++			path+'?token=private', '/api/v1/files/%2e%2e/content', 'javascript:alert(1)']) {
++			expect(protectedFileUrl(value, origin)).toBeNull();
++		}
++	});
++	it('uses a header and cookies, never a bearer in the URL', async () => {
++		vi.stubGlobal('window', { location: { origin } });
++		const request = vi.fn().mockResolvedValue(new Response('mp4', {
++			headers: { 'content-type':'video/mp4', 'content-disposition':"attachment; filename*=UTF-8''demo%20video.mp4" }
++		}));
++		vi.stubGlobal('fetch', request);
++		const result = await protectedFileBlob(new URL(path, origin), 'fixture-token');
++		expect(result.name).toBe('demo video.mp4');
++		expect(request.mock.calls[0][0]).toBe(origin+path);
++		expect(request.mock.calls[0][1]).toMatchObject({ headers: { Authorization:'Bearer fixture-token' }, credentials:'include', redirect:'error' });
++	});
++	it('does not send credentials outside the approved origin', async () => {
++		vi.stubGlobal('window', { location: { origin } });
++		const request = vi.fn(); vi.stubGlobal('fetch', request);
++		await expect(protectedFileBlob(new URL(path,'https://other.test'),'fixture-token')).rejects.toThrow('Invalid file URL');
++		expect(request).not.toHaveBeenCalled();
++	});
++	it('does not turn access denial into a playable blob', async () => {
++		vi.stubGlobal('window', { location: { origin } });
++		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('denied',{status:403})));
++		await expect(protectedFileBlob(new URL(path,origin),'fixture-token')).rejects.toThrow('403');
++	});
++	it('rejects an oversized response before buffering it', async () => {
++		vi.stubGlobal('window', { location: { origin } });
++		vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('small',{headers:{'content-length':String(300*1024*1024)}})));
++		await expect(protectedFileBlob(new URL(path,origin),'fixture-token')).rejects.toThrow('size limit');
++	});
++});
