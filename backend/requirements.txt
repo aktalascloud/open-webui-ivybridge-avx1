@@ -1,3 +1,4 @@
+oauthlib==4.0.1 # GHSA-3jp2-3mrg-2vxc
 fastapi==0.136.3
 uvicorn[standard]==0.54.0
 pydantic==2.13.4

@@ -942,14 +942,17 @@ class ChatTable:
     ) -> tuple[int, bool] | None:
         try:
             async with get_async_db_context(db) as session:
-                chat = await session.get(Chat, id)
-                if chat and chat.user_id == user_id:
-                    last_read_at = int(time.time())
-                    was_unread = chat.last_read_at is None or chat.updated_at > chat.last_read_at
-                    chat.last_read_at = last_read_at
-                    await session.commit()
-                    return last_read_at, was_unread
-                return None
+                row = (
+                    await session.execute(select(Chat.updated_at, Chat.last_read_at).filter_by(id=id, user_id=user_id))
+                ).one_or_none()
+                if row is None:
+                    return None
+
+                last_read_at = int(time.time())
+                was_unread = row.last_read_at is None or row.updated_at > row.last_read_at
+                await session.execute(update(Chat).filter_by(id=id).values(last_read_at=last_read_at))
+                await session.commit()
+                return last_read_at, was_unread
         except Exception:
             return None
 
@@ -958,18 +961,23 @@ class ChatTable:
     ) -> ChatTitleIdResponse | None:
         try:
             async with get_async_db_context(db) as session:
-                chat = await session.get(Chat, id)
-                if chat and chat.user_id == user_id:
-                    chat.last_read_at = 0
-                    await session.commit()
-                    return ChatTitleIdResponse(
-                        id=chat.id,
-                        title=chat.title,
-                        updated_at=chat.updated_at,
-                        created_at=chat.created_at,
-                        last_read_at=chat.last_read_at,
+                row = (
+                    await session.execute(
+                        select(Chat.title, Chat.updated_at, Chat.created_at).filter_by(id=id, user_id=user_id)
                     )
-                return None
+                ).one_or_none()
+                if row is None:
+                    return None
+
+                await session.execute(update(Chat).filter_by(id=id).values(last_read_at=0))
+                await session.commit()
+                return ChatTitleIdResponse(
+                    id=id,
+                    title=row.title,
+                    updated_at=row.updated_at,
+                    created_at=row.created_at,
+                    last_read_at=0,
+                )
         except Exception:
             return None
 
@@ -1007,10 +1015,14 @@ class ChatTable:
             await session.commit()
             return result.rowcount or 0
 
-    async def update_chat_title_by_id(self, id: str, title: str) -> ChatModel | None:
+    async def update_chat_title_by_id(
+        self, id: str, title: str, *, expected_title: str | None = None
+    ) -> ChatModel | None:
         try:
             async with self._chat_transaction(id) as (session, chat_item):
                 if chat_item is None:
+                    return None
+                if expected_title is not None and chat_item.title != expected_title:
                     return None
                 clean_title = self._clean_null_bytes(title)
                 chat_item.title = clean_title
@@ -2815,15 +2827,16 @@ class ChatTable:
     ) -> bool:
         try:
             async with get_async_db_context(db) as session:
-                chat = await session.get(Chat, id)
-                tags = chat.meta.get('tags', [])
+                row = (await session.execute(select(Chat.meta).filter_by(id=id))).one_or_none()
+                if row is None:
+                    return False
+
+                meta = row[0]
+                tags = meta.get('tags', [])
                 tag_id = tag_name.replace(' ', '_').lower()
 
                 tags = [tag for tag in tags if tag != tag_id]
-                chat.meta = {
-                    **chat.meta,
-                    'tags': list(set(tags)),
-                }
+                await session.execute(update(Chat).filter_by(id=id).values(meta={**meta, 'tags': list(set(tags))}))
                 await session.commit()
                 return True
         except Exception:

@@ -15,6 +15,7 @@
 		settings,
 		showFileNavPath,
 		showFileNavDir,
+		selectedFolder,
 		selectedTerminalId
 	} from '$lib/stores';
 	import {
@@ -54,6 +55,7 @@
 	import FileEntryRow from './FileNav/FileEntryRow.svelte';
 	import Icon from './FileNav/Icon.svelte';
 	import FileTypeIcon from './FileNav/FileTypeIcon.svelte';
+	import FileGridIcon from './FileNav/FileGridIcon.svelte';
 	import BulkActionBar from './FileNav/BulkActionBar.svelte';
 	import TerminalDock from './TerminalDock.svelte';
 
@@ -61,6 +63,10 @@
 	let savedPath = '/';
 	// savedPath is only a placeholder until a directory has loaded.
 	let savedPathLoaded = false;
+	$: folderDirectory =
+		!onSelectDirectory && !chatId && $selectedFolder?.data?.terminal_id === effectiveTerminalId
+			? $selectedFolder.data.working_directory
+			: null;
 	let savedFileRoot: TerminalFileRoot | null = null;
 	const treeExpandedCache = new Map<string, string[]>();
 	const treeContentsCache = new Map<string, [string, FileEntry[]][]>();
@@ -78,6 +84,7 @@
 	export let terminalId: string | null = null;
 	export let initialFile: { path: string; page?: number | null } | null = null;
 	export let initialDirectory: string | null = null;
+	export let onSelectDirectory: ((path: string) => void) | null = null;
 	export let manageFileRequests = true;
 	export let showTerminalDock = true;
 	export let onOpenFile: ((path: string, page?: number | null) => void) | null = null;
@@ -368,6 +375,7 @@
 	let showSearch = false;
 	let searchInput: HTMLInputElement;
 	const toggleSearch = async () => {
+		if (onSelectDirectory) return;
 		showSearch = !showSearch;
 		if (!showSearch) searchQuery = '';
 		await tick();
@@ -397,7 +405,9 @@
 		normalizePath(name).split('/').filter(Boolean).at(-1) ?? name.replace(/\/+$/, '');
 
 	const normalizeEntries = (items: FileEntry[]) =>
-		items.map((entry) => ({ ...entry, name: cleanEntryName(entry.name) }));
+		items
+			.filter((entry) => !onSelectDirectory || entry.type === 'directory')
+			.map((entry) => ({ ...entry, name: cleanEntryName(entry.name) }));
 
 	const asDirectoryPath = (path: string) => {
 		const normalized = normalizePath(path || '/');
@@ -677,6 +687,7 @@
 	let prevTerminalUrl = '';
 	let prevTerminalId = effectiveTerminalId;
 	let prevChatId = chatId;
+	let prevFolderDirectory: string | null = null;
 	let mounted = false;
 	let disposed = false;
 	$: {
@@ -687,6 +698,8 @@
 		const chatChanged = chatId !== prevChatId;
 		const oldChatId = prevChatId;
 		if (chatChanged) prevChatId = chatId;
+		const folderChanged = folderDirectory !== prevFolderDirectory;
+		prevFolderDirectory = folderDirectory;
 
 		const terminalChanged =
 			terminal && (terminal.url !== prevTerminalUrl || effectiveTerminalId !== prevTerminalId);
@@ -708,9 +721,11 @@
 				}
 				// Chat just got created (null → real ID): persist the current
 				// browsed path as the new session's cwd — don't re-fetch.
-				if (savedPathLoaded) setCwd(terminal.url, terminal.key, savedPath, chatId);
-			} else if (terminalChanged || chatChanged) {
-				++loadGeneration;
+				if (!onSelectDirectory && savedPathLoaded)
+					setCwd(terminal.url, terminal.key, savedPath, chatId);
+			} else if (terminalChanged || chatChanged || folderChanged) {
+				const generation = ++loadGeneration;
+				savedPathLoaded = false;
 				openedFile = null;
 				if (terminalContext) terminalContext = { ...terminalContext, file: null };
 				// Terminal switched, new chat started, or switched between
@@ -720,7 +735,10 @@
 				entries = [];
 				resetTreeState();
 				(async () => {
-					savedPath = applyCwd(await getCwd(terminal.url, terminal.key, chatId ?? undefined));
+					const cwd = await getCwd(terminal.url, terminal.key, chatId ?? undefined);
+					if (disposed || generation !== loadGeneration) return;
+					const serverPath = applyCwd(cwd);
+					savedPath = folderDirectory || serverPath;
 					loadDir(savedPath);
 				})();
 			}
@@ -1043,7 +1061,8 @@
 		loading = false;
 
 		// Set working directory on the terminal server (fire-and-forget)
-		if (!initialFile) setCwd(terminal.url, terminal.key, directory, chatId ?? undefined);
+		if (!onSelectDirectory && !initialFile)
+			setCwd(terminal.url, terminal.key, directory, chatId ?? undefined);
 
 		if (result === null) {
 			error =
@@ -1869,7 +1888,15 @@
 		let handledDisplayFile = false;
 
 		const unsubFileNav = showFileNavPath.subscribe(async (request) => {
-			if (!manageFileRequests || !active || !request || !selectedTerminal || comparison) return;
+			if (
+				onSelectDirectory ||
+				!manageFileRequests ||
+				!active ||
+				!request ||
+				!selectedTerminal ||
+				comparison
+			)
+				return;
 			handledDisplayFile = true;
 			showFileNavPath.set(null);
 			let filePath = typeof request === 'string' ? request : request.path;
@@ -1903,7 +1930,13 @@
 		});
 
 		const unsubFileNavDir = showFileNavDir.subscribe(async (filePath) => {
-			if (!filePath || !selectedTerminal || effectiveTerminalId !== $selectedTerminalId) return;
+			if (
+				onSelectDirectory ||
+				!filePath ||
+				!selectedTerminal ||
+				effectiveTerminalId !== $selectedTerminalId
+			)
+				return;
 			showFileNavDir.set(null);
 			filePath = normalizePath(filePath);
 			if (!isInsideFileRoot(filePath)) {
@@ -1937,7 +1970,7 @@
 				savedPath =
 					terminalContext && terminalContext.terminalId === effectiveTerminalId
 						? terminalContext.currentDirectory
-						: serverPath;
+						: folderDirectory || serverPath;
 				savedPath = clampToFileRoot(savedPath);
 				if (initialFile) {
 					const path = normalizePath(initialFile.path);
@@ -2019,7 +2052,16 @@
 			deleteTarget = null;
 		}
 	}}
-/>
+>
+	<p class="mb-2 text-sm text-gray-700 dark:text-gray-300 [overflow-wrap:anywhere]">
+		{$i18n.t('Are you sure you want to delete "{{NAME}}"?', {
+			NAME: deleteTarget?.name ?? ''
+		})}
+	</p>
+	<p class="text-sm text-gray-500">
+		{$i18n.t('This action cannot be undone. Do you wish to continue?')}
+	</p>
+</ConfirmDialog>
 
 <svelte:document
 	on:selectionchange={captureSelection}
@@ -2125,7 +2167,7 @@
 			fileSize={openedFile?.size ?? pendingFile?.size}
 			{loading}
 			{showSearch}
-			onToggleSearch={toggleSearch}
+			onToggleSearch={onSelectDirectory ? null : toggleSearch}
 			writable={currentWritable}
 			canGoBack={!initialFile && canGoBack}
 			canGoForward={!initialFile && canGoForward}
@@ -2472,7 +2514,9 @@
 			{:else}
 				{#if isSearching}
 					{#if matchLoading}
-						<div class="flex justify-center pt-8"><Spinner className="size-4" /></div>
+						<div class="flex h-full items-center justify-center">
+							<Spinner className="size-3.5 text-gray-400 dark:text-gray-500" />
+						</div>
 					{:else if matchError}
 						<div class="flex items-center justify-center py-12">
 							<div class="text-xs text-gray-400 dark:text-gray-500">{matchError}</div>
@@ -2594,7 +2638,9 @@
 						{$i18n.t('Uploading...')}
 					</div>
 				{:else if loading || (effectiveTerminalId && $terminalServers === null)}
-					<div class="flex justify-center pt-8"><Spinner className="size-4" /></div>
+					<div class="flex h-full items-center justify-center">
+						<Spinner className="size-3.5 text-gray-400 dark:text-gray-500" />
+					</div>
 				{:else if error}
 					<div class="p-4 text-xs">{error}</div>
 				{:else if visibleEntries.length === 0 && !creatingFolder && !creatingFile}
@@ -2609,34 +2655,17 @@
 					{#if visibleEntries.length > 0 || creatingFolder || creatingFile}
 						<ul
 							class={viewMode === 'grid'
-								? 'grid grid-cols-[repeat(auto-fill,minmax(min(94px,calc((100%_-_0.5rem)/2)),1fr))] gap-2 p-2.5'
+								? 'grid grid-cols-[repeat(auto-fill,minmax(min(80px,100%),1fr))] gap-1 p-2'
 								: ''}
 						>
 							{#if creatingFolder}
 								<li
 									class={viewMode === 'grid'
-										? 'order-last relative flex h-17 min-w-0 flex-col items-start self-start px-1.5 pt-4 pb-1.5'
+										? 'order-last flex h-24 min-w-0 flex-col items-center gap-0.5 rounded-xl px-1 py-2'
 										: 'flex h-7 items-center gap-1.5 pl-[26px] pr-2'}
 								>
 									{#if viewMode === 'grid'}
-										<svg
-											class="pointer-events-none absolute inset-0 h-full w-full text-black/10 dark:text-white/10"
-											viewBox="0 0 200 68"
-											preserveAspectRatio="none"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="1"
-											aria-hidden="true"
-										>
-											<path
-												d="M1 19V8Q1 1 9 1H54Q58 1 61 4L65 7Q67 9 71 9H191Q199 9 199 15V19"
-												vector-effect="non-scaling-stroke"
-											/>
-											<path
-												d="M1 20Q1 13 9 13H191Q199 13 199 20V60Q199 67 191 67H9Q1 67 1 60Z"
-												vector-effect="non-scaling-stroke"
-											/>
-										</svg>
+										<FileGridIcon entry={{ name: newFolderName, type: 'directory' }} itemCount={0} />
 									{:else}
 										<FileTypeIcon name={newFolderName} type="directory" />
 									{/if}
@@ -2644,7 +2673,7 @@
 										bind:this={newFolderInput}
 										bind:value={newFolderName}
 										class={viewMode === 'grid'
-											? 'relative w-full min-w-0 bg-transparent py-0.5 text-xs text-gray-800 outline-hidden dark:text-gray-200'
+											? 'w-full min-w-0 rounded bg-transparent py-0.5 text-center text-xs text-gray-800 outline-hidden ring-1 ring-blue-500 dark:text-gray-200'
 											: 'min-w-0 flex-1 bg-transparent py-0.5 text-xs outline-hidden'}
 										placeholder={$i18n.t('Folder name')}
 										aria-label={$i18n.t('Folder name')}
@@ -2662,17 +2691,19 @@
 							{#if creatingFile}
 								<li
 									class={viewMode === 'grid'
-										? 'order-last flex h-[3.875rem] min-w-0 flex-col items-start self-start rounded-md border border-black/[0.06] bg-gray-50/40 p-1.5 dark:border-white/[0.06] dark:bg-gray-900'
+										? 'order-last flex h-24 min-w-0 flex-col items-center gap-0.5 rounded-xl px-1 py-2'
 										: 'flex h-7 items-center gap-1.5 pl-[26px] pr-2'}
 								>
 									{#if viewMode === 'list'}
 										<FileTypeIcon name={newFileName} type="file" />
+									{:else}
+										<FileGridIcon entry={{ name: newFileName, type: 'file' }} />
 									{/if}
 									<input
 										bind:this={newFileInput}
 										bind:value={newFileName}
 										class={viewMode === 'grid'
-											? 'relative w-full min-w-0 bg-transparent py-0.5 text-xs text-gray-800 outline-hidden dark:text-gray-200'
+											? 'w-full min-w-0 rounded bg-transparent py-0.5 text-center text-xs text-gray-800 outline-hidden ring-1 ring-blue-500 dark:text-gray-200'
 											: 'min-w-0 flex-1 bg-transparent py-0.5 text-xs outline-hidden'}
 										placeholder={$i18n.t('File name')}
 										aria-label={$i18n.t('File name')}
@@ -2741,8 +2772,21 @@
 			{/if}
 		</div>
 
+		{#if onSelectDirectory}
+			<div
+				class="flex shrink-0 items-center justify-end border-t border-gray-50 px-2 pt-3 dark:border-gray-850/30"
+			>
+				<button
+					type="button"
+					class="flex h-7 items-center rounded-lg bg-gray-900 px-2.5 text-xs text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+					disabled={loading || !!error || !savedPathLoaded || !!selectedFile}
+					on:click={() => onSelectDirectory?.(currentPath)}>{$i18n.t('Use this directory')}</button
+				>
+			</div>
+		{/if}
+
 		<!-- Read-only session output -->
-		{#if showTerminalDock}
+		{#if showTerminalDock && !onSelectDirectory}
 			<div
 				class:hidden={!hasSessions}
 				class="shrink-0 border-t border-gray-50 dark:border-gray-850/30"

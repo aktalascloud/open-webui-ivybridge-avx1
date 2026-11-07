@@ -1147,6 +1147,9 @@ class OAuthClientManager:
                 log.error(f'Failed to refresh token for session {session.id}')
                 return None
 
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            # Transient provider failure: the grant is still valid, keep the session
+            raise
         except Exception as e:
             log.error(f'Error refreshing token for session {session.id}: {e}')
             return None
@@ -1232,8 +1235,12 @@ class OAuthClientManager:
                     else:
                         error_text = await r.text()
                         log.error(f'Token refresh failed for client_id {client_id}: {r.status} - {error_text}')
+                        if r.status == 429 or r.status >= 500:
+                            r.raise_for_status()
                         return None
 
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            raise
         except Exception as e:
             log.error(f'Exception during token refresh for client_id {client_id}: {e}')
             return None
@@ -1746,6 +1753,9 @@ class OAuthManager:
                 user_oauth_groups = []
 
         user_current_groups: list[GroupModel] = await Groups.get_groups_by_member_id(user.id, db=db)
+        if oauth_claim and claim_data is None and token_claims is not None and user_current_groups:
+            log.warning('Token exchange denied: no readable groups claim in userinfo or the token')
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
         all_available_groups: list[GroupModel] = await Groups.get_all_groups(db=db)
 
         # Create groups if they don't exist and creation is enabled

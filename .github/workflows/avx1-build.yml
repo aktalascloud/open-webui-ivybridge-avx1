@@ -37,6 +37,7 @@ jobs:
         with:
           path: .avx1-native-cache
           key: ivy-native-${{ runner.os }}-${{ steps.native-inputs.outputs.key }}-${{ hashFiles('pyproject.toml', '.avx1/native_json.py', '.avx1/native_cache.py', '.avx1/common.py', '.avx1/native-policy.json') }}
+          restore-keys: ivy-native-${{ runner.os }}-${{ steps.native-inputs.outputs.key }}-
       - name: Build, test, audit and package
         env:
           BUILD_CHANNEL: latest

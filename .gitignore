@@ -319,3 +319,7 @@ cypress/screenshots
 *.p12
 *.jks
 android/key.properties
+/evals/
+
+# Local temporary fixtures and screenshots
+/tmp/

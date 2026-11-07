@@ -166,6 +166,7 @@
 	export let inputId = 'chat-input';
 	export let messagesContainerId = 'messages-container';
 	export let temporary: boolean | undefined = undefined;
+	export let onTemporaryChange: ((value: boolean) => void) | null = null;
 	$: isTemporary = temporary ?? $temporaryChatEnabled;
 	export let terminalContext: TerminalContext | null = null;
 	export let terminalSelectionEnabled = true;
@@ -213,9 +214,7 @@
 	$: canCompact = !!history?.currentId;
 	$: canSide =
 		($_user?.role === 'admin' ||
-			($_user?.role === 'user' &&
-				($_user.permissions?.chat?.temporary ?? true) &&
-				($_user.permissions?.chat?.side_chat ?? false))) &&
+			($_user?.role === 'user' && ($_user.permissions?.chat?.side_chat ?? false))) &&
 		!embedded &&
 		selectedModels.length === 1 &&
 		!!selectedModelIds[0] &&
@@ -238,7 +237,7 @@
 			)
 		: false;
 	$: canToggleTemporary =
-		!embedded &&
+		(!embedded || onTemporaryChange !== null) &&
 		!chatId &&
 		($_user?.role === 'admin' ||
 			($_user?.role === 'user' &&
@@ -267,6 +266,39 @@
 	export let oauthRedirectHandler: Function = () => {};
 
 	let showTerminalMenu = false;
+
+	function fitControlLabels(controls: HTMLElement) {
+		let frame: number;
+		const scheduleMeasure = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(() => {
+				const labels = controls.querySelectorAll<HTMLElement>('[data-input-label]');
+				// Measure all labels together so separate controls cannot compete for the same space.
+				for (const label of labels) label.style.display = '';
+				if (controls.scrollWidth > controls.clientWidth) {
+					for (const label of labels) label.style.display = 'none';
+				}
+			});
+		};
+		const observer = new ResizeObserver(scheduleMeasure);
+		const observeControls = () => {
+			observer.disconnect();
+			observer.observe(controls);
+			for (const child of controls.children) observer.observe(child);
+			scheduleMeasure();
+		};
+		const mutations = new MutationObserver(observeControls);
+		mutations.observe(controls, { childList: true, subtree: true, characterData: true });
+		observeControls();
+
+		return {
+			destroy() {
+				cancelAnimationFrame(frame);
+				observer.disconnect();
+				mutations.disconnect();
+			}
+		};
+	}
 
 	export let messageQueue: { id: string; prompt: string; files: any[]; error?: string }[] = [];
 	export let onQueueSendNow: (id: string) => void = () => {};
@@ -615,6 +647,10 @@
 
 	const temporaryHandler = async () => {
 		if (!canToggleTemporary) return;
+		if (onTemporaryChange) {
+			onTemporaryChange(!isTemporary);
+			return;
+		}
 
 		if (($settings?.temporaryChatByDefault ?? false) && isTemporary) {
 			await temporaryChatEnabled.set(null);
@@ -879,19 +915,12 @@
 		modelCapabilitiesById
 	);
 
-	let terminalCapableModels = [];
-	$: terminalCapableModels = getCapableModelIds(
-		selectedModelIds,
-		'terminal',
-		modelCapabilitiesById
-	);
 	$: hasDirectToolServerAccess =
 		$config?.features?.enable_direct_integrations &&
 		($_user?.role === 'admin' || ($_user?.permissions?.features?.direct_tool_servers ?? true));
 	$: showTerminalSelector =
 		terminalSelectionEnabled &&
 		$config?.features?.enable_tool_servers &&
-		terminalCapableModels.length > 0 &&
 		(($terminalServers ?? []).some((t) => t.id) ||
 			(hasDirectToolServerAccess &&
 				(($terminalServers ?? []).some((t) => !t.id) ||
@@ -959,17 +988,6 @@
 	// Disable code interpreter when terminal is active (mutually exclusive)
 	$: if ($selectedTerminalId && codeInterpreterEnabled) {
 		codeInterpreterEnabled = false;
-	}
-
-	// Clear selected terminal when model doesn't support terminal
-	$: if (
-		terminalSelectionEnabled &&
-		inputId === 'chat-input' &&
-		$selectedTerminalId &&
-		selectedModelIds.length > 0 &&
-		terminalCapableModels.length === 0
-	) {
-		selectedTerminalId.set(null);
 	}
 
 	const scrollToBottom = () => {
@@ -1372,7 +1390,19 @@
 		}
 	};
 
+	const isAttachmentDrop = (event: DragEvent) => {
+		if (!(event.target instanceof Element)) return false;
+		const composer = event.target.closest('[data-composer-id]');
+		if (composer) return composer.getAttribute('data-composer-id') === inputId;
+		// Files can land anywhere in this chat's dropzone. Sidebar items still target
+		// the composer so dragging a chat into a split panel keeps working.
+		return event.dataTransfer?.types.includes('Files') ?? false;
+	};
 	const onDragOver = (e: DragEvent) => {
+		if (!isAttachmentDrop(e)) {
+			dragged = false;
+			return;
+		}
 		e.preventDefault();
 
 		// Check if a file or a sidebar chat/folder item is being dragged.
@@ -1396,6 +1426,7 @@
 	};
 
 	const onDrop = async (e: DragEvent) => {
+		if (!isAttachmentDrop(e)) return;
 		e.preventDefault();
 		console.log(e);
 
@@ -2128,6 +2159,7 @@
 
 						<div
 							id={inputId === 'chat-input' ? 'message-input-container' : `${inputId}-wrapper`}
+							data-composer-id={inputId}
 							class="flex-1 flex flex-col relative w-full shadow-lg rounded-3xl border {isTemporary
 								? 'border-dashed border-gray-100 dark:border-gray-800 hover:border-gray-200 focus-within:border-gray-200 hover:dark:border-gray-700 focus-within:dark:border-gray-700'
 								: ' border-gray-100/50 dark:border-gray-850/50 hover:border-gray-200 focus-within:border-gray-100 hover:dark:border-gray-800 focus-within:dark:border-gray-800'} {($settings?.highContrastMode ??
@@ -2281,7 +2313,6 @@
 											: 'pt-2'
 										: ''}"
 									id={`${inputId}-container`}
-									data-composer-id={inputId}
 									on:input={handleTypingInput}
 								>
 									{#if suggestions}
@@ -2611,7 +2642,10 @@
 									{/if}
 								</div>
 
-								<div class="flex flex-1 items-center min-w-0 overflow-x-auto scrollbar-none">
+								<div
+									use:fitControlLabels
+									class="flex flex-1 items-center min-w-0 overflow-x-auto scrollbar-none"
+								>
 									{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.valves ?? true))}
 										<div class="ml-1 flex gap-1.5 shrink-0">
 											<Tooltip content={$i18n.t('Valves')} placement="top">
@@ -2649,7 +2683,7 @@
 												>
 													<Wrench className="size-4" strokeWidth="1.75" />
 
-													<span class="text-sm">
+													<span data-input-label class="text-sm">
 														{(selectedToolIds ?? []).length}
 													</span>
 												</button>
@@ -2672,7 +2706,7 @@
 												>
 													<Cube className="size-4" strokeWidth="1.75" />
 
-													<span class="text-sm">
+													<span data-input-label class="text-sm">
 														{(selectedSkillIds ?? []).length}
 													</span>
 												</button>
@@ -2763,9 +2797,6 @@
 														: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
 												>
 													<GlobeAlt className="size-4" strokeWidth="1.75" />
-													<div class="hidden group-hover:block">
-														<XMark className="size-4" strokeWidth="1.75" />
-													</div>
 												</button>
 											</Tooltip>
 										{/if}
@@ -2783,9 +2814,6 @@
 														: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
 												>
 													<Photo className="size-4" strokeWidth="1.75" />
-													<div class="hidden group-hover:block">
-														<XMark className="size-4" strokeWidth="1.75" />
-													</div>
 												</button>
 											</Tooltip>
 										{/if}
@@ -2808,10 +2836,6 @@
 														: 'focus:outline-hidden rounded-full'}"
 												>
 													<Terminal className="size-3.5" strokeWidth="2" />
-
-													<div class="hidden group-hover:block">
-														<XMark className="size-4" strokeWidth="1.75" />
-													</div>
 												</button>
 											</Tooltip>
 										{/if}

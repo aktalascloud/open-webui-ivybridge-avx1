@@ -4,9 +4,7 @@
 	import {
 		chatId as activeChatId,
 		config,
-		mobile,
 		settings,
-		showTabs,
 		showSettings,
 		terminalServers,
 		selectedTerminalId,
@@ -69,9 +67,6 @@
 	const selectDirect = async (terminal: (typeof directTerminals)[0]) => {
 		const newId = $selectedTerminalId === terminal.url ? null : terminal.url;
 		selectedTerminalId.set(newId);
-		if (newId && !$mobile) {
-			showTabs.set(($settings?.showFilesOnTerminalSelect ?? true) ? 'files' : false);
-		}
 
 		// Enable the selected direct terminal, disable all others
 		const updatedServers = ($settings?.terminalServers ?? []).map((s) => ({
@@ -93,9 +88,6 @@
 	const selectSystem = async (terminal: (typeof systemTerminals)[0]) => {
 		const newId = $selectedTerminalId === terminal.id ? null : terminal.id;
 		selectedTerminalId.set(newId);
-		if (newId && !$mobile) {
-			showTabs.set(($settings?.showFilesOnTerminalSelect ?? true) ? 'files' : false);
-		}
 
 		// Disable all direct terminals when switching to a system terminal
 		if ($settings?.terminalServers?.some((s) => s.enabled)) {
@@ -135,18 +127,18 @@
 
 <div class="flex items-center translate-x-0.5">
 	{#if disabled}
-		<Tooltip content={$i18n.t('Terminal')} placement="top">
+		<Tooltip content={selectedLabel} placement="top">
 			<button
 				type="button"
 				disabled
 				aria-disabled="true"
-				aria-label={$selectedTerminalId && selectedLabel ? undefined : $i18n.t('Terminal')}
+				aria-label={selectedLabel}
 				class={triggerClass}
 			>
 				<Cloud className="size-3.5" strokeWidth="2" />
 
 				{#if $selectedTerminalId && selectedLabel}
-					<span class="truncate text-[0.8125rem] max-w-[6.25rem] sm:max-w-[9.375rem]"
+					<span data-input-label class="truncate text-[0.8125rem] max-w-[9.375rem]"
 						>{selectedLabel}</span
 					>
 				{/if}
@@ -154,16 +146,12 @@
 		</Tooltip>
 	{:else}
 		<Dropdown bind:show align="start">
-			<Tooltip content={$i18n.t('Terminal')} placement="top">
-				<button
-					type="button"
-					aria-label={$selectedTerminalId && selectedLabel ? undefined : $i18n.t('Terminal')}
-					class={triggerClass}
-				>
+			<Tooltip content={selectedLabel} placement="top">
+				<button type="button" aria-label={selectedLabel} class={triggerClass}>
 					<Cloud className="size-3.5" strokeWidth="2" />
 
 					{#if $selectedTerminalId && selectedLabel}
-						<span class="truncate text-[0.8125rem] max-w-[6.25rem] sm:max-w-[9.375rem]"
+						<span data-input-label class="truncate text-[0.8125rem] max-w-[9.375rem]"
 							>{selectedLabel}</span
 						>
 					{/if}

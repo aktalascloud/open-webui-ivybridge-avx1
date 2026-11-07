@@ -7,6 +7,10 @@ from pathlib import Path
 import types
 import time
 import sys
+import runpy
+import hashlib
+import re
+from uuid import uuid4
 import unittest
 from unittest.mock import AsyncMock, patch
 ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
@@ -33,6 +37,17 @@ def mcp_instance(session):
     instance=cls();instance.client=session;instance.tool_definitions={}
     return instance
 
+
+def execution_scope(extra=None):
+    space={**runpy.run_path(str(ROOT/'utils/tool_calling.py')),'JSONCodec':json,'time':time,
+           'hashlib':hashlib,'re':re,'uuid4':uuid4,'is_saved_chat_id':lambda _:True}
+    space.update(extra or {})
+    for name in ['tool_permission_fingerprint','requires_tool_approval']:
+        function(Path('utils/tool_permissions.py'),name,space)
+    function(Path('utils/middleware.py'),'_is_tool_result_error',space)
+    function(Path('utils/middleware.py'),'execute_tool_call',space)
+    return space
+
 class AgentPRs(unittest.IsolatedAsyncioTestCase):
     async def native(self,kind,params,spec):
         captured=[]
@@ -40,7 +55,7 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
         async def update(function,extra_params):return function
         space={'resolve_tool_call':lambda *_:None,'JSONCodec':json,'ast':ast,'log':types.SimpleNamespace(debug=lambda *_:None),
                'is_saved_chat_id':lambda _:True,'get_updated_tool_function':update,'time':time}
-        call=function(Path('utils/middleware.py'),'execute_tool_call',space)
+        space=execution_scope(space);call=space['execute_tool_call']
         tool={'type':kind,'callable':target,'spec':{'parameters':spec}}
         result=await call({'messages':[]},{'tools':{'demo':tool}},None,{'type':'function_call','name':'demo','arguments':json.dumps(params),'call_id':'fixture-call'})
         self.assertEqual(result[1],'ok');return captured[0]
@@ -61,6 +76,9 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
             space={'tools':{'demo':{'type':kind,'callable':target,'spec':{'parameters':{'properties':{'query':{}}}}}},
                 'log':types.SimpleNamespace(debug=lambda *_:None,warning=lambda *_:None),'process_tool_result':result,
                 'request':None,'metadata':{},'user':None,'event_emitter':None,'sources':[]}
+            space=execution_scope(space)
+            space.update(body={'messages':[]},event_caller=None,
+                         get_updated_tool_function=AsyncMock(side_effect=lambda function,extra_params:function))
             call=function(Path('utils/middleware.py'),'tool_call_handler',space,legacy=True)
             await call({'name':'demo','parameters':{'query':'kept','other':1}})
             self.assertEqual(captured,[expected])
@@ -73,8 +91,7 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
 
     async def test_ephemeral_native_call_cannot_execute_without_explicit_approval(self):
         target=AsyncMock(return_value='must not execute')
-        call=function(Path('utils/middleware.py'),'execute_tool_call',{'JSONCodec':json,'ast':ast,
-                      'is_saved_chat_id':lambda _:False,'log':types.SimpleNamespace(debug=lambda *_:None)})
+        call=execution_scope({'is_saved_chat_id':lambda _:False})['execute_tool_call']
         metadata={'params':{'tool_approval_mode':'ask'},'tools':{'demo':{'type':'function','callable':target,'spec':{'parameters':{'properties':{}}}}}}
         result=await call({'messages':[]},metadata,None,{'type':'function_call','name':'demo','arguments':'{}'})
         self.assertIn('not approved',result[1]);target.assert_not_awaited()

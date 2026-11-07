@@ -4039,9 +4039,11 @@ async def search_tools(
     query: str,
     count: int = 5,
     __metadata__: dict = None,
+    __request__: Request = None,
+    __user__: dict = None,
 ) -> str:
     """
-    Search the tools listed in <available_tools> and return their full definitions.
+    Discover available tools by capability and return their full definitions.
     Pass the exact tool name when you already know it.
     Invoke a result with call_tool(tool_name, params), where params is a JSON-encoded object
     matching the tool's parameters. Do not call deferred tools directly by name.
@@ -4050,11 +4052,20 @@ async def search_tools(
     :param count: Maximum number of results to return (default: 5, max: 20)
     :return: JSON with the definitions of the matching tools, which can then be invoked through call_tool
     """
-    from open_webui.utils.tool_search import search_deferred_tools
+    from open_webui.utils.tool_search import ToolSearchError, rank_deferred_tools
 
     tools = __metadata__['tools']
     candidates = {name: tools[name]['spec'] for name in __metadata__['deferred_tools']}
-    matches = search_deferred_tools(query, candidates, count)
+    try:
+        matches = await rank_deferred_tools(
+            query,
+            candidates,
+            count,
+            request=__request__,
+            user=UserModel(**__user__) if __user__ else None,
+        )
+    except ToolSearchError as error:
+        return JSONCodec.dumps({'error': str(error)})
     if not matches:
         return JSONCodec.dumps(
             {'tools': [], 'message': 'No matching tools found. Try different keywords or the exact tool name.'}
@@ -4234,12 +4245,12 @@ async def create_automation(
     The automation will use the current chat model.
 
     The rrule parameter must be a valid iCalendar RRULE string. Common examples:
-    - Every day at 9am: "DTSTART:20250101T090000\\nRRULE:FREQ=DAILY"
-    - Every Monday at 8am: "DTSTART:20250106T080000\\nRRULE:FREQ=WEEKLY;BYDAY=MO"
+    - Every day at 9am: "DTSTART:20250101T090000\nRRULE:FREQ=DAILY"
+    - Every Monday at 8am: "DTSTART:20250106T080000\nRRULE:FREQ=WEEKLY;BYDAY=MO"
     - Every hour: "RRULE:FREQ=HOURLY;INTERVAL=1"
     - Every 30 minutes: "RRULE:FREQ=MINUTELY;INTERVAL=30"
-    - Once at a specific time: "DTSTART:20250415T140000\\nRRULE:FREQ=DAILY;COUNT=1"
-    - First day of every month: "DTSTART:20250101T090000\\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1"
+    - Once at a specific time: "DTSTART:20250415T140000\nRRULE:FREQ=DAILY;COUNT=1"
+    - First day of every month: "DTSTART:20250101T090000\nRRULE:FREQ=MONTHLY;BYMONTHDAY=1"
 
     The DTSTART time should reflect the desired execution time. Use COUNT=1 for one-time automations.
 

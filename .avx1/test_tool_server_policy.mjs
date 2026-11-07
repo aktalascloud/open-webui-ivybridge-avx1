@@ -56,7 +56,7 @@ test('actual side-chat send isolates mic metadata and cannot alias an explicit s
     mic.mark('same');
     if(sideVoice)mic.mark('same','side-fixture');
     let payload;
-    const context={sideChatAllowed:true,draft:'same',files:[],busy:false,atSelectedModel:{id:'model'},
+    const context={canSend:true,disposed:false,sending:false,recovering:false,temporary:true,isShared:false,originalChatId:null,parentFolderId:null,sideChatAllowed:true,draft:'same',files:[],busy:false,atSelectedModel:{id:'model'},
       selectedModels:['model'],error:'',id:'temporary-fixture',inputId:'side-fixture',
       $i18n:{t:value=>value},$socket:{connected:true,id:'fixture-socket'},sideModelId:'model',
       tick:async()=>{},input:{uploadPendingFiles:async()=>true,setText(){}},uuidv4:()=>String(Math.random()),

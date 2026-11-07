@@ -95,6 +95,7 @@
 	let commitMessage = '';
 	let savedDraft = '';
 	let defaultMeta: Record<string, any> = {};
+	let defaultFunctionCalling: string | null = null;
 	let allowNavigation = false;
 	let showDiscard = false;
 	let afterDiscard: (() => void) | null = null;
@@ -437,7 +438,7 @@
 			}
 		}
 
-		if (toolIds.length > 0) {
+		if (toolIds.length > 0 || defaultMeta.toolIds?.length > 0) {
 			modelInfo.meta.toolIds = toolIds;
 		} else {
 			if (modelInfo.meta.toolIds) {
@@ -723,7 +724,7 @@
 				}
 			});
 
-			toolIds = model?.meta?.toolIds ?? [];
+			toolIds = model?.meta?.toolIds ?? defaultMeta.toolIds ?? [];
 			subagents = { model_ids: model?.meta?.subagents?.model_ids ?? [] };
 			skillIds = model?.meta?.skillIds ?? [];
 			filterIds = model?.meta?.filterIds ?? [];
@@ -785,11 +786,13 @@
 		// reflects the actual defaults rather than hardcoded values
 		const modelsConfig = await getModelsDefaults(localStorage.token).catch(() => null);
 		defaultMeta = modelsConfig?.DEFAULT_MODEL_METADATA ?? {};
+		defaultFunctionCalling = modelsConfig?.DEFAULT_FUNCTION_CALLING ?? null;
 
 		// Use admin defaults as base, falling back to hardcoded defaults
 		capabilities = { ...DEFAULT_CAPABILITIES, ...(defaultMeta.capabilities ?? {}) };
 		defaultFeatureIds = defaultMeta.defaultFeatureIds ?? [];
 		builtinTools = defaultMeta.builtinTools ?? {};
+		toolIds = defaultMeta.toolIds ?? [];
 
 		// Scroll to top 'workspace-container' element
 		const workspaceContainer = document.getElementById('workspace-container');
@@ -1723,6 +1726,7 @@
 									<div class="space-y-0.5">
 										<Capabilities
 											bind:capabilities
+											functionCalling={params.function_calling ?? defaultFunctionCalling}
 											bind:defaultFeatureIds
 											bind:builtinTools
 											disabled={readOnly}

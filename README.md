@@ -30,3 +30,5 @@ Use the single release package. Keep user data separate from source. Settings, e
 Current checks and measurements: [.avx1/measurements/latest.json](.avx1/measurements/latest.json). CPU microbenchmarks are not LLM tokens/s. Original licenses and notices apply.
 
 Measured on the local CPU: the160-file KB metadata fixture avoids20MiB extracted-text materialization; median process cycles fell94.63%. This is one SQLite/Pydantic operation, not inference throughput. Raw samples and exact source hashes are in the current measurement record.
+
+Current maintainer-only applied patches: [patches](patches/README.md).

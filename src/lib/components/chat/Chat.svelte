@@ -2,6 +2,7 @@
 	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
 	import { isSelectedDirectToolServer } from '$lib/utils/toolServerPolicy.js';
 	import { applyStrataReasoning } from '$lib/utils/strataReasoning';
+	import { resolveToolApprovalMode } from '$lib/utils/toolPermissions';
 	import type { TerminalContext } from '$lib/types';
 	import {
 		estimateTokens,
@@ -22,6 +23,7 @@
 	import { get, writable, type Unsubscriber, type Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
 	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { getModels } from '$lib/apis';
 	import equal from 'fast-deep-equal';
 
 	import {
@@ -249,6 +251,7 @@
 	let contextUsage = null;
 
 	const normalizeSelectedModels = (modelIds: string[] = []) => {
+		if (modelIds.some((id) => id.startsWith('agent:'))) return modelIds;
 		const selected = resolveDefaultModelIds(
 			$models,
 			modelIds,
@@ -436,9 +439,7 @@
 	$: canClone = isShared && ($user?.role === 'admin' || ($user?.permissions?.chat?.import ?? true));
 	$: sideChatAllowed =
 		$user?.role === 'admin' ||
-		($user?.role === 'user' &&
-			($user.permissions?.chat?.temporary ?? true) &&
-			($user.permissions?.chat?.side_chat ?? false));
+		($user?.role === 'user' && ($user.permissions?.chat?.side_chat ?? false));
 	let cloning = false;
 
 	const cloneSharedChat = async () => {
@@ -533,13 +534,16 @@
 	let currentDraftKey = '';
 
 	// Chat parameters own the approval mode; chats without an override use the user default.
-	$: toolApprovalMode =
-		(params?.tool_approval_mode ?? $settings?.params?.tool_approval_mode) === 'ask'
-			? 'ask'
-			: 'full';
+	$: toolApprovalMode = resolveToolApprovalMode(
+		params?.tool_approval_mode ?? $settings?.params?.tool_approval_mode,
+		$config?.features?.enable_tool_permissions_auto ?? false
+	);
 
 	const handleToolApprovalModeChange = async (mode: string) => {
-		const tool_approval_mode = mode === 'ask' ? 'ask' : 'full';
+		const tool_approval_mode = resolveToolApprovalMode(
+			mode,
+			$config?.features?.enable_tool_permissions_auto ?? false
+		);
 		browserApprovalMode = tool_approval_mode;
 		params = {
 			...params,
@@ -1083,11 +1087,34 @@
 	}
 
 	let lastTerminalSkillSelector: string | null = null;
+	let agentDiscovery = 0;
+	const refreshAgentModels = async () => {
+		const generation = ++agentDiscovery;
+		try {
+			const available = await getModels(
+				localStorage.token,
+				$config?.features?.enable_direct_connections ? ($settings?.directConnections ?? null) : null
+			);
+			if (generation === agentDiscovery) {
+				models.set(available);
+				const remaining = selectedModels.filter(
+					(id) => !id.startsWith('agent:') || available.some((model) => model.id === id)
+				);
+				selectedModels =
+					remaining.length || equal(remaining, selectedModels)
+						? remaining
+						: normalizeSelectedModels(remaining);
+			}
+		} catch (error) {
+			console.error('Agent model discovery failed', error);
+		}
+	};
 	$: if ($selectedTerminalId !== lastTerminalSkillSelector) {
 		terminalContext = null;
 		selectedSkillIds = selectedSkillIds.filter((id) => !id.startsWith('terminal:'));
 		terminalSkills.set([]);
 		lastTerminalSkillSelector = $selectedTerminalId;
+		void refreshAgentModels();
 	}
 
 	let defaultsModelIds: string[] = [];
@@ -1123,7 +1150,8 @@
 			const defaultFeature = (feature: 'web_search' | 'image_generation' | 'code_interpreter') =>
 				featureAvailable(feature) &&
 				currentModels.every((model) => model.info?.meta?.defaultFeatureIds?.includes(feature));
-			const terminalId = currentModels[0]?.info?.meta?.terminalId;
+			const folderTerminalId = !history.currentId ? $selectedFolder?.data?.terminal_id : null;
+			const terminalId = folderTerminalId || currentModels[0]?.info?.meta?.terminalId;
 			const defaults: Record<string, any> = {
 				selectedToolIds: [
 					...new Set(
@@ -1154,7 +1182,8 @@
 				terminalId:
 					terminalId &&
 					isTerminalAvailable(terminalId) &&
-					currentModels.every((model) => model.info?.meta?.terminalId === terminalId)
+					(folderTerminalId ||
+						currentModels.every((model) => model.info?.meta?.terminalId === terminalId))
 						? terminalId
 						: $selectedTerminalId
 			};
@@ -1952,7 +1981,10 @@
 
 		$audioQueue?.destroy();
 
-		const audioQueueInstance = new AudioQueue(document.getElementById('audioElement'));
+		const audioQueueInstance = new AudioQueue(
+			document.getElementById('audioElement'),
+			() => $settings.responseAutoPlayback ?? false
+		);
 		audioQueue.set(audioQueueInstance);
 
 		// Restore direct terminal enabled states based on persisted selectedTerminalId
@@ -1977,8 +2009,13 @@
 
 		const selectedFolderSubscribe = selectedFolder.subscribe(async (folder) => {
 			await tick();
-			// Folder default models apply to new chats only.
+			// Folder defaults apply to new chats only.
 			if (!history.currentId && folder) {
+				if (folder.data?.terminal_id) {
+					selectedTerminalId.set(folder.data.terminal_id);
+					await refreshAgentModels();
+					if (history.currentId || $selectedFolder?.id !== folder.id) return;
+				}
 				const folderModels = normalizeSelectedModels(folder.data?.model_ids ?? []);
 				if (!equal(selectedModels, folderModels)) {
 					selectedModels = folderModels;
@@ -2446,6 +2483,7 @@
 				return {
 					chatId: isTemporaryChatId($chatId) ? undefined : $chatId || undefined,
 					modelId: model && !('direct' in model && model.direct) ? model.id : '',
+					terminalId: $selectedTerminalId || undefined,
 					voiceModel: $config?.audio?.realtime?.model,
 					voice: model?.info?.meta?.voice?.voice || $config?.audio?.realtime?.voice,
 					messages: createMessagesList(history, history.currentId).map((message) => {
@@ -2740,12 +2778,16 @@
 			}
 
 			// Unavailable models filtering
-			selectedModels = selectedModels.filter((modelId) =>
-				$models.map((m) => m.id).includes(modelId)
+			selectedModels = selectedModels.filter(
+				(modelId) => modelId.startsWith('agent:') || $models.map((m) => m.id).includes(modelId)
 			);
 		} else {
 			if ($selectedFolder) {
 				// Folder defaults are explicit; never inherit a previous chat's selection.
+				if ($selectedFolder.data?.terminal_id) {
+					selectedTerminalId.set($selectedFolder.data.terminal_id);
+					await refreshAgentModels();
+				}
 				selectedModels = normalizeSelectedModels($selectedFolder.data?.model_ids ?? []);
 			} else {
 				if (sessionStorage.selectedModels) {
@@ -2881,36 +2923,38 @@
 		if (chatInputPrompt !== null) messageInput?.setText(chatInputPrompt);
 		if (modelSearch) await openModelSelectorWithSearch(modelSearch);
 
-		// Consume one-shot desktop event (e.g. Spotlight query, call shortcut)
-		if ($desktopEvent) {
+		// Consume call requests or the acknowledged Tether handoff.
+		if ($desktopEvent && (!$desktopEvent.handoff || !embedded)) {
 			const event = $desktopEvent;
 			desktopEvent.set(null);
 
-			if (event.type === 'call') {
+			if (event.handoff && !event.handoff.isCurrent()) {
+				event.handoff.complete('The signed-in account changed. Try again from Tether.');
+			} else if (event.type === 'call' || event.type === 'voice') {
 				openCallOverlay();
+				event.handoff?.complete(
+					$showCallOverlay
+						? undefined
+						: 'Voice mode is unavailable. Check your model, permissions and voice settings in WebUI.'
+				);
 			} else if (event.type === 'query') {
-				const query = event.data?.query;
-				const eventFiles = event.data?.files;
-
-				// Attach screenshot images from desktop (e.g. Spotlight region capture)
-				if (eventFiles?.length) {
-					for (const ef of eventFiles) {
-						files = [
-							...files,
-							{
-								type: 'image',
-								url: ef.dataUrl,
-								name: ef.name
-							}
-						];
-					}
-				}
-
-				if (query) {
-					messageInput?.setTextHandler(query, () => submitHandler(prompt));
-				} else if (eventFiles?.length) {
+				if (!messageInput) {
+					event.handoff.complete('The WebUI composer is not ready. Send again from Spotlight.');
+				} else {
+					// Replace the restored new-chat draft; do not mix in its old attachments.
+					files = event.data.files.map((file) => ({
+						type: 'image',
+						url: file.dataUrl,
+						name: file.name
+					}));
+					messageInput.setText(event.data.query ?? '');
 					await tick();
-					submitHandler('');
+					if (event.handoff.isCurrent()) {
+						event.handoff.complete();
+						void submitHandler(event.data.query ?? '');
+					} else {
+						event.handoff.complete('The handoff expired. Send again from Spotlight.');
+					}
 				}
 			}
 		} else if ($page.url.searchParams.get('q')) {
@@ -2920,7 +2964,7 @@
 		}
 
 		selectedModels = selectedModels.map((modelId) =>
-			$models.map((m) => m.id).includes(modelId) ? modelId : ''
+			modelId.startsWith('agent:') || $models.map((m) => m.id).includes(modelId) ? modelId : ''
 		);
 
 		await tick();
@@ -2988,11 +3032,20 @@
 					(chatContent?.models ?? undefined) !== undefined
 						? chatContent.models
 						: [chatContent.models ?? ''];
+				if (selectedModels[0]?.startsWith('agent:')) {
+					const terminalId = decodeURIComponent(selectedModels[0].split(':')[1]);
+					if (isTerminalAvailable(terminalId)) {
+						selectedTerminalId.set(terminalId);
+						await refreshAgentModels();
+					} else if ($terminalServers !== null) {
+						selectedModels = selectedModels.filter((modelId) => !modelId.startsWith('agent:'));
+					}
+				}
 
 				// An empty model list is not evidence that the chat's models are gone.
 				if ($models.length > 0) {
-					selectedModels = selectedModels.filter((modelId) =>
-						$models.map((m) => m.id).includes(modelId)
+					selectedModels = selectedModels.filter(
+						(modelId) => modelId.startsWith('agent:') || $models.map((m) => m.id).includes(modelId)
 					);
 				}
 
@@ -3886,8 +3939,11 @@
 	let terminalTabs: ChatTabs;
 	let fullWidthTabs = false;
 	let mainChatActive = false;
+	let mainChatStyle = '';
+	let mainChatGroupId = '';
 	let tabTitleEditor: import('svelte').Snippet | undefined;
 	let tabActions: import('svelte').Snippet | undefined;
+	let tabBarActions: import('svelte').Snippet | undefined;
 
 	const getChatId = async (_history: typeof history) => {
 		let _chatId = $chatId;
@@ -3947,7 +4003,7 @@
 			return { status: 'rejected' };
 
 		const _selectedModels = selectedModels.map((modelId) =>
-			$models.map((m) => m.id).includes(modelId) ? modelId : ''
+			modelId.startsWith('agent:') || $models.map((m) => m.id).includes(modelId) ? modelId : ''
 		);
 
 		if (!equal(selectedModels, _selectedModels)) {
@@ -4517,7 +4573,11 @@
 						: $config?.features?.enable_tools
 				),
 				skill_ids: skillIds.length > 0 ? skillIds : undefined,
-				terminal_id: terminalEnabled && requestTerminalId ? requestTerminalId : undefined,
+				terminal_id: terminalEnabled && requestTerminalId ? requestTerminalId : null,
+				terminal_cwd:
+					!_chatId && terminalContext?.terminalId === requestTerminalId
+						? terminalContext.currentDirectory
+						: undefined,
 				tool_servers: $config?.features?.enable_tool_servers
 					? [
 							...($toolServers ?? []).filter(
@@ -5290,6 +5350,10 @@
 		? '  md:max-w-[calc(100%-var(--sidebar-width))]'
 		: ' '} w-full max-w-full min-w-0 flex flex-col"
 	id={chatContainerId}
+	role="presentation"
+	on:dragover|capture={(event) => terminalTabs?.dragOverChat(event)}
+	on:drop|capture={(event) => terminalTabs?.dropChat(event)}
+	on:dragleave={(event) => terminalTabs?.leaveChatDrop(event)}
 >
 	<div in:fade={{ duration: 50 }} class="w-full h-full flex flex-col">
 		{#if backgroundImage}
@@ -5302,14 +5366,15 @@
 			></div>
 		{/if}
 
-		<div
-			class="w-full h-full min-h-0 {fullWidthTabs
-				? 'grid grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto]'
-				: 'flex'}"
-		>
+		<div class="relative w-full h-full min-h-0 flex">
 			<div
 				class="h-full flex relative max-w-full min-w-0 min-h-0 flex-1 flex-col col-start-1 row-start-2"
 				class:hidden={fullWidthTabs && !mainChatActive}
+				style={fullWidthTabs ? mainChatStyle : undefined}
+				data-main-chat-pane
+				data-panel-group={fullWidthTabs ? mainChatGroupId : undefined}
+				on:focusin={() => fullWidthTabs && terminalTabs?.focusMainChat()}
+				on:pointerdown={() => fullWidthTabs && terminalTabs?.focusMainChat()}
 				id={fullWidthTabs ? 'chat-panel-main-chat-view' : undefined}
 				role={fullWidthTabs ? 'tabpanel' : undefined}
 				aria-labelledby={fullWidthTabs ? 'chat-panel-main-chat' : undefined}
@@ -5352,6 +5417,7 @@
 							tabbed={fullWidthTabs}
 							bind:tabTitleEditor
 							bind:tabActions
+							bind:tabBarActions
 							{liveParticipants}
 							bind:this={navbarElement}
 							readOnly={isShared}
@@ -5725,17 +5791,21 @@
 				<ChatTabs
 					bind:fullWidth={fullWidthTabs}
 					bind:mainChatActive
+					bind:mainChatStyle
+					bind:mainChatGroupId
 					title={$chatTitle || $i18n.t('New Chat')}
 					tabTitleEditor={loading ? undefined : tabTitleEditor}
 					tabActions={loading ? undefined : tabActions}
+					tabBarActions={loading ? undefined : tabBarActions}
 					bind:terminalContext
 					bind:history
 					bind:files
 					chatId={$chatId}
 					bind:this={terminalTabs}
+					folderId={chat ? (chat.folder_id ?? null) : ($selectedFolder?.id ?? null)}
 					chatUser={chatOwner}
 					modelId={selectedModelIds?.at(0) ?? null}
-					canSideChat={sideChatAllowed && selectedModels.length === 1 && !!selectedModelIds[0]}
+					canSideChat={sideChatAllowed}
 					systemPrompt={params?.system || $settings.system || ''}
 					submitPrompt={submitHandler}
 					onAskFile={askFile}
