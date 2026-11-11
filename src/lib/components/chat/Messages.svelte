@@ -21,6 +21,7 @@
 	export let className = 'h-full flex pt-18';
 
 	export let chatId = '';
+	export let temporary = $temporaryChatEnabled;
 	export let user = $_user;
 
 	export let prompt;
@@ -45,8 +46,9 @@
 	export let forkHandler: Function | null = null;
 
 	export let readOnly = false;
-	export let shareMode: 'continue' | null = null;
+	export let writeAccess = false;
 	export let allowDelete = true;
+	export let allowToolApproval: boolean = false;
 	export let compactPreview = false;
 	export let editCodeBlock = true;
 
@@ -54,6 +56,7 @@
 	export let bottomPadding = false;
 	export let autoScroll;
 	export let messagesContainerId = 'messages-container';
+	export let branchPointMessageId: string | null = null;
 
 	export let onSelect = (e) => {};
 	export let onInsertToNote: ((content: string) => void) | null = null;
@@ -95,6 +98,7 @@
 		const visitedMessageIds = new Set();
 
 		while (message && (messagesCount !== null ? _messages.length < messagesCount : true)) {
+			if (message.id === branchPointMessageId) break;
 			if (visitedMessageIds.has(message.id)) {
 				console.warn('Circular dependency detected in message history', message.id);
 				break;
@@ -192,7 +196,7 @@
 	};
 
 	const updateChat = async () => {
-		if (!$temporaryChatEnabled) {
+		if (!temporary) {
 			history = history;
 			await tick();
 			const res = await updateChatById(localStorage.token, chatId, {
@@ -486,7 +490,7 @@
 		history.currentId = getDeepestChildId(history, parentMessageId);
 		history = history;
 
-		if (!$temporaryChatEnabled) {
+		if (!temporary) {
 			const res = await deleteChatMessageById(localStorage.token, chatId, messageId);
 			if (res?.chat?.history) {
 				history = res.chat.history;
@@ -510,14 +514,14 @@
 </script>
 
 <div class={className}>
-	{#if Object.keys(history?.messages ?? {}).length == 0}
+	{#if Object.keys(history?.messages ?? {}).length == 0 || (branchPointMessageId && history?.currentId === branchPointMessageId)}
 		<ChatPlaceholder modelIds={selectedModels} {atSelectedModel} {onSelect} />
 	{:else}
 		<div class="w-full pt-2">
 			{#key chatId}
 				<section class="w-full" aria-labelledby="chat-conversation">
 					<h2 class="sr-only" id="chat-conversation">{$i18n.t('Chat Conversation')}</h2>
-					{#if messages.at(0)?.parentId !== null}
+					{#if messages.at(0)?.parentId !== null && messages.at(0)?.parentId !== branchPointMessageId}
 						<Loader
 							on:visible={(e) => {
 								console.log('visible');
@@ -560,13 +564,14 @@
 									{onToolCallResolved}
 									{forkHandler}
 									{allowDelete}
+									{allowToolApproval}
 									{triggerScroll}
 									{readOnly}
 									{compactPreview}
 									{editCodeBlock}
 									{topPadding}
 									{onInsertToNote}
-									{shareMode}
+									{writeAccess}
 								/>
 							{/each}
 						</ul>

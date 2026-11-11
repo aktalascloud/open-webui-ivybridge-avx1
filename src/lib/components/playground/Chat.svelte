@@ -1,11 +1,13 @@
 <script lang="ts">
+	import { getPageContext } from '$lib/utils/page';
+	const { goto } = getPageContext();
+
 	import { v4 as uuidv4 } from 'uuid';
 	import fileSaver from 'file-saver';
 	const { saveAs } = fileSaver;
 
 	import { toast } from 'svelte-sonner';
 
-	import { goto } from '$app/navigation';
 	import { onMount, tick, getContext } from 'svelte';
 
 	import {
@@ -14,7 +16,7 @@
 		WEBUI_API_BASE_URL,
 		WEBUI_BASE_URL
 	} from '$lib/constants';
-	import { WEBUI_NAME, config, user, models, settings } from '$lib/stores';
+	import { baseModels, WEBUI_NAME, config, user, models, settings } from '$lib/stores';
 
 	import { chatCompletion } from '$lib/apis/openai';
 
@@ -93,7 +95,7 @@
 			return;
 		}
 
-		const model = $models.find((model) => model.id === selectedModelId);
+		const model = $baseModels.find((model) => model.id === selectedModelId);
 		if (!model) {
 			selectedModelId = '';
 			return;
@@ -309,8 +311,11 @@
 		}
 
 		selectedModelId =
-			resolveDefaultModelIds($models, $settings?.models, $config?.default_models?.split(','))[0] ??
-			'';
+			resolveDefaultModelIds(
+				$baseModels,
+				$settings?.models,
+				$config?.default_models?.split(',')
+			)[0] ?? '';
 		loaded = true;
 	});
 </script>
@@ -507,7 +512,7 @@
 									aria-label={$i18n.t('Model')}
 									bind:value={selectedModelId}
 								>
-									{#each $models as model}
+									{#each $baseModels as model}
 										<option value={model.id} class="bg-gray-50 dark:bg-gray-700"
 											>{model.name}</option
 										>

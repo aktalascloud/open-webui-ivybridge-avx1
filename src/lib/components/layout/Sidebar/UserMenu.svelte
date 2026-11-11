@@ -1,8 +1,10 @@
 <script lang="ts">
+	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import HotkeyHint from '$lib/components/common/HotkeyHint.svelte';
 	import { createEventDispatcher, getContext, onMount, tick } from 'svelte';
 
 	import { goto } from '$app/navigation';
+	import type { AppLayoutContext } from '$lib/types';
 	import { fade, slide } from 'svelte/transition';
 
 	import { getUsage } from '$lib/apis';
@@ -36,8 +38,16 @@
 	import { toast } from 'svelte-sonner';
 
 	const i18n = getContext('i18n');
+	const appLayout = getContext<AppLayoutContext | undefined>('appLayout');
 
 	export let show = false;
+	let confirmSignOut = false;
+	const signOut = async () => {
+		const res = await userSignOut();
+		localStorage.removeItem('token');
+		location.href = getLogoutRedirectUrl(res?.redirect_url);
+		show = false;
+	};
 	export let role = '';
 
 	export let profile = false;
@@ -264,7 +274,9 @@
 							if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
 							e.preventDefault();
 							show = false;
-							goto('/workspace');
+							if (appLayout?.openPageTab)
+								appLayout.openPageTab({ href: '/workspace', label: $i18n.t('Workspace') });
+							else goto('/workspace');
 							if ($mobile) {
 								await tick();
 								showSidebar.set(false);
@@ -315,7 +327,9 @@
 							if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
 							e.preventDefault();
 							show = false;
-							goto('/notes');
+							if (appLayout?.openPageTab)
+								appLayout.openPageTab({ href: '/notes', label: $i18n.t('Notes') });
+							else goto('/notes');
 							if ($mobile) {
 								await tick();
 								showSidebar.set(false);
@@ -366,7 +380,9 @@
 							if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
 							e.preventDefault();
 							show = false;
-							goto('/calendar');
+							if (appLayout?.openPageTab)
+								appLayout.openPageTab({ href: '/calendar', label: $i18n.t('Calendar') });
+							else goto('/calendar');
 							if ($mobile) {
 								await tick();
 								showSidebar.set(false);
@@ -417,7 +433,9 @@
 							if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
 							e.preventDefault();
 							show = false;
-							goto('/automations');
+							if (appLayout?.openPageTab)
+								appLayout.openPageTab({ href: '/automations', label: $i18n.t('Automations') });
+							else goto('/automations');
 							if ($mobile) {
 								await tick();
 								showSidebar.set(false);
@@ -468,7 +486,9 @@
 							if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
 							e.preventDefault();
 							show = false;
-							goto('/playground');
+							if (appLayout?.openPageTab)
+								appLayout.openPageTab({ href: '/playground', label: $i18n.t('Playground') });
+							else goto('/playground');
 							if ($mobile) {
 								await tick();
 								showSidebar.set(false);
@@ -626,11 +646,9 @@
 				class="flex h-[1.6875rem] items-center gap-2 rounded-xl px-2 text-[0.8125rem] w-full hover:bg-gray-50/60 dark:hover:bg-gray-800/60 transition cursor-pointer select-none"
 				type="button"
 				on:click={async () => {
-					const res = await userSignOut();
-					localStorage.removeItem('token');
-
-					location.href = getLogoutRedirectUrl(res?.redirect_url);
-					show = false;
+					const { hasChatViewDrafts } = await import('$lib/stores/chatViewStates');
+					if (hasChatViewDrafts()) confirmSignOut = true;
+					else await signOut();
 				}}
 			>
 				<div class="self-center">
@@ -641,3 +659,11 @@
 		</DropdownMenu>
 	</div>
 </Dropdown>
+
+<ConfirmDialog
+	bind:show={confirmSignOut}
+	title={$i18n.t('Unsaved changes')}
+	message={$i18n.t('Discard unsaved file edits and sign out?')}
+	confirmLabel={$i18n.t('Sign Out')}
+	on:confirm={signOut}
+/>

@@ -81,6 +81,7 @@ class InterfaceSettings(BaseModel):
     chatFadeStreamingText: bool | None = None
     richTextInput: bool | None = None
     showFormattingToolbar: bool | None = None
+    showInputSelections: bool | None = None
     insertPromptAsRichText: bool | None = None
     promptAutocomplete: bool | None = None
     insertSuggestionPrompt: bool | None = None
@@ -859,6 +860,9 @@ class UsersTable:
             from open_webui.models.notifications import delete_user_notifications
 
             await delete_user_notifications(id, db=session)
+            from open_webui.models.chat_views import ChatViewState
+
+            await session.execute(delete(ChatViewState).where(ChatViewState.user_id == id))
             await session.execute(delete(User).where(User.id == id))
             await session.commit()
             return True

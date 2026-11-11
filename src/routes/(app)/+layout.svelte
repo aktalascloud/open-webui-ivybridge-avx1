@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { onMount, tick, getContext } from 'svelte';
+	import { onMount, tick, getContext, setContext } from 'svelte';
+	import type { AppLayoutContext } from '$lib/types';
 
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -45,6 +46,8 @@
 	} from '$lib/stores';
 
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
+	import Chat from '$lib/components/chat/Chat.svelte';
+	import { pageTabKey } from '$lib/components/chat/Tabs/tabs';
 	import SettingsModal from '$lib/components/chat/SettingsModal.svelte';
 	import ChangelogModal from '$lib/components/ChangelogModal.svelte';
 	import AccountPending from '$lib/components/layout/Overlay/AccountPending.svelte';
@@ -54,8 +57,11 @@
 	import { canUseTemporaryChats } from '$lib/utils/settings-access';
 
 	const i18n = getContext('i18n');
+	setContext<AppLayoutContext>('appLayout', {});
 
 	let loaded = false;
+	$: routeHasTabs = ['/(app)', '/(app)/c/[id]'].includes($page.route.id ?? '');
+	$: usePageTabs = !routeHasTabs && !!pageTabKey($page.url);
 
 	let version;
 	let handledSettingsUrl = '';
@@ -94,6 +100,21 @@
 		);
 	};
 
+	const refreshTerminalServers = async () => {
+		const userId = $user?.id;
+		if (!userId || !localStorage.token) return;
+		const systemTerminals = await getTerminalServers(localStorage.token);
+		if ($user?.id !== userId || !$config?.features?.enable_tool_servers) return;
+		terminalServers.update((servers) => [
+			...(servers ?? []).filter((server) => !server.id),
+			...systemTerminals.map((terminal) => ({
+				...terminal,
+				url: `${WEBUI_API_BASE_URL}/terminals/${terminal.id}`,
+				key: localStorage.token
+			}))
+		]);
+	};
+
 	const setToolServers = async () => {
 		if (!$config?.features?.enable_tool_servers) {
 			toolServers.set([]);
@@ -123,10 +144,8 @@
 				: []
 		).filter((s: any) => s.enabled || s.url === $selectedTerminalId);
 
-		// Fetch terminal servers the user has access to (for FileNav + terminal_id)
-		const systemTerminals = await getTerminalServers(localStorage.token);
-		terminalServers.set([
-			...(enabledTerminals.length > 0
+		const directTerminals =
+			enabledTerminals.length > 0
 				? (
 						await getToolServersData(
 							enabledTerminals.map((t: any) => ({
@@ -154,17 +173,12 @@
 							key: enabledTerminals[i]?.key ?? '',
 							config: enabledTerminals[i]?.config ?? data?.config ?? {}
 						}))
-				: []),
-			// Store with proxy URL and session key for FileNav file browsing
-			...systemTerminals.map((t) => ({
-				id: t.id,
-				url: `${WEBUI_API_BASE_URL}/terminals/${t.id}`,
-				name: t.name,
-				key: localStorage.token,
-				contexts: t.contexts ?? {},
-				config: t.config ?? {}
-			}))
+				: [];
+		terminalServers.update((servers) => [
+			...directTerminals,
+			...(servers ?? []).filter((server) => server.id)
 		]);
+		await refreshTerminalServers();
 	};
 
 	const setBanners = async () => {
@@ -198,9 +212,20 @@
 
 	onMount(() => {
 		const socketInstance = $socket;
-		socketInstance?.on('access:updated', refreshAccess);
+		const changed = () => {
+			void refreshTerminalServers().catch((error) =>
+				console.error('Unable to refresh terminals', error)
+			);
+		};
+		const eventHandler = (event: { data?: { type?: string } }) => {
+			if (event?.data?.type === 'terminals:changed') changed();
+			else if (event?.data?.type === 'access:updated') void refreshAccess();
+		};
+		socketInstance?.on('events', eventHandler);
+		socketInstance?.on('connect', changed);
 		return () => {
-			socketInstance?.off('access:updated', refreshAccess);
+			socketInstance?.off('events', eventHandler);
+			socketInstance?.off('connect', changed);
 		};
 	});
 
@@ -281,7 +306,6 @@
 
 		setToolServers().catch((e) => {
 			console.error('Failed to load tool servers:', e);
-			terminalServers.set([]);
 		});
 
 		const setupKeyboardShortcuts = () => {
@@ -386,7 +410,9 @@
 				) {
 					console.log('Shortcut triggered: REGENERATE_RESPONSE');
 					event.preventDefault();
-					[...document.getElementsByClassName('regenerate-response-button')]?.at(-1)?.click();
+					[...document.querySelectorAll('#messages-container .regenerate-response-button')]
+						?.at(-1)
+						?.click();
 				}
 			});
 		};
@@ -495,7 +521,9 @@
 				{#if loaded}
 					<main class="contents">
 						<div id="main-content" tabindex="-1" class="sr-only left-0 top-0"></div>
-						<slot />
+						{#if usePageTabs}
+							<Chat initialPage={$page.url.pathname + $page.url.search + $page.url.hash} />
+						{:else}<slot />{/if}
 					</main>
 				{:else}
 					<div

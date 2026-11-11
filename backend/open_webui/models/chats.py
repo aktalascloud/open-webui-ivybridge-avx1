@@ -11,6 +11,7 @@ import uuid
 from typing import Any, Literal
 
 # local imports
+from open_webui.models.chat_views import ChatViewState
 from open_webui.models.notifications import emit_changes
 from open_webui.env import ENABLE_ADMIN_CHAT_ACCESS
 from open_webui.models.comments import delete_resource_comments
@@ -57,7 +58,7 @@ def chat_search_content_query(text: str) -> str:
 
 
 def chat_search_terms(text: str) -> list[str]:
-    return list(dict.fromkeys(re.findall(r'[a-z0-9]+', text.lower())))
+    return list(dict.fromkeys(re.findall(r'[a-z0-9]+', text.lower())))[:12]
 
 
 def chat_message_list(chat: dict) -> list:
@@ -346,6 +347,10 @@ class ChatResponse(BaseModel):
     @classmethod
     def normalize_variables(cls, value):
         return value if isinstance(value, dict) else {}
+
+
+class ChatAccessResponse(ChatResponse):
+    write_access: bool
 
 
 class ChatTitleIdResponse(BaseModel):
@@ -2848,6 +2853,9 @@ class ChatTable:
                 await session.execute(update(AutomationRun).filter_by(chat_id=id).values(chat_id=None))
                 await session.execute(delete(ChatMessage).filter_by(chat_id=id))
                 recipients = await delete_resource_comments('chat', select(Chat.id).filter_by(id=id), db=session)
+                await session.execute(
+                    delete(ChatViewState).where(ChatViewState.chat_id.in_(select(Chat.id).filter_by(id=id)))
+                )
                 await session.execute(delete(Chat).filter_by(id=id))
                 await session.commit()
                 await emit_changes(recipients)
@@ -2863,6 +2871,11 @@ class ChatTable:
                 await session.execute(delete(ChatMessage).filter_by(chat_id=id))
                 recipients = await delete_resource_comments(
                     'chat', select(Chat.id).filter_by(id=id, user_id=user_id), db=session
+                )
+                await session.execute(
+                    delete(ChatViewState).where(
+                        ChatViewState.chat_id.in_(select(Chat.id).filter_by(id=id, user_id=user_id))
+                    )
                 )
                 await session.execute(delete(Chat).filter_by(id=id, user_id=user_id))
                 await session.commit()
@@ -2889,6 +2902,9 @@ class ChatTable:
                 recipients = await delete_resource_comments(
                     'chat', select(Chat.id).filter_by(user_id=user_id), db=session
                 )
+                await session.execute(
+                    delete(ChatViewState).where(ChatViewState.chat_id.in_(select(Chat.id).filter_by(user_id=user_id)))
+                )
                 await session.execute(delete(Chat).filter_by(user_id=user_id))
                 await session.commit()
                 await emit_changes(recipients)
@@ -2914,6 +2930,11 @@ class ChatTable:
                 recipients.update(
                     await delete_resource_comments(
                         'chat', select(Chat.id).filter_by(user_id=user_id, folder_id=folder_id), db=session
+                    )
+                )
+                await session.execute(
+                    delete(ChatViewState).where(
+                        ChatViewState.chat_id.in_(select(Chat.id).filter_by(user_id=user_id, folder_id=folder_id))
                     )
                 )
                 await session.execute(delete(Chat).filter_by(user_id=user_id, folder_id=folder_id))

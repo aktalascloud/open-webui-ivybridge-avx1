@@ -45,7 +45,7 @@ from open_webui.env import (
     GLOBAL_LOG_LEVEL,
     RAG_SYSTEM_CONTEXT,
 )
-from open_webui.events import EVENTS, publish_event
+from open_webui.events import EVENTS, build_event, publish_event
 from open_webui.models.access_grants import AccessGrants
 from open_webui.models.chats import Chats
 from open_webui.models.config import Config
@@ -154,16 +154,23 @@ from open_webui.utils.task import (
 from open_webui.utils.tether import get_terminal_connections
 from open_webui.utils.terminals import filter_user_terminal_tools, upload_files_to_terminal
 from open_webui.utils.tool_approval import complete_tool_call, pending_tool_calls
-from open_webui.utils.tool_permissions import ToolApprovalRequired, requires_tool_approval
+from open_webui.utils.tool_permissions import (
+    ToolApprovalRequired,
+    get_tool_permissions_auto_config,
+    requires_tool_approval,
+    set_tool_approval_prompt,
+)
 from open_webui.utils.tool_calling import (
     INCOMPLETE_CALL_ERROR,
+    add_tool_call_metadata,
     final_answer_payload,
     prepare_tool_call,
     recover_tool_calls,
+    set_tool_call_metadata,
     split_tool_calls,
     tool_repetition_error,
 )
-from open_webui.utils.tool_search import apply_tool_search, resolve_tool_call
+from open_webui.utils.tool_search import apply_tool_search, resolve_tool_call, split_tool_call_batches
 from open_webui.utils.tools import (
     connect_mcp_server,
     display_file,
@@ -238,7 +245,8 @@ async def publish_chat_finished_event(
 
     content = content or get_output_text(output)
     webui_url = await Config.get('webui.url')
-    await publish_event(
+    model = (getattr(request.app.state, 'MODELS', {}) or {}).get(metadata.get('model_id'), {})
+    event = build_event(
         request,
         EVENTS.CHAT_FINISHED,
         actor=user,
@@ -249,12 +257,25 @@ async def publish_chat_finished_event(
             'chat_id': chat_id,
             'message_id': metadata.get('message_id'),
             'model_id': metadata.get('model_id'),
+            'model_name': model.get('name'),
             'title': title,
             'url': f'{webui_url}/c/{chat_id}' if webui_url else f'/c/{chat_id}',
             'message': content,
         },
         message=title or 'Chat finished',
     )
+    try:
+        from open_webui.internal.db import get_async_db_context
+        from open_webui.models.notifications import emit_changes
+        from open_webui.utils.inbox import consume_event
+
+        async with get_async_db_context() as db:
+            recipients = await consume_event(event, db=db)
+            await db.commit()
+        await emit_changes(recipients)
+    except Exception:
+        log.exception('Chat mention notification failed for %s', chat_id)
+    await publish_event(request, event)
     event_emitter = await get_event_emitter(metadata, update_db=False)
     if event_emitter:
         folder_id = metadata.get('folder_id') or await Chats.get_chat_folder_id(chat_id, metadata.get('user_id'))
@@ -2419,6 +2440,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                         append=True,
                     )
 
+    form_data['messages'] = set_tool_approval_prompt(form_data['messages'])
     tool_ids = form_data.pop('tool_ids', None)
     terminal_id = form_data.pop('terminal_id', None)
     if not ENABLE_TOOL_SERVERS:
@@ -2879,6 +2901,28 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                     form_data, metadata, tools_dict, inlet_filter_tools, extra_params=extra_params
                 )
 
+                settings = await Config.get_many(
+                    'chat.tool_call_labels.enable',
+                    'chat.tool_permissions.enable',
+                    'chat.tool_permissions.auto.enable',
+                    'chat.tool_permissions.auto.engine',
+                )
+                approval = (
+                    metadata.get('params', {}).get('tool_approval_mode') == 'auto'
+                    and settings.get('chat.tool_permissions.enable')
+                    and settings.get('chat.tool_permissions.auto.enable')
+                    and settings.get('chat.tool_permissions.auto.engine', '') == ''
+                )
+                add_tool_call_metadata(
+                    tools_dict,
+                    labels=settings.get('chat.tool_call_labels.enable', False),
+                    approval=approval,
+                    language=(metadata.get('variables') or {}).get('{{USER_LANGUAGE}}') or 'English',
+                )
+                form_data['messages'] = set_tool_approval_prompt(
+                    form_data['messages'], (await get_tool_permissions_auto_config())['prompt'] if approval else None
+                )
+
                 # If the function calling is native, then call the tools function calling handler
                 form_data['tools'] = [
                     {'type': 'function', 'function': tool.get('spec', {})}
@@ -2973,7 +3017,9 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             )
         )
     if initial_output:
-        form_data['messages'].extend(convert_output_to_messages(initial_output, raw=True))
+        form_data['messages'].extend(
+            convert_output_to_messages(initial_output, raw=True, reasoning_format=get_reasoning_format(model))
+        )
         metadata['initial_output'] = initial_output
 
     form_data = normalize_messages_for_model(form_data)
@@ -3145,7 +3191,12 @@ async def execute_tool_call(form_data, metadata, event_caller, tool_call, histor
     name = tool_call.get('name', '')
     tool = metadata.get('tools', {}).get(name)
     error = (
-        prepare_tool_call(tool_call, tool.get('spec', {}).get('parameters'))
+        prepare_tool_call(
+            tool_call,
+            tool.get('spec', {}).get('parameters'),
+            display_labels=tool.get('display_labels', False),
+            approval_review=tool.get('approval_review', False),
+        )
         if tool
         else f'Error: Tool "{name}" not found.'
     )
@@ -4656,6 +4707,8 @@ async def streaming_chat_response_handler(response, ctx):
                 )
 
             def full_output():
+                for item in output:
+                    set_tool_call_metadata(item, metadata.get('tools', {}))
                 if is_message_continuation():
                     return [
                         *prior_output[:-1],
@@ -4871,6 +4924,11 @@ async def streaming_chat_response_handler(response, ctx):
 
                     async def emit_response_completion_event(response_data: dict):
                         nonlocal stream_size
+                        for item in [
+                            response_data.get('item') or {},
+                            *((response_data.get('response') or {}).get('output') or []),
+                        ]:
+                            set_tool_call_metadata(item, metadata.get('tools', {}))
                         if response_data.get('type', '').endswith('.delta'):
                             await queue_pending_delta_data(
                                 response_data,
@@ -5204,6 +5262,7 @@ async def streaming_chat_response_handler(response, ctx):
                                                 if item.get('type') == 'function_call'
                                             }
 
+                                            tool_name_changed = False
                                             for tc in response_tool_calls:
                                                 call_id = tc.get('id') or output_id('fc')
                                                 tc['id'] = call_id
@@ -5212,6 +5271,7 @@ async def streaming_chat_response_handler(response, ctx):
                                                     output_index, item = output_by_call_id[call_id]
                                                     if func.get('name', item.get('name', '')) != item.get('name'):
                                                         stream_size = 0
+                                                        tool_name_changed = True
                                                     item['name'] = func.get('name', item.get('name', ''))
                                                     item['arguments'] = func.get('arguments', item.get('arguments', ''))
                                                     item['status'] = 'in_progress'
@@ -5262,6 +5322,17 @@ async def streaming_chat_response_handler(response, ctx):
                                                             'delta': delta_arguments,
                                                         }
                                                     )
+
+                                            if tool_name_changed:
+                                                # A late tool name can select a native renderer. Flush deltas
+                                                # before the full snapshot so arguments are not appended twice.
+                                                await flush_pending_delta_data()
+                                                await event_emitter(
+                                                    {
+                                                        'type': 'chat:completion',
+                                                        'data': {'output': full_output(), 'flush': True},
+                                                    }
+                                                )
 
                                             data = None
                                             delta_type = 'tool_call'
@@ -5826,7 +5897,7 @@ async def streaming_chat_response_handler(response, ctx):
                     output_by_call_id = {
                         item.get('call_id'): item for item in output if item.get('type') == 'function_call'
                     }
-                    for tool_call in tool_calls.pop(0):
+                    for tool_call in split_tool_call_batches(tool_calls.pop(0), metadata.get('tools', {})):
                         error = tool_call.get('execution_error') or resolve_tool_call(
                             tool_call, metadata.get('tools', {})
                         )
@@ -5845,12 +5916,20 @@ async def streaming_chat_response_handler(response, ctx):
                         )
                         tool = metadata.get('tools', {}).get(item['name'])
                         error = error or (
-                            prepare_tool_call(item, tool.get('spec', {}).get('parameters'))
+                            prepare_tool_call(
+                                item,
+                                tool.get('spec', {}).get('parameters'),
+                                display_labels=tool.get('display_labels', False),
+                                approval_review=tool.get('approval_review', False),
+                            )
                             if tool
                             else f'Error: Tool "{item["name"]}" not found.'
                         )
                         blocked = tool_repetition_error(item, tool_history)
-                        stop_reason = stop_reason or round_error or blocked or tool_call.get('execution_error')
+                        is_incomplete = tool_call.get('execution_error') == INCOMPLETE_CALL_ERROR
+                        stop_reason = (
+                            stop_reason or round_error or blocked or (INCOMPLETE_CALL_ERROR if is_incomplete else None)
+                        )
                         error = f'Error: {round_error}' if round_error else error or blocked
                         if error:
                             tool_history.append(item)
@@ -5858,6 +5937,10 @@ async def streaming_chat_response_handler(response, ctx):
                         item['status'] = 'failed' if error else item['status']
                         if 'provider_function' in tool_call:
                             item['provider_function'] = tool_call['provider_function']
+                            # The first resolved call reuses the hidden dispatcher's output item.
+                            item['hidden'] = tool.get('hidden') is True if tool else False
+                        if 'provider_batch' in tool_call:
+                            item['provider_batch'] = tool_call['provider_batch']
                         if error:
                             output.append(
                                 {

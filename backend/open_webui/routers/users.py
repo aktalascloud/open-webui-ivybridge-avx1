@@ -265,6 +265,7 @@ class FeaturesPermissions(BaseModel):
     image_generation: bool = True
     code_interpreter: bool = True
     memories: bool = True
+    subagents: bool = True
     automations: bool = False
     calendar: bool = True
     webhooks: bool = False
@@ -428,7 +429,7 @@ async def update_default_user_permissions(request: Request, form_data: UserPermi
     from open_webui.socket.main import sio
 
     try:
-        await sio.emit('access:updated', {})
+        await sio.emit('events', {'data': {'type': 'access:updated'}})
     except Exception:
         log.exception('Unable to refresh default user permissions')
     await publish_event(

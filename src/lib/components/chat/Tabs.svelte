@@ -1,13 +1,32 @@
 <script lang="ts">
-	import type { TerminalContext } from '$lib/types';
+	import type { AppLayoutContext, TerminalContext } from '$lib/types';
 	import type { GitStatus } from '$lib/apis/terminal/git';
 	let fileGitStatuses: Record<string, GitStatus | null> = {};
 	let fileGitDiffModes: Record<string, 'unified' | 'split'> = {};
 	let fileGitHideWhitespace: Record<string, boolean> = {};
 	import { onMount, onDestroy, tick, getContext } from 'svelte';
+	import { toast } from 'svelte-sonner';
+	import {
+		chatViewEntry,
+		loadChatView,
+		changeChatView,
+		flushChatView,
+		updateViewTab,
+		createViewSession,
+		promoteChatView,
+		registerChatViewCapture,
+		chatViewChanges,
+		hasChatViewDrafts,
+		clearChatViews
+	} from '$lib/stores/chatViewStates';
 	import { v4 as uuidv4 } from 'uuid';
 	import Sortable from 'sortablejs';
-	import { beforeNavigate, goto } from '$app/navigation';
+	import { beforeNavigate } from '$app/navigation';
+	import { WEBUI_NAME } from '$lib/stores';
+	import { pageTabKey } from './Tabs/tabs';
+	import Page from './Tabs/Page.svelte';
+	let pageViews: Record<string, Page> = {};
+	let pendingPageTab: { href: string; label: string } | null = null;
 	import {
 		artifactContents,
 		config,
@@ -23,6 +42,7 @@
 		showArtifacts,
 		showEmbeds,
 		settings,
+		showFileNav,
 		showFileNavPath,
 		selectedTerminalId,
 		user,
@@ -38,6 +58,7 @@
 	import {
 		emptyTabs,
 		openTab,
+		openTabInSidePanel,
 		activateTab,
 		removeTab,
 		moveTab,
@@ -54,78 +75,93 @@
 		setSplitTabs,
 		fileTabId,
 		type PanelTab
-	} from './ChatTabs/tabs';
+	} from './Tabs/tabs';
 	import {
-		resolveTerminalConnection,
+		resolveTerminalTarget,
 		terminalRequest,
-		type TerminalConnection
+		TerminalRequestError,
+		type TerminalTarget
 	} from '$lib/apis/terminal';
 	import { formatChord, keybindings, matchKeybinding, Shortcut } from '$lib/shortcuts';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
+	import Spinner from '../common/Spinner.svelte';
 	import Dropdown from '../common/Dropdown.svelte';
 	import DropdownMenu from '../common/DropdownMenu.svelte';
 	import Icon from './FileNav/Icon.svelte';
 	import Annotation from '$lib/components/icons/Annotation.svelte';
+	import HomeIcon from '$lib/components/icons/Home.svelte';
+	import HashtagIcon from '$lib/components/icons/Hashtag.svelte';
+	import NotesIcon from '$lib/components/layout/Sidebar/icons/Notes.svelte';
+	import WorkspaceIcon from '$lib/components/layout/Sidebar/icons/Workspace.svelte';
+	import ClockIcon from '$lib/components/layout/Sidebar/icons/Clock.svelte';
+	import CalendarIcon from '$lib/components/layout/Sidebar/icons/Calendar.svelte';
+	import CodeIcon from '$lib/components/layout/Sidebar/icons/Code.svelte';
 	import { fileIconName } from './FileNav/fileIcon';
-	import UntitledFile from './ChatTabs/UntitledFile.svelte';
-	import QuickOpen from './ChatTabs/QuickOpen.svelte';
-	import VoiceNote from './ChatTabs/VoiceNote.svelte';
-	import Browser from './ChatTabs/Browser.svelte';
-	import Desktop from './ChatTabs/Desktop.svelte';
+	import UntitledFile from './Tabs/UntitledFile.svelte';
+	import QuickOpen from './Tabs/QuickOpen.svelte';
+	import VoiceNote from './Tabs/VoiceNote.svelte';
+	import Browser from './Tabs/Browser.svelte';
+	import Desktop from './Tabs/Desktop.svelte';
 	import XTerminal from './XTerminal.svelte';
 	import CallPanel from './MessageInput/CallPanel.svelte';
 	import Drawer from '../common/Drawer.svelte';
 	import MobileSwipePanel from '../common/MobileSwipePanel.svelte';
-	import GitBar from './ChatTabs/GitBar.svelte';
+	import GitBar from './Tabs/GitBar.svelte';
 	import Artifacts from './Artifacts.svelte';
-	import Embeds from './ChatTabs/Embeds.svelte';
-	import SideChat from './ChatTabs/SideChat.svelte';
+	import Embeds from './Tabs/Embeds.svelte';
+	import SideChat from './Tabs/SideChat.svelte';
 	import FileNav from './FileNav.svelte';
 	import PyodideFileNav from './PyodideFileNav.svelte';
 	import Overview from './Overview.svelte';
 	import Modal from '../common/Modal.svelte';
+	import ConfirmDialog from '../common/ConfirmDialog.svelte';
+	let stopTerminalChoice: ((stop: boolean) => void) | null = null;
 	import XMark from '../icons/XMark.svelte';
 	import SplitPanel from '../icons/SplitPanel.svelte';
 	import { isSavedChatId } from '$lib/utils/chatId';
 
 	const i18n = getContext<any>('i18n');
+	const appLayout = getContext<AppLayoutContext | undefined>('appLayout');
 
-	export let history;
+	export let history: any = { messages: {}, currentId: null };
 
 	export let chatId: string | null = null;
+	export let chatLoading = false;
+	export let chatStreaming = false;
 	export let folderId: string | null = null;
 	export let terminalContext: TerminalContext | null = null;
 	export let chatUser = null;
 
-	export let bridge: import('$lib/utils/realtime').RealtimeCall;
+	export let bridge: import('$lib/utils/realtime').RealtimeCall | undefined = undefined;
 	export let callMode = 'current';
-	export let eventTarget: EventTarget;
-	export let submitPrompt: Function;
+	export let eventTarget = new EventTarget();
+	export let submitPrompt: Function = () => {};
 	export let onAskFile:
 		| ((instruction: string, file: import('$lib/apis/terminal').FilesystemFile) => Promise<void>)
 		| null = null;
-	export let stopResponse: Function;
-	export let showMessage: Function;
-	export let files: any[];
-	export let modelId;
+	export let stopResponse: Function = () => {};
+	export let showMessage: Function = () => {};
+	export let files: any[] = [];
+	export let modelId: string | null = null;
 	export let systemPrompt = '';
 	export let canSideChat = false;
 
 	export let codeInterpreterEnabled = false;
+	// Retired layout controls: keep their translations.
+	// $i18n.t('Use full-width tabs')
+	// $i18n.t('Use side tabs')
 	export let fullWidth = false;
 	export let mainChatActive = false;
 	export let mainChatStyle = '';
 	export let mainChatGroupId = '';
 	let paneCanvas: HTMLDivElement;
 	export let title = '';
+	export let mainChatHref = '/';
 	export let tabTitleEditor: import('svelte').Snippet | undefined = undefined;
 	export let tabActions: import('svelte').Snippet | undefined = undefined;
 	export let tabBarActions: import('svelte').Snippet | undefined = undefined;
 	$: fullWidth = largeScreen;
 	$: panelVisible = largeScreen || !!$showTabs;
-	$: if (largeScreen !== tabs.tabs.some((tab) => tab.id === mainChatTabId)) {
-		tabs = setMainChatTab(tabs, largeScreen, title);
-	}
 
 	let largeScreen = false;
 	let dragged = false;
@@ -135,42 +171,221 @@
 	let tabs = emptyTabs();
 	const paneStyle = (rect: PanelRect, header = 0) =>
 		`position:absolute;left:${rect.left * 100}%;top:calc(100% * ${rect.top} + ${header}px * var(--app-text-scale, 1));width:${rect.width * 100}%;height:calc(100% * ${rect.height} - ${header}px * var(--app-text-scale, 1));`;
-	const focusGroup = (id: string) => {
+	const focusGroup = (id: string, event?: Event) => {
+		// Tab clicks activate their own group.
+		if (event?.target instanceof Element && event.target.closest('[data-panel-tab]')) return;
 		const group = tabs.groups.find((group) => group.id === id);
-		if (group?.activeId) tabs = activateTab(tabs, group.activeId);
+		if (group?.activeId && tabs.activeGroupId !== id) tabs = activateTab(tabs, group.activeId);
 	};
 	let terminalViews: Record<string, XTerminal> = {};
 	export const hasTerminals = () => tabs.tabs.some((tab) => tab.kind === 'terminal');
-	export async function bindTerminalChat(id: string) {
-		await tick();
-		await Promise.all(
-			tabs.tabs
-				.filter((tab) => tab.kind === 'terminal')
-				.map((tab) => terminalViews[tab.id]?.bindChat(id))
-		);
+	let browserViews: Record<string, Browser> = {};
+	let gitViews: Record<string, GitBar> = {};
+	let sideViews: Record<string, SideChat> = {};
+	let sideChatStreaming: Record<string, boolean> = {};
+	let viewEntry: ReturnType<typeof chatViewEntry> | null = null;
+	let viewReady = false;
+	let viewError = '';
+	let switchVersion = 0;
+	let promotion: Promise<void> | null = null;
+	let sessionFailures: Record<string, { message: string; status?: number }> = {};
+	let sessionAttempts: Record<string, number> = {};
+
+	export function captureView() {
+		if (!viewEntry || !viewReady) return;
+		const owner = viewEntry;
+		for (const tab of tabs.tabs) {
+			const draft = fileViews[tab.id]?.captureView?.();
+			if (draft) owner.drafts.set(tab.id, draft);
+			if (gitViews[tab.id]) owner.transient[`git:${tab.id}`] = gitViews[tab.id].captureView();
+			if (sideViews[tab.id]) owner.transient[`side:${tab.id}`] = sideViews[tab.id].captureView();
+		}
+		owner.transient.gitDiffModes = fileGitDiffModes;
+		owner.transient.gitHideWhitespace = fileGitHideWhitespace;
+		const panels = {
+			...tabs,
+			tabs: tabs.tabs.map((tab) => ({
+				...tab,
+				...(tab.kind === 'files' && owner.drafts.get(tab.id)?.directory
+					? { directory: owner.drafts.get(tab.id).directory }
+					: {})
+			}))
+		};
+		changeChatView(owner, { ...owner.state, panels, selectedTerminalId: $selectedTerminalId });
 	}
+	let preserveChatView = false;
+	export function prepareChatSwitch(preserve = false) {
+		stopTerminalChoice?.(false);
+		stopTerminalChoice = null;
+		captureView();
+		if (viewEntry) void flushChatView(viewEntry);
+		preserveChatView = preserve && viewReady;
+		if (preserveChatView) return;
+		viewReady = false;
+		tabs = emptyTabs();
+		sideChatStreaming = {};
+		++switchVersion;
+		tabsChatId = undefined;
+	}
+	export async function bindTerminalChat(id: string) {
+		if (!viewEntry || viewEntry.chatId === id) return;
+		if (promotion) return promotion;
+		const owner = viewEntry;
+		captureView();
+		promotion = promoteChatView(
+			owner,
+			id,
+			async () => {
+				await tick();
+				for (const tab of owner.state.panels.tabs) {
+					if (!tab.sessionId) continue;
+					if (tab.kind === 'terminal') {
+						if (!terminalViews[tab.id]) throw new Error('Terminal is not connected');
+						await terminalViews[tab.id].bindChat(id);
+					} else if (tab.kind === 'browser') {
+						if (!browserViews[tab.id]) throw new Error('Browser is not connected');
+						await browserViews[tab.id].bindChat(id);
+					}
+				}
+			},
+			$temporaryChatEnabled
+		)
+			.then(() => {
+				tabsChatId = id;
+				viewEntry = owner;
+				preserveChatView = false;
+				viewError = '';
+			})
+			.finally(() => {
+				promotion = null;
+			});
+		return promotion;
+	}
+
+	async function restoreChatView(id: string | null) {
+		if (!$user?.id) return;
+		const version = ++switchVersion;
+		captureView();
+		if (viewEntry) void flushChatView(viewEntry);
+		viewReady = false;
+		tabs = emptyTabs();
+		viewError = '';
+		sideChatStreaming = {};
+		tabsChatId = id;
+		const owner = chatViewEntry($user.id, id, $temporaryChatEnabled);
+		viewEntry = owner;
+		try {
+			await loadChatView(owner);
+			if (version !== switchVersion) return;
+			// The chat restores its terminal and directory together; layouts must not override them.
+			owner.state.selectedTerminalId = $selectedTerminalId;
+			owner.state.panels = setMainChatTab(owner.state.panels, true, title);
+			tabs = owner.state.panels;
+			dirtyFiles = {};
+			fileContexts = {};
+			fileGitStatuses = {};
+			fileGitDiffModes = owner.transient.gitDiffModes ?? {};
+			fileGitHideWhitespace = owner.transient.gitHideWhitespace ?? {};
+			commentTarget = {};
+			sessionFailures = {};
+			sessionAttempts = {};
+			viewReady = true;
+			hasOpenedTabs = tabs.tabs.some((tab) => tab.kind !== 'chat');
+		} catch (error) {
+			if (version === switchVersion) viewError = String(error);
+		}
+	}
+	const persistPanels = (panels: typeof tabs, selector: string | null, ready: boolean) => {
+		if (!ready || !viewEntry || chatLoading || viewEntry.promoting) return;
+		// The Files tab follows the terminal picked for the chat and starts over there.
+		if (selector && selector !== viewEntry.state.selectedTerminalId) {
+			const moved = panels.tabs.filter(
+				(tab) => tab.kind === 'files' && tab.terminalId !== selector
+			);
+			for (const tab of moved) {
+				viewEntry.drafts.delete(tab.id);
+				delete fileContexts[tab.id];
+			}
+			panels = {
+				...panels,
+				tabs: panels.tabs.map((tab) =>
+					moved.includes(tab)
+						? {
+								...tab,
+								label: $i18n.t('Files'),
+								terminalId: selector,
+								target: undefined,
+								path: undefined,
+								directory: undefined
+							}
+						: tab
+				)
+			};
+		}
+		if (viewEntry.state.panels !== panels || viewEntry.state.selectedTerminalId !== selector)
+			changeChatView(viewEntry, { ...viewEntry.state, panels, selectedTerminalId: selector });
+	};
+	$: persistPanels(tabs, $selectedTerminalId, viewReady);
+	$: if (viewEntry && viewEntry.userId !== $user?.id) {
+		viewReady = false;
+		viewEntry = null;
+		tabs = emptyTabs();
+		sideChatStreaming = {};
+		tabsChatId = undefined;
+		clearChatViews();
+	}
+	const captureTargets = (..._connections: unknown[]) => {
+		captureView();
+		// A returning component must read disk before restoring its cached draft.
+		for (const tab of tabs.tabs) {
+			if (tab.terminalId && !terminalAccessible(tab.terminalId)) delete dirtyFiles[tab.id];
+		}
+		dirtyFiles = { ...dirtyFiles };
+	};
+	$: if (mounted && viewReady) captureTargets($terminalServers, $settings, $config, $user);
+	const tabTarget = (tab: PanelTab) => {
+		if (!tab.terminalId || !terminalAccessible(tab.terminalId)) return null;
+		const target = resolveTerminalTarget(
+			tab.terminalId,
+			$terminalServers ?? [],
+			directTerminals,
+			localStorage.token ?? '',
+			tab.target?.context ?? { chatId, modelId: modelId ?? null }
+		);
+		if (target) tab.target = target;
+		return target;
+	};
+	const startSession = (owner: NonNullable<typeof viewEntry>, tab: PanelTab) => {
+		const target = tabTarget(tab);
+		if (target) {
+			delete sessionFailures[tab.id];
+			void createViewSession(owner, tab.id, target);
+		}
+	};
+
 	let fileViews: Record<
 		string,
 		{
 			hasUnsavedChanges: () => boolean;
 			requestClose: () => Promise<boolean>;
 			browseDirectory?: (path: string) => unknown;
+			refreshDirectory?: () => unknown;
 			revealPage?: (page: number | null) => void;
+			captureView?: () => any;
 		}
 	> = {};
 	let dirtyFiles: Record<string, boolean> = {};
 	let fileContexts: Record<string, TerminalContext | null> = {};
 	let panelTarget: HTMLElement | null = null;
-	let tabsChatId = chatId;
+	let tabsChatId: string | null | undefined = undefined;
 	let hasOpenedTabs = false;
 	let commentTarget: { comment_id?: string } = {};
 	let closing = new Set<string>();
-	let navigationApproved = false;
-	let selectedConnection: TerminalConnection | null = null;
+	let selectedTarget: TerminalTarget | null = null;
 	let showQuickOpen = false;
 	let voiceNote: VoiceNote;
 	let voiceNoteTarget: {
-		connection: TerminalConnection;
+		target: TerminalTarget;
 		chatId: string | null;
 		directory?: string;
 	} | null = null;
@@ -181,13 +396,13 @@
 			voiceNote?.finishRecording();
 			return;
 		}
-		if (!canVoiceNote || !selectedConnection || !$user) return;
+		if (!canVoiceNote || !selectedTarget || !$user) return;
 		voiceNoteTarget = {
-			connection: selectedConnection,
+			target: selectedTarget,
 			chatId,
 			directory:
-				contextTab?.terminalId === selectedConnection.selector
-					? terminalContext?.currentDirectory
+				activeFileContext?.terminalId === selectedTarget.selector
+					? activeFileContext.currentDirectory
 					: undefined
 		};
 	};
@@ -228,9 +443,19 @@
 		update(target);
 		return { update, destroy: () => node.remove() };
 	};
+	const pageIcons: Record<string, typeof NotesIcon> = {
+		notes: NotesIcon,
+		workspace: WorkspaceIcon,
+		automations: ClockIcon,
+		calendar: CalendarIcon,
+		playground: CodeIcon,
+		home: HomeIcon,
+		channels: HashtagIcon
+	};
 	const tabIcon = (kind: PanelTab['kind']) =>
 		({
 			chat: 'chat-lines',
+			page: 'page',
 			files: 'folder',
 			file: 'page',
 			terminal: 'terminal',
@@ -249,7 +474,7 @@
 		activeTab?.kind === 'chat'
 			? tabs.tabs.find((tab) => tab.id === tabs.history.at(-1))
 			: activeTab;
-	$: terminalContext = (contextTab && fileContexts[contextTab.id]) ?? contextTab?.context ?? null;
+	$: activeFileContext = (contextTab && fileContexts[contextTab.id]) ?? contextTab?.context ?? null;
 	$: if (activeTabId && panelTarget) {
 		const id = activeTabId;
 		void tick().then(() =>
@@ -266,56 +491,213 @@
 		tabs = activateTab(tabs, id);
 		showTabs.set(true);
 	};
-	const openPanel = (tab: PanelTab) => {
+	const activateFilesOnDrag = (node: HTMLElement, tab: PanelTab) => {
+		if (tab.kind !== 'files') return;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const clear = () => {
+			clearTimeout(timer);
+			timer = undefined;
+		};
+		const over = (event: DragEvent) => {
+			if (!event.dataTransfer?.types.includes('application/x-terminal-file-move') || timer) return;
+			if (tabs.groups.some((group) => group.activeId === tab.id)) return;
+			timer = setTimeout(() => {
+				selectTab(tab.id);
+				clear();
+			}, 500);
+		};
+		const leave = (event: DragEvent) => {
+			if (!(event.relatedTarget instanceof Node && node.contains(event.relatedTarget))) clear();
+		};
+		node.addEventListener('dragover', over);
+		node.addEventListener('dragleave', leave);
+		node.addEventListener('drop', clear);
+		window.addEventListener('dragend', clear);
+		return {
+			destroy() {
+				clear();
+				node.removeEventListener('dragover', over);
+				node.removeEventListener('dragleave', leave);
+				node.removeEventListener('drop', clear);
+				window.removeEventListener('dragend', clear);
+			}
+		};
+	};
+	const openPanel = (tab: PanelTab, inSidePanel = false) => {
+		if (!viewReady || !viewEntry) return;
 		hasOpenedTabs = true;
-		tabs = openTab(tabs, tab);
+		if (tab.terminalId) {
+			const target =
+				tab.target ??
+				resolveTerminalTarget(
+					tab.terminalId,
+					$terminalServers ?? [],
+					directTerminals,
+					localStorage.token,
+					{ chatId: chatId, modelId: modelId ?? null }
+				);
+			tab = { ...tab, target: target ?? undefined };
+		}
+		tabs = inSidePanel ? openTabInSidePanel(tabs, tab) : openTab(tabs, tab);
+		changeChatView(viewEntry, { ...viewEntry.state, panels: tabs });
 		showTabs.set(true);
 	};
-	const openFiles = (selector = $selectedTerminalId, directory?: string) => {
+	const createPageTab = (request: { href: string; label: string }): PanelTab => {
+		const url = new URL(request.href, location.origin);
+		const chat = url.pathname === '/' || url.pathname.startsWith('/c/');
+		return {
+			id: `${chat ? 'side' : 'page'}:${uuidv4()}`,
+			kind: chat ? 'side' : 'page',
+			href: url.pathname + url.search + url.hash,
+			chatId: url.pathname.startsWith('/c/') ? decodeURIComponent(url.pathname.slice(3)) : undefined,
+			initialPrompt: chat ? url.searchParams.get('q') ?? '' : undefined,
+			label: request.label || $i18n.t(chat ? 'Chat' : 'Loading...')
+		};
+	};
+	const findPageTab = (url: URL) => tabs.tabs.find((tab) =>
+		(tab.href && pageTabKey(new URL(tab.href, location.origin)) === pageTabKey(url)) ||
+		(tab.chatId && url.pathname === `/c/${tab.chatId}`) ||
+		(url.pathname === '/workspace' && tab.href?.startsWith('/workspace/'))
+	);
+	export const openPageTab = (request: { href: string; label: string }) => {
+		const url = new URL(request.href, location.origin);
+		if (url.origin !== location.origin || !pageTabKey(url)) return;
+		if (!viewReady) {
+			pendingPageTab = request;
+			return;
+		}
+		if ((url.pathname === '/' && !url.search) || request.href === mainChatHref) {
+			focusMainChat();
+			return;
+		}
+		const existing = findPageTab(url);
+		if (existing) {
+			selectTab(existing.id);
+			if (existing.href !== request.href && url.pathname !== '/workspace')
+				void navigatePageTab(existing.id, request.href);
+		} else openPanel(createPageTab(request));
+	};
+	const navigatePageTab = async (id: string, href: string) => {
+		if (!(await pageViews[id]?.requestClose() ?? true)) return;
+		const url = new URL(href, location.origin);
+		if (url.pathname === '/' || url.pathname.startsWith('/c/')) {
+			openPageTab({ href, label: '' });
+		} else if (viewEntry) updateViewTab(viewEntry, id, { href });
+		await tick();
+	};
+
+	$: if (viewReady && pendingPageTab) {
+		const request = pendingPageTab;
+		pendingPageTab = null;
+		openPageTab(request);
+	}
+
+	const openFiles = (
+		selector = $selectedTerminalId,
+		directory?: string,
+		newTab = false,
+		sourceModelId = modelId
+	) => {
 		if (selector ? !terminalAccessible(selector) : !showFilesTab) return;
-		const id = selector ? `files:${selector}` : 'files';
+		const target = resolveTerminalTarget(
+			selector,
+			$terminalServers ?? [],
+			directTerminals,
+			localStorage.token,
+			{ chatId: chatId, modelId: sourceModelId ?? null }
+		);
+		const pinnedModel = target?.context.modelId ?? null;
+		const existing = newTab
+			? undefined
+			: (tabs.tabs.find(
+					(tab) =>
+						tab.id === tabs.activeId &&
+						tab.kind === 'files' &&
+						(tab.terminalId ?? null) === selector &&
+						(tab.target?.context.modelId ?? null) === pinnedModel
+				) ??
+				tabs.tabs.find(
+					(tab) =>
+						tab.kind === 'files' &&
+						(tab.terminalId ?? null) === selector &&
+						(tab.target?.context.modelId ?? null) === pinnedModel
+				));
+		if (!existing && terminalContext?.terminalId === selector)
+			directory ??= terminalContext.currentDirectory || undefined;
+		const id = existing?.id ?? uuidv4();
 		openPanel({
 			id,
 			kind: 'files',
 			label: $i18n.t('Files'),
 			terminalId: selector ?? undefined,
+			target: target ?? undefined,
 			path: directory
 		});
-		if (directory) void fileViews[id]?.browseDirectory?.(directory);
+		const view = fileViews[id];
+		if (
+			directory &&
+			view &&
+			view.captureView()?.directory?.replace(/\/+$/, '') !== directory.replace(/\/+$/, '')
+		)
+			void view.browseDirectory(directory);
 	};
-	const openFile = (path: string, selector: string, page?: number | null) => {
+	const openFile = (
+		path: string,
+		selector: string,
+		page?: number | null,
+		sourceModelId = modelId
+	) => {
 		if (!terminalAccessible(selector)) return;
+		const target = resolveTerminalTarget(
+			selector,
+			$terminalServers ?? [],
+			directTerminals,
+			localStorage.token,
+			{ chatId: chatId, modelId: sourceModelId ?? null }
+		);
+		const pinnedModel = target?.context.modelId ?? null;
 		path = path.replace(/\\/g, '/').replace(/\/{2,}/g, '/');
 		const id =
 			tabs.tabs.find(
 				(tab) =>
-					tab.kind === 'file' && !tab.untitled && tab.terminalId === selector && tab.path === path
-			)?.id ?? fileTabId(selector, path);
+					tab.kind === 'file' &&
+					!tab.untitled &&
+					tab.terminalId === selector &&
+					(tab.target?.context.modelId ?? null) === pinnedModel &&
+					tab.path === path
+			)?.id ?? fileTabId(JSON.stringify([selector, pinnedModel]), path);
 		openPanel({
 			id,
 			kind: 'file',
 			label: path.split('/').pop() || path,
 			terminalId: selector,
+			target: target ?? undefined,
 			path,
 			page
 		});
 		if (page != null) fileViews[id]?.revealPage?.(page);
 	};
 	const newFile = () => {
-		if (!terminalFilesAvailable || !selectedConnection) return;
+		if (!terminalFilesAvailable || !selectedTarget) return;
 		let number = 1;
 		while (tabs.tabs.some((tab) => tab.untitled && tab.label === `Untitled-${number}`)) number++;
 		openPanel({
 			id: uuidv4(),
 			kind: 'file',
 			label: `Untitled-${number}`,
-			terminalId: selectedConnection.selector,
-			connection: { ...selectedConnection },
+			terminalId: selectedTarget.selector,
+			target: { ...selectedTarget },
 			untitled: true,
-			context: contextTab?.terminalId === selectedConnection.selector ? terminalContext : undefined
+			context:
+				activeFileContext?.terminalId === selectedTarget.selector
+					? activeFileContext
+					: undefined
 		});
 	};
-	const openFeature = (kind: 'artifacts' | 'preview' | 'voice' | 'comments' | 'side') => {
+	const openFeature = (
+		kind: 'artifacts' | 'preview' | 'voice' | 'comments' | 'side',
+		inSidePanel = false
+	) => {
 		if (!availableViews.some((view) => view.kind === kind && view.available)) return;
 		const view = availableViews.find((view) => view.kind === kind)!;
 		if (kind === 'side') {
@@ -325,37 +707,45 @@
 			const pending = $sideChatRequest;
 			const initialPrompt = pending?.parentId === chatId ? pending.prompt : '';
 			if (pending?.parentId === chatId) sideChatRequest.set(null);
-			openPanel({
-				id: uuidv4(),
-				kind,
-				label: `${view.label} ${sideChatNumber}`,
-				sideChatNumber,
-				initialPrompt
-			});
+			openPanel(
+				{
+					id: uuidv4(),
+					kind,
+					label: `${view.label} ${sideChatNumber}`,
+					sideChatNumber,
+					sideChat: true,
+					initialPrompt
+				},
+				inSidePanel
+			);
 			return;
 		}
-		openPanel({ id: kind, kind, label: view.label });
+		openPanel({ id: kind, kind, label: view.label }, inSidePanel);
 	};
-	const updateSideChat = (tabId: string, chat: { id: string; title?: string }) => {
-		tabs = {
-			...tabs,
-			tabs: tabs.tabs.map((tab) =>
-				tab.id === tabId ? { ...tab, chatId: chat.id, label: chat.title || tab.label } : tab
-			)
-		};
-	};
+
 	type SplitDrop = PanelRect & { groupId: string; edge: SplitEdge | null };
 	let chatDropPreview: SplitDrop | null = null;
 	let draggedTabId = '';
 	let pendingTabDrop: (() => void) | null = null;
 	const clearChatDropPreview = () => (chatDropPreview = null);
-	const canDropChat = (event: DragEvent) =>
+	const canDropChat = (event: Pick<DragEvent, 'dataTransfer'>) =>
 		canSideChat &&
-		($user?.role === 'admin' || !($user?.permissions?.chat?.temporary_enforced ?? false)) &&
+		($user?.role === 'admin' ||
+			!(
+				($user?.permissions?.chat?.temporary ?? true) &&
+				($user?.permissions?.chat?.temporary_enforced ?? false)
+			)) &&
 		event.dataTransfer?.types.includes('application/x-open-webui-chat');
-	const chatDropBounds = (event: DragEvent): SplitDrop | null => {
-		const internal = event.dataTransfer?.types.includes('application/x-chat-panel-tab');
-		if ((!internal && !canDropChat(event)) || !(event.target instanceof Element)) return null;
+	const chatDropBounds = (
+		event: Pick<DragEvent, 'target' | 'clientX' | 'clientY' | 'dataTransfer'>
+	): SplitDrop | null => {
+		const internal =
+			!!draggedTabId || event.dataTransfer?.types.includes('application/x-chat-panel-tab');
+		if (
+			(!internal && !canDropChat(event) &&
+				!event.dataTransfer?.types.includes('application/x-open-webui-page')) ||
+			!(event.target instanceof Element)
+		) return null;
 		if (!internal && event.target.closest('[data-composer-id]')) return null;
 		const group = event.target.closest<HTMLElement>('[data-panel-group]');
 		const panel = event.target.closest('#controls-container');
@@ -410,9 +800,9 @@
 		chatDropPreview = chatDropBounds(event);
 		if (chatDropPreview || event.dataTransfer?.types.includes('Files')) event.preventDefault();
 		if (chatDropPreview)
-			event.dataTransfer!.dropEffect = event.dataTransfer!.types.includes(
-				'application/x-chat-panel-tab'
-			)
+			event.dataTransfer!.dropEffect =
+				event.dataTransfer!.effectAllowed === 'move' ||
+				event.dataTransfer!.types.includes('application/x-chat-panel-tab')
 				? 'move'
 				: 'copy';
 	};
@@ -427,8 +817,22 @@
 		if (!bounds || pendingTabDrop) return;
 		const internalId = event.dataTransfer?.getData('application/x-chat-panel-tab');
 		let savedId = '';
+		let droppedPage: PanelTab | null = null;
 		if (internalId) {
 			if (!tabs.tabs.some((tab) => tab.id === internalId)) return;
+		} else if (event.dataTransfer?.types.includes('application/x-open-webui-page')) {
+			try {
+				const item = JSON.parse(event.dataTransfer.getData('application/x-open-webui-page'));
+				if (typeof item.href !== 'string') return;
+				const url = new URL(item.href, location.origin);
+				if (url.origin !== location.origin || !pageTabKey(url)) return;
+				droppedPage = createPageTab({
+					href: url.pathname + url.search + url.hash,
+					label: typeof item.label === 'string' ? item.label : ''
+				});
+			} catch {
+				return;
+			}
 		} else {
 			try {
 				const item = JSON.parse(event.dataTransfer!.getData('text/plain'));
@@ -441,15 +845,19 @@
 		event.preventDefault();
 		const applyDrop = () => {
 			const groupId = bounds.groupId;
-			if (savedId === chatId && !tabs.tabs.some((tab) => tab.id === mainChatTabId)) return;
+			if (!droppedPage && savedId === chatId && !tabs.tabs.some((tab) => tab.id === mainChatTabId)) return;
 			const existing =
 				internalId ||
-				(savedId === chatId ? mainChatTabId : tabs.tabs.find((tab) => tab.chatId === savedId)?.id);
+				(droppedPage
+					? findPageTab(new URL(droppedPage.href!, location.origin))?.id
+					: savedId === chatId
+						? mainChatTabId
+						: tabs.tabs.find((tab) => tab.chatId === savedId)?.id);
 			let id = existing;
 			if (!id) {
 				focusGroup(groupId);
-				id = uuidv4();
-				tabs = openTab(tabs, { id, kind: 'side', label: $i18n.t('Chat'), chatId: savedId });
+				id = droppedPage?.id ?? uuidv4();
+				tabs = openTab(tabs, droppedPage ?? { id, kind: 'side', label: $i18n.t('Chat'), chatId: savedId });
 			}
 			tabs = bounds.edge
 				? splitTab(tabs, id, groupId, bounds.edge)
@@ -488,30 +896,32 @@
 		dragged = false;
 	};
 	const newTerminal = () => {
-		if (!terminalEnabled || !selectedConnection) return;
+		if (!terminalEnabled || !selectedTarget) return;
 		let terminalNumber = 1;
 		while (
 			tabs.tabs.some((tab) => tab.kind === 'terminal' && tab.terminalNumber === terminalNumber)
 		) {
 			terminalNumber++;
 		}
+		const id = uuidv4();
 		openPanel({
-			id: uuidv4(),
+			id,
 			kind: 'terminal',
 			label: `${$i18n.t('Terminal')} ${terminalNumber}`,
 			terminalNumber,
-			terminalId: selectedConnection.selector,
-			connection: { ...selectedConnection }
+			terminalId: selectedTarget.selector,
+			target: { ...selectedTarget }
 		});
+		if (viewEntry && viewReady) startSession(viewEntry, tabs.tabs.find((tab) => tab.id === id)!);
 	};
 	const openDesktop = () => {
-		if (!desktopEnabled || !selectedConnection) return;
+		if (!desktopEnabled || !selectedTarget) return;
 		openPanel({
-			id: JSON.stringify(['desktop', selectedConnection.selector]),
+			id: JSON.stringify(['desktop', selectedTarget.baseUrl, selectedTarget.context.modelId]),
 			kind: 'desktop',
 			label: $i18n.t('Desktop'),
-			terminalId: selectedConnection.selector,
-			connection: { ...selectedConnection }
+			terminalId: selectedTarget.selector,
+			target: { ...selectedTarget }
 		});
 	};
 	const openBrowser = (
@@ -526,45 +936,68 @@
 		const existing =
 			url &&
 			tabs.tabs.find(
-				(tab) => tab.kind === 'browser' && tab.terminalId === selector && tab.path === url
+				(tab) =>
+					tab.kind === 'browser' &&
+					tab.terminalId === selector &&
+					tab.path === url &&
+					(tab.target?.context.modelId ?? null) === (selectedTarget?.context.modelId ?? null)
 			);
 		if (existing) {
 			selectTab(existing.id);
 			return;
 		}
-		const connection = selector
-			? resolveTerminalConnection(
+		const target = selector
+			? resolveTerminalTarget(
 					selector,
 					$terminalServers ?? [],
 					directTerminals,
-					localStorage.token ?? ''
+					localStorage.token ?? '',
+					{ chatId: chatId, modelId: modelId ?? null }
 				)
 			: null;
-		if (!connection) return;
+		if (!target) return;
 		const terminal = ($terminalServers ?? []).find((item) => item.id === selector);
 		const proxyBase =
 			baseUrl ??
-			(connection && chatContextNeedsSavedChat(terminal) && chatId
-				? `${connection.baseUrl}/chats/${encodeURIComponent(chatId)}`
-				: connection?.baseUrl);
+			(target && chatContextNeedsSavedChat(terminal) && chatId
+				? `${target.baseUrl}/chats/${encodeURIComponent(chatId)}`
+				: target?.baseUrl);
+		const id = uuidv4();
 		openPanel({
-			id: uuidv4(),
+			id,
 			kind: 'browser',
 			label: port ? `localhost:${port}` : $i18n.t('Browser'),
 			path: url,
 			terminalId: selector ?? undefined,
 			browserBaseUrl: proxyBase,
-			connection: connection ?? undefined
+			target: target ?? undefined
 		});
+		if (viewEntry && viewReady) startSession(viewEntry, tabs.tabs.find((tab) => tab.id === id)!);
 	};
 	const closeTab = async (id: string) => {
 		if (id === mainChatTabId) return;
 		if (closing.has(id)) return;
+		const owner = viewEntry;
+		if (!owner) return;
 		closing.add(id);
 		try {
-			const tab = tabs.tabs.find((item) => item.id === id);
+			await owner.pending.get(id);
+			const tab = owner.state.panels.tabs.find((item) => item.id === id);
 			if (!tab) return;
-			if (fileViews[id]?.hasUnsavedChanges()) {
+			if (tab.kind === 'page' && !(await pageViews[id]?.requestClose() ?? true)) return;
+			const target =
+				tab.sessionId && (tab.kind === 'terminal' || tab.kind === 'browser')
+					? tabTarget(tab)
+					: null;
+			if (
+				target &&
+				tab.kind === 'terminal' &&
+				!(await new Promise<boolean>((resolve) => {
+					stopTerminalChoice = resolve;
+				}))
+			)
+				return;
+			if (owner === viewEntry && fileViews[id]?.hasUnsavedChanges()) {
 				selectTab(id);
 				if (!(await fileViews[id].requestClose())) return;
 			}
@@ -574,12 +1007,46 @@
 			}
 			if (tab.kind === 'artifacts') showArtifacts.set(false);
 			if (tab.kind === 'preview') showEmbeds.set(false);
-			tabs = removeTab(tabs, id);
-			delete dirtyFiles[id];
-			delete fileContexts[id];
-			if (!tabs.tabs.length) showTabs.set(false);
-			await tick();
-			document.getElementById(domId(tabs.activeId))?.focus();
+			owner.drafts.delete(id);
+			const previousPanels = owner.state.panels;
+			const closedPanels = removeTab(previousPanels, id);
+			changeChatView(owner, { ...owner.state, panels: closedPanels });
+			if (owner === viewEntry) {
+				tabs = owner.state.panels;
+				delete dirtyFiles[id];
+				delete fileContexts[id];
+				delete sideChatStreaming[id];
+				if (!tabs.tabs.length || (!largeScreen && tabs.tabs.every((tab) => tab.kind === 'chat')))
+					showTabs.set(false);
+				await tick();
+				if (owner === viewEntry) document.getElementById(domId(tabs.activeId))?.focus();
+			}
+			if (target && tab.sessionId) {
+				try {
+					await terminalRequest(
+						target,
+						`${tab.kind === 'terminal' ? '/api/terminals' : '/browser/sessions'}/${encodeURIComponent(tab.sessionId)}`,
+						{ method: 'DELETE' }
+					);
+				} catch (error) {
+					if (!(error instanceof TerminalRequestError) || error.status !== 404) {
+						changeChatView(owner, {
+							...owner.state,
+							panels:
+								owner.state.panels === closedPanels
+									? previousPanels
+									: openTab(owner.state.panels, tab)
+						});
+						if (owner === viewEntry) {
+							tabs = owner.state.panels;
+							showTabs.set(true);
+						}
+						throw error;
+					}
+				}
+			}
+		} catch (error) {
+			toast.error(String(error));
 		} finally {
 			closing.delete(id);
 		}
@@ -587,6 +1054,24 @@
 	let tabDropHandled = false;
 	const sortableTabs = (node: HTMLElement) => {
 		let nextSibling: ChildNode | null = null;
+		let touchDrag = false;
+		const trackTouch = (event: TouchEvent) => {
+			if (!touchDrag) return;
+			const point = event.touches[0] ?? event.changedTouches[0];
+			chatDropPreview = point
+				? chatDropBounds({
+						target: document.elementFromPoint(point.clientX, point.clientY),
+						clientX: point.clientX,
+						clientY: point.clientY,
+						dataTransfer: null
+					})
+				: null;
+		};
+		const preventTouchMenu = (event: Event) => {
+			if ((event.target as Element).closest('[role="tab"]')) event.preventDefault();
+		};
+		document.addEventListener('touchmove', trackTouch, { passive: true });
+		node.addEventListener('contextmenu', preventTouchMenu);
 		const sortable = new Sortable(node, {
 			animation: 150,
 			direction: 'horizontal',
@@ -595,16 +1080,33 @@
 			delay: 200,
 			delayOnTouchOnly: true,
 			touchStartThreshold: 5,
+			// Touch events let Sortable cancel scrolling after the hold without disabling quick swipes.
+			supportPointer: false,
+			fallbackOnBody: true,
 			ghostClass: 'opacity-40',
 			setData: (transfer: DataTransfer, item: HTMLElement) =>
 				transfer.setData('application/x-chat-panel-tab', item.dataset.panelTab ?? ''),
-			onStart: ({ item }: { item: HTMLElement }) => {
+			onStart: ({ item, originalEvent }: { item: HTMLElement; originalEvent?: Event }) => {
 				nextSibling = item.nextSibling;
+				touchDrag = !!originalEvent && 'touches' in originalEvent;
+				clearChatDropPreview();
 				tabDropHandled = false;
 				draggedTabId = item.dataset.panelTab ?? '';
 				dragged = true;
 			},
-			onEnd: ({ item, from }: { item: HTMLElement; from: HTMLElement }) => {
+			onEnd: ({
+				item,
+				from,
+				originalEvent
+			}: {
+				item: HTMLElement;
+				from: HTMLElement;
+				originalEvent?: Event;
+			}) => {
+				const cancelled = originalEvent?.type === 'touchcancel';
+				if (touchDrag && originalEvent && 'touches' in originalEvent)
+					trackTouch(originalEvent as TouchEvent);
+				const touchTarget = touchDrag && !cancelled ? chatDropPreview : null;
 				const id = item.dataset.panelTab!;
 				const group = tabGroups[id];
 				const order = Array.from(from.querySelectorAll<HTMLElement>('[data-panel-tab]'))
@@ -612,15 +1114,29 @@
 					.filter((tabId) => group?.tabIds.includes(tabId));
 				// Restore the DOM before Svelte reconciles its keyed tabs.
 				from.insertBefore(item, nextSibling?.parentNode === from ? nextSibling : null);
-				if (!tabDropHandled) tabs = moveTab(tabs, id, order.indexOf(id));
+				if (touchTarget) {
+					tabs = touchTarget.edge
+						? splitTab(tabs, id, touchTarget.groupId, touchTarget.edge)
+						: moveTabToGroup(tabs, id, touchTarget.groupId);
+				} else if (!tabDropHandled && !cancelled) tabs = moveTab(tabs, id, order.indexOf(id));
 				const drop = pendingTabDrop;
 				pendingTabDrop = null;
 				drop?.();
+				// Consume Sortable's fallback click suppression so it cannot swallow the next tap.
+				if (touchDrag) document.documentElement.dispatchEvent(new MouseEvent('click'));
 				draggedTabId = '';
 				dragged = false;
+				touchDrag = false;
+				clearChatDropPreview();
 			}
 		});
-		return { destroy: () => sortable.destroy() };
+		return {
+			destroy: () => {
+				sortable.destroy();
+				document.removeEventListener('touchmove', trackTouch);
+				node.removeEventListener('contextmenu', preventTouchMenu);
+			}
+		};
 	};
 	const navigateTabs = (event: KeyboardEvent) => {
 		if (!(event.target instanceof HTMLElement) || event.target.getAttribute('role') !== 'tab')
@@ -647,16 +1163,12 @@
 
 	$: hasMessages = history?.messages && Object.keys(history.messages).length > 0;
 
-	const chatContext = (terminal: any) => terminal?.contexts?.chat ?? {};
-	const chatContextAvailable = (terminal: any) => chatContext(terminal) !== false;
-	const chatContextNeedsSavedChat = (terminal: any) =>
-		chatContext(terminal)?.context_id === 'chat_id';
-	$: selectedSystemTerminal = ($terminalServers ?? []).find(
-		(t) => t.id && t.id === $selectedTerminalId
+	const chatContextNeedsSavedChat = (terminal: any) => terminal?.scope === 'chat';
+	$: selectedSystemTerminal = ($terminalServers ?? []).find((t) =>
+		(!!$selectedTerminalId && t.id === $selectedTerminalId)
 	);
 	$: selectedSystemTerminalAvailable =
 		selectedSystemTerminal &&
-		chatContextAvailable(selectedSystemTerminal) &&
 		!(chatContextNeedsSavedChat(selectedSystemTerminal) && !isSavedChatId(chatId));
 	$: terminalFilesAvailable = !!(
 		$config?.features?.enable_tool_servers &&
@@ -721,19 +1233,14 @@
 		},
 		{ kind: 'artifacts', label: $i18n.t('Artifacts'), available: showArtifactsTab },
 		{ kind: 'preview', label: $i18n.t('Preview'), available: showPreviewTab },
-		{ kind: 'voice', label: $i18n.t('Voice'), available: $showCallOverlay },
+		{ kind: 'voice', label: $i18n.t('Voice'), available: !!bridge && $showCallOverlay },
 		{ kind: 'comments', label: $i18n.t('Comments'), available: showCommentsTab }
 	];
 
-	$: showFilesMenuItem =
-		showFilesTab &&
-		!tabs.tabs.some(
-			(tab) => tab.id === ($selectedTerminalId ? `files:${$selectedTerminalId}` : 'files')
-		);
 	$: newTabViews = availableViews.filter(
 		(view) => view.kind !== 'files' && view.kind !== 'voice' && view.available
 	);
-	$: canOpenNewTab = showFilesMenuItem || terminalFilesAvailable || newTabViews.length > 0;
+	$: canOpenNewTab = showFilesTab || terminalFilesAvailable || newTabViews.length > 0;
 
 	const quickSplit = () => {
 		if (tabs.tabs.length < 2) {
@@ -768,7 +1275,7 @@
 				if (voiceNoteTarget || canVoiceNote) action = openVoiceNote;
 				break;
 			case Shortcut.QUICK_OPEN:
-				if (terminalFilesAvailable && selectedConnection)
+				if (terminalFilesAvailable && selectedTarget)
 					action = () => {
 						showQuickOpen = true;
 					};
@@ -777,7 +1284,7 @@
 				if (showFilesTab) action = () => openFiles();
 				break;
 			case Shortcut.OPEN_DESKTOP:
-				if (desktopEnabled && selectedConnection) action = openDesktop;
+				if (desktopEnabled && selectedTarget) action = openDesktop;
 				break;
 			case Shortcut.NEW_CHAT_TAB:
 				if (canSideChat) action = () => openFeature('side');
@@ -786,13 +1293,13 @@
 				if (showCommentsTab) action = () => openFeature('comments');
 				break;
 			case Shortcut.NEW_FILE:
-				if (terminalFilesAvailable && selectedConnection) action = newFile;
+				if (terminalFilesAvailable && selectedTarget) action = newFile;
 				break;
 			case Shortcut.NEW_TERMINAL:
-				if (terminalEnabled && selectedConnection) action = newTerminal;
+				if (terminalEnabled && selectedTarget) action = newTerminal;
 				break;
 			case Shortcut.NEW_BROWSER:
-				if (browserEnabled && selectedConnection) action = () => openBrowser();
+				if (browserEnabled && selectedTarget) action = () => openBrowser();
 				break;
 			case Shortcut.CLOSE_TAB:
 				if (panelVisible && tabs.activeId)
@@ -828,10 +1335,9 @@
 		($settings as { terminalServers?: { url: string; key?: string }[] })?.terminalServers ?? [];
 	const terminalAccessible = (selector: string) => {
 		if (!$config?.features?.enable_tool_servers) return false;
-		const system = ($terminalServers ?? []).find((terminal) => terminal.id === selector);
+		const system = ($terminalServers ?? []).find((terminal) => (!!selector && terminal.id === selector));
 		if (system)
 			return (
-				chatContextAvailable(system) &&
 				!(chatContextNeedsSavedChat(system) && !isSavedChatId(chatId))
 			);
 		return !!(
@@ -840,39 +1346,14 @@
 			directTerminals.some((terminal) => terminal.url === selector)
 		);
 	};
-	const pruneTabs = () => {
-		const hadTabs = tabs.tabs.length > 0;
-		for (const tab of tabs.tabs) {
-			// An open side chat owns its model and context; changing the parent must not discard it.
-			if (tab.kind === 'side' || tab.kind === 'chat') continue;
-			const available = tab.terminalId
-				? !!$selectedTerminalId && terminalAccessible(tab.terminalId)
-				: availableViews.some((view) => view.kind === tab.kind && view.available);
-			if (!available) {
-				tabs = removeTab(tabs, tab.id);
-				delete dirtyFiles[tab.id];
-				delete fileContexts[tab.id];
-			}
-		}
-		if (hadTabs && !tabs.tabs.length) showTabs.set(false);
-	};
-	$: {
-		availableViews;
-		$selectedTerminalId;
-		$terminalServers;
-		$settings;
-		$config;
-		$user;
-		chatId;
-		pruneTabs();
-	}
-	$: selectedConnection =
+	$: selectedTarget =
 		terminalFilesAvailable && mounted
-			? resolveTerminalConnection(
+			? resolveTerminalTarget(
 					$selectedTerminalId,
 					$terminalServers ?? [],
 					directTerminals,
-					localStorage.token ?? ''
+					localStorage.token ?? '',
+					{ chatId: chatId, modelId: modelId ?? null }
 				)
 			: null;
 	const checkTerminal = async () => {
@@ -880,11 +1361,11 @@
 		terminalEnabled = false;
 		desktopEnabled = false;
 		browserEnabled = false;
-		if (!selectedConnection) return;
+		if (!selectedTarget) return;
 		try {
 			const result = await terminalRequest<{
 				features?: { terminal?: boolean; desktop?: boolean; browser?: boolean };
-			}>(selectedConnection, chatId, '/api/config');
+			}>(selectedTarget, '/api/config');
 			if (version === featureVersion) {
 				terminalEnabled = result.features?.terminal !== false;
 				desktopEnabled = result.features?.desktop === true;
@@ -895,26 +1376,24 @@
 		}
 	};
 	$: {
-		selectedConnection;
+		selectedTarget;
 		chatId;
 		void checkTerminal();
 	}
 
-	$: if (chatId !== tabsChatId) {
-		if (tabsChatId || !chatId) {
-			tabs = setMainChatTab(emptyTabs(), largeScreen, title);
-			hasOpenedTabs = false;
-			dirtyFiles = {};
-			fileContexts = {};
-			fileGitStatuses = {};
-			fileGitDiffModes = {};
-			fileGitHideWhitespace = {};
-			commentTarget = {};
-		}
-		tabsChatId = chatId;
+	$: if (mounted && !chatLoading && $user?.id && chatId !== tabsChatId) {
+		if (viewEntry && viewReady && (preserveChatView || (!viewEntry.chatId && chatId))) {
+			tabsChatId = chatId;
+			if (chatId)
+				void bindTerminalChat(chatId).catch((error) => {
+					viewError = String(error);
+				});
+		} else void restoreChatView(chatId);
 	}
 	$: if (
 		mounted &&
+		viewReady &&
+		!chatLoading &&
 		!largeScreen &&
 		$showTabs === true &&
 		tabs.tabs.every((tab) => tab.id === mainChatTabId)
@@ -944,28 +1423,35 @@
 		$sideChatRequest?.parentId === chatId
 	)
 		sideChatRequest.set(null);
-	$: if ($showTabs === 'side') {
-		if (canSideChat) openFeature('side');
+	$: if (viewReady && $showTabs === 'side') {
+		if (canSideChat) openFeature('side', true);
 		else sideChatRequest.set(null);
 		showTabs.set(tabs.tabs.length > 0);
 	}
 	$: if (
+		viewReady &&
 		($showTabs === 'comments' || (typeof $showTabs === 'object' && $showTabs)) &&
 		showCommentsTab
 	) {
 		commentTarget = typeof $showTabs === 'object' ? $showTabs : {};
 		openFeature('comments');
 	}
-	$: if ($showArtifacts && showArtifactsTab) {
-		openFeature('artifacts');
+	$: if (viewReady && $showArtifacts && showArtifactsTab) {
+		openFeature('artifacts', true);
 		showArtifacts.set(false);
 	}
-	$: if ($showEmbeds && showPreviewTab) {
+	$: if (viewReady && $showEmbeds && showPreviewTab) {
 		openFeature('preview');
 		showEmbeds.set(false);
 	}
-	$: if ($showCallOverlay) openFeature('voice');
-	$: if ($showFileNavPath && terminalFilesAvailable && $selectedTerminalId) {
+	$: if (viewReady && $showCallOverlay) openFeature('voice');
+	$: if (viewReady && $showTabs === 'voice') openFeature('voice');
+	$: if (viewReady && $showFileNav) {
+		const request = $showFileNav;
+		showFileNav.set(null);
+		if (request.chatId === chatId) openFiles(request.terminalId, request.directory, true);
+	}
+	$: if (viewReady && $showFileNavPath && terminalFilesAvailable && $selectedTerminalId) {
 		const request = $showFileNavPath;
 		showFileNavPath.set(null);
 		openFile(
@@ -976,26 +1462,16 @@
 	}
 
 	beforeNavigate(({ from, to, cancel, willUnload }) => {
-		if (navigationApproved || from?.url.pathname === to?.url.pathname) return;
-		showOverview.set(false);
-		const dirtyTabs = tabs.tabs.filter((tab) => fileViews[tab.id]?.hasUnsavedChanges());
-		if (!dirtyTabs.length) return;
-		cancel();
-		if (willUnload || !to) return;
-		void (async () => {
-			for (const tab of dirtyTabs) {
-				selectTab(tab.id);
-				if (!(await fileViews[tab.id].requestClose())) return;
-			}
-			navigationApproved = true;
-			try {
-				await goto(to.url);
-			} finally {
-				navigationApproved = false;
-			}
-		})();
+		if (from?.url.pathname === to?.url.pathname) return;
+		captureView();
+		if (viewEntry) void flushChatView(viewEntry);
+		if (willUnload && hasChatViewDrafts()) cancel();
 	});
 	onDestroy(() => {
+		stopTerminalChoice?.(false);
+		captureView();
+		if (viewEntry) void flushChatView(viewEntry);
+		++switchVersion;
 		++countVersion;
 		++featureVersion;
 		showOverview.set(false);
@@ -1005,7 +1481,7 @@
 	$: if (
 		$selectedTerminalId &&
 		$terminalServers !== null &&
-		!($terminalServers ?? []).some((t) => t.id && t.id === $selectedTerminalId) &&
+		!($terminalServers ?? []).some((t) => (!!$selectedTerminalId && t.id === $selectedTerminalId)) &&
 		!(
 			$config?.features?.enable_direct_integrations &&
 			($user?.role === 'admin' || ($user?.permissions?.features?.direct_tool_servers ?? true))
@@ -1020,6 +1496,14 @@
 	};
 
 	onMount(() => {
+		if (appLayout) appLayout.openPageTab = openPageTab;
+		const unregisterCapture = registerChatViewCapture(captureView);
+		const unsubscribeViews = chatViewChanges.subscribe(() => {
+			if (viewEntry && viewReady) {
+				tabs = viewEntry.state.panels;
+				viewError = viewEntry.error;
+			}
+		});
 		document.addEventListener('keydown', handleWorkspaceShortcut, true);
 		const unsubscribeVisibility = showTabs.subscribe((visible) => {
 			if (!largeScreen && !visible && panelTarget) releasePanel(panelTarget);
@@ -1042,6 +1526,9 @@
 		init();
 
 		return () => {
+			if (appLayout?.openPageTab === openPageTab) delete appLayout.openPageTab;
+			unregisterCapture();
+			unsubscribeViews();
 			document.removeEventListener('keydown', handleWorkspaceShortcut, true);
 			unsubscribeVisibility();
 			isDestroyed = true;
@@ -1053,31 +1540,86 @@
 		};
 	});
 	// Tab-opening handlers mutate tabs indirectly, so derive visibility and placement after them.
+	$: displayTabs = fullWidth ? tabs : setMainChatTab(tabs, false);
 	$: positions = fullWidth
-		? panelPositions(tabs.layout)
+		? panelPositions(displayTabs.layout)
 		: {
-				groups: { [tabs.activeGroupId]: { left: 0, top: 0, width: 1, height: 1 } },
+				groups: { [displayTabs.activeGroupId]: { left: 0, top: 0, width: 1, height: 1 } },
 				dividers: []
 			};
 	$: tabGroups = Object.fromEntries(
-		tabs.groups.flatMap((group) => group.tabIds.map((id) => [id, group]))
+		displayTabs.groups.flatMap((group) => group.tabIds.map((id) => [id, group]))
 	);
 	$: visibleTabIds = new Set(
-		tabs.groups
-			.filter((group) => fullWidth || group.id === tabs.activeGroupId)
+		displayTabs.groups
+			.filter((group) => fullWidth || group.id === displayTabs.activeGroupId)
 			.map((group) => group.activeId)
 	);
 	$: mainChatActive = fullWidth && visibleTabIds.has(mainChatTabId);
-	$: mainChatGroupId = tabs.groups.find((group) => group.tabIds.includes(mainChatTabId))?.id ?? '';
+	$: if (mounted && viewReady && !chatLoading) {
+		const active = tabs.tabs.find((tab) => tab.id === tabs.activeId);
+		const href = active?.kind === 'page'
+			? active.href
+			: active?.kind === 'chat'
+				? mainChatHref
+				: active?.kind === 'side' ? (active.chatId ? `/c/${active.chatId}` : active.href) : null;
+		if (href) {
+			const url = new URL(href, location.origin);
+			if (active?.kind === 'chat' && !chatId) {
+				// delete() re-encodes the other parameters even when it removes nothing.
+				if ($temporaryChatEnabled) url.searchParams.set('temporary-chat', 'true');
+				else if (url.searchParams.has('temporary-chat')) url.searchParams.delete('temporary-chat');
+			}
+			if (url.origin === location.origin && url.href !== location.href) {
+				// Reflect selection without routing through SvelteKit and remounting the workspace.
+				window.history.replaceState(window.history.state, '', url);
+			}
+		}
+	}
+	$: mainChatGroupId =
+		displayTabs.groups.find((group) => group.tabIds.includes(mainChatTabId))?.id ?? '';
 	$: mainChatStyle =
 		fullWidth && positions.groups[mainChatGroupId]
 			? paneStyle(positions.groups[mainChatGroupId], 36)
 			: '';
 </script>
 
+
+<ConfirmDialog
+	show={!!stopTerminalChoice}
+	title={$i18n.t('Stop terminal?')}
+	message={$i18n.t('Stop this terminal and close the tab?')}
+	confirmLabel={$i18n.t('Stop terminal')}
+	on:confirm={() => {
+		stopTerminalChoice?.(true);
+		stopTerminalChoice = null;
+	}}
+	on:cancel={() => {
+		stopTerminalChoice?.(false);
+		stopTerminalChoice = null;
+	}}
+/>
+
+<svelte:head>
+	<!-- LICENSE covers this Open WebUI browser-title identifier.
+	Do not alter, remove, obscure, or replace it except as LICENSE permits:
+	https://docs.openwebui.com/license. -->
+	<title>{activeTab?.kind === 'page' || activeTab?.kind === 'side'
+		? `${activeTab.label} / ${$WEBUI_NAME}`
+		: $settings.showChatTitleInTab !== false && chatId && title
+			? `${title.length > 30 ? `${title.slice(0, 30)}...` : title} / ${$WEBUI_NAME}`
+			: $WEBUI_NAME}</title>
+</svelte:head>
+
 <svelte:window
 	bind:innerWidth={viewportWidth}
-	on:dragend={clearChatDropPreview}
+	on:dragstart|capture={(event) => {
+		if (event.target instanceof Element && event.target.closest('#sidebar')) dragged = true;
+	}}
+	on:dragend|capture={() => {
+		dragged = false;
+		clearChatDropPreview();
+	}}
 	on:drop|capture={clearChatDropPreview}
 	on:blur={clearChatDropPreview}
 />
@@ -1109,19 +1651,19 @@
 		onclose={() => {
 			voiceNoteTarget = null;
 		}}
-		onsaved={(path) => openFile(path, target.connection.selector)}
+		onsaved={(path) => openFile(path, target.target.selector)}
 	/>
 {/if}
 
-{#if showQuickOpen && terminalFilesAvailable && selectedConnection}
-	{#key `${selectedConnection.selector}:${chatId}`}
+{#if showQuickOpen && terminalFilesAvailable && selectedTarget}
+	{#key JSON.stringify([selectedTarget.baseUrl, selectedTarget.context.modelId, chatId])}
 		<QuickOpen
-			connection={selectedConnection}
+			target={selectedTarget}
 			{chatId}
 			onclose={() => {
 				showQuickOpen = false;
 			}}
-			onselect={(path) => openFile(path, selectedConnection!.selector)}
+			onselect={(path) => openFile(path, selectedTarget!.selector)}
 		/>
 	{/key}
 {/if}
@@ -1175,7 +1717,31 @@
 	id="controls-container"
 >
 	<div bind:this={paneCanvas} class="relative flex-1 min-h-0 min-w-0">
-		{#if fullWidth}
+		{#if viewError}
+			<div
+				role="alert"
+				class="absolute inset-x-0 top-10 z-40 pointer-events-auto bg-white dark:bg-gray-900 p-3 text-sm"
+			>
+				{viewError}
+				<button
+					class="underline ml-2"
+					on:click={() => {
+						if (viewEntry?.promoting && chatId) void bindTerminalChat(chatId).catch(() => {});
+						else if (viewReady && viewEntry) void flushChatView(viewEntry);
+						else void restoreChatView(chatId);
+					}}>{$i18n.t('Retry')}</button
+				>
+			</div>
+		{:else if chatLoading || !viewReady}
+			<div
+				role="status"
+				aria-label={$i18n.t('Loading…')}
+				class="absolute inset-0 flex items-center justify-center text-sm text-gray-500"
+			>
+				<Spinner className="size-5" />
+			</div>
+		{/if}
+		{#if fullWidth && viewReady && !chatLoading}
 			<button
 				type="button"
 				class="absolute right-2 top-1 z-20 flex size-7 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50/40 dark:text-gray-400 dark:hover:bg-gray-800/40 disabled:opacity-30 pointer-events-auto"
@@ -1193,14 +1759,14 @@
 				<SplitPanel className="size-4.5" strokeWidth="1" />
 			</button>
 		{/if}
-		{#each tabs.groups.filter((group) => fullWidth || group.id === tabs.activeGroupId) as group (group.id)}
+		{#each displayTabs.groups.filter((group) => fullWidth || group.id === displayTabs.activeGroupId) as group (group.id)}
 			<div
 				data-panel-group={group.id}
 				role="presentation"
 				class="absolute min-h-0 min-w-0 pointer-events-none flex flex-col overflow-hidden"
 				style={paneStyle(positions.groups[group.id])}
-				on:focusin={() => focusGroup(group.id)}
-				on:pointerdown={() => focusGroup(group.id)}
+				on:focusin={(event) => focusGroup(group.id, event)}
+				on:pointerdown={(event) => focusGroup(group.id, event)}
 			>
 				{@render tabBar(group)}
 			</div>
@@ -1247,7 +1813,13 @@
 				></div>
 			</div>
 		{/each}
-		{#each tabs.tabs.filter((tab) => tab.kind !== 'chat') as tab (tab.id)}
+		{#each (viewReady ? tabs.tabs : []).filter((tab) => tab.kind !== 'chat') as tab (`${viewEntry?.instanceId}:${tab.id}`)}
+			{@const owner = viewEntry!}
+			{@const target =
+				mounted && $config && $user && $settings && $terminalServers !== null
+					? tabTarget(tab)
+					: null}
+			{@const failure = sessionFailures[tab.id]}
 			<div
 				id={`${domId(tab.id)}-view`}
 				role="tabpanel"
@@ -1261,7 +1833,25 @@
 				on:focusin={() => focusGroup(tabGroups[tab.id].id)}
 				on:pointerdown={() => focusGroup(tabGroups[tab.id].id)}
 			>
-				{#if tab.kind === 'voice'}
+				{#if tab.terminalId && !target}
+					<div
+						role="status"
+						class="flex h-full items-center justify-center p-4 text-center text-xs text-gray-400 dark:text-gray-500"
+					>
+						{$i18n.t('Terminal connection unavailable')}
+					</div>
+				{:else if tab.kind === 'page' && tab.href}
+					<Page
+						bind:this={pageViews[tab.id]}
+						href={tab.href}
+						active={visibleTabIds.has(tab.id)}
+						onNavigate={(href) => navigatePageTab(tab.id, href)}
+						onTitleChange={(label) => {
+							if (label && tabs.tabs.find((item) => item.id === tab.id)?.label !== label)
+								updateViewTab(owner, tab.id, { label });
+						}}
+					/>
+				{:else if tab.kind === 'voice' && bridge}
 					<CallPanel
 						{bridge}
 						bind:callMode
@@ -1279,63 +1869,116 @@
 					<Artifacts overlay={dragged} />
 				{:else if tab.kind === 'side'}
 					<SideChat
+						standalone={!!tab.href}
+						bind:this={sideViews[tab.id]}
+						bind:streaming={sideChatStreaming[tab.id]}
+						initialView={owner.transient[`side:${tab.id}`]}
 						chatId={tab.chatId ?? ''}
-						onChatUpdate={(chat) => updateSideChat(tab.id, chat)}
-						parentChatId={chatId ?? ''}
-						parentFolderId={folderId}
+						onChatUpdate={(chat) =>
+							updateViewTab(owner, tab.id, {
+								chatId: chat.id,
+								...(chat.title ? { label: chat.title } : {})
+							})}
+						parentChatId={tab.sideChat ? owner.chatId ?? '' : ''}
+						parentFolderId={tab.href ? null : folderId}
 						{history}
-						{modelId}
+						modelId={tab.href ? new URL(tab.href, location.origin).searchParams.get('models') ?? new URL(tab.href, location.origin).searchParams.get('model') ?? modelId : modelId}
 						{systemPrompt}
 						initialPrompt={tab.initialPrompt ?? ''}
 					/>
 				{:else if tab.kind === 'comments' && currentComments}
-					{#key `${$user?.id}:${chatId}:${currentComments.comment_id ?? ''}`}
+					{#key `${$user?.id}:$chatId={owner.chatId}:${currentComments.comment_id ?? ''}`}
 						<CommentsPanel
 							embedded={true}
 							bind:view={currentComments}
 							onCountChange={setCommentCount}
 						/>
 					{/key}
-				{:else if tab.kind === 'desktop' && tab.connection}
+				{:else if tab.kind === 'desktop' && target}
 					<Desktop
-						connection={tab.connection}
-						{chatId}
+						target={target!}
+						chatId={owner.chatId}
 						active={panelVisible && visibleTabIds.has(tab.id)}
 						overlay={dragged}
 					/>
-				{:else if tab.kind === 'browser'}
-					<Browser
-						baseUrl={tab.browserBaseUrl ?? ''}
-						connection={tab.connection ?? null}
-						{chatId}
-						active={panelVisible && visibleTabIds.has(tab.id)}
-						initialUrl={tab.path ?? ''}
-						onOpenBrowser={(url) => openBrowser(undefined, tab.terminalId, tab.browserBaseUrl, url)}
-						overlay={dragged}
-						onNavigate={(path, label) => {
-							tabs = {
-								...tabs,
-								tabs: tabs.tabs.map((item) =>
-									item.id === tab.id ? { ...item, path, label } : item
-								)
-							};
-						}}
-					/>
-				{:else if tab.kind === 'terminal' && tab.connection}
-					<XTerminal
-						bind:this={terminalViews[tab.id]}
-						connection={tab.connection}
-						{chatId}
-						active={panelVisible && visibleTabIds.has(tab.id)}
-						overlay={dragged}
-					/>
-				{:else if tab.untitled && tab.connection}
+				{:else if tab.kind === 'browser' || tab.kind === 'terminal'}
+					{#if owner.pending.has(tab.id)}
+						<p
+							role="status"
+							class="flex h-full items-center justify-center p-4 text-center text-xs text-gray-400 dark:text-gray-500"
+						>
+							{$i18n.t('Connecting…')}
+						</p>
+					{:else if !tab.sessionId || failure}
+						<div
+							role="status"
+							class="flex h-full flex-col items-center justify-center gap-3 p-4 text-center text-xs text-gray-400 dark:text-gray-500"
+						>
+							<p>
+								{failure?.status === 404
+									? $i18n.t('Session no longer available')
+									: (failure?.message ??
+										owner.sessionErrors[tab.id] ??
+										$i18n.t('Session no longer available'))}
+							</p>
+							{#if failure && failure.status !== 404}
+								<button
+									class="underline"
+									on:click={() => {
+										delete sessionFailures[tab.id];
+										sessionFailures = { ...sessionFailures };
+										sessionAttempts = {
+											...sessionAttempts,
+											[tab.id]: (sessionAttempts[tab.id] ?? 0) + 1
+										};
+									}}>{$i18n.t('Retry')}</button
+								>
+							{:else}
+								<button class="underline" on:click={() => startSession(owner, tab)}
+									>{$i18n.t(
+										tab.kind === 'terminal' ? 'Start new terminal' : 'Reopen browser'
+									)}</button
+								>
+							{/if}
+						</div>
+					{:else}
+						{#key `${tab.sessionId}:${sessionAttempts[tab.id] ?? 0}`}
+							{#if tab.kind === 'terminal'}
+								<XTerminal
+									bind:this={terminalViews[tab.id]}
+									target={target!}
+									sessionId={tab.sessionId}
+									active={panelVisible && visibleTabIds.has(tab.id)}
+									overlay={dragged}
+									onUnavailable={(message, status) => {
+										if (owner === viewEntry)
+											sessionFailures = { ...sessionFailures, [tab.id]: { message, status } };
+									}}
+								/>
+							{:else}
+								<Browser
+									bind:this={browserViews[tab.id]}
+									{target}
+									sessionId={tab.sessionId}
+									active={panelVisible && visibleTabIds.has(tab.id)}
+									overlay={dragged}
+									onOpenBrowser={(url) => openBrowser(undefined, tab.terminalId, undefined, url)}
+									onNavigate={(path, label) => updateViewTab(owner, tab.id, { path, label })}
+									onUnavailable={(message, status) => {
+										if (owner === viewEntry)
+											sessionFailures = { ...sessionFailures, [tab.id]: { message, status } };
+									}}
+								/>
+							{/if}
+						{/key}
+					{/if}
+				{:else if tab.untitled && target}
 					<UntitledFile
+						initialView={owner.drafts.get(tab.id)}
 						bind:this={fileViews[tab.id]}
 						bind:dirty={dirtyFiles[tab.id]}
 						label={tab.label}
-						connection={tab.connection}
-						{chatId}
+						target={target!}
 						initialDirectory={tab.context?.currentDirectory}
 						isOpen={(path) =>
 							tabs.tabs.some(
@@ -1347,65 +1990,91 @@
 									item.path === path
 							)}
 						onSaved={(path) => {
-							tabs = {
-								...tabs,
-								tabs: tabs.tabs.map((item) =>
-									item.id === tab.id
-										? {
-												...item,
-												untitled: false,
-												dirty: false,
-												path,
-												label: path.split('/').pop() || path
-											}
-										: item
-								)
-							};
+							owner.drafts.delete(tab.id);
+							updateViewTab(owner, tab.id, {
+								untitled: false,
+								dirty: false,
+								path,
+								label: path.split('/').pop() || path
+							});
 						}}
 					/>
 				{:else if (tab.kind === 'files' || tab.kind === 'file') && tab.terminalId}
-					{@const fileConnection = mounted
-						? resolveTerminalConnection(
-								tab.terminalId,
-								$terminalServers ?? [],
-								directTerminals,
-								localStorage.token ?? ''
-							)
-						: null}
+					{@const fileTarget = mounted ? tabTarget(tab) : null}
 					<div class="flex h-full min-h-0 flex-col">
 						<div class="min-h-0 flex-1">
 							<FileNav
+								target={fileTarget}
+								modelId={fileTarget?.context.modelId ?? null}
+								onFileSaved={(content) => {
+									const draft = owner.drafts.get(tab.id);
+									if (draft?.preview) {
+										draft.preview.baseText = content;
+										draft.dirty = draft.preview.dirty = draft.preview.text !== content;
+									}
+								}}
+								initialView={owner.drafts.get(tab.id)}
+								onViewChange={(view) => {
+									owner.drafts.set(tab.id, view);
+									if (tab.kind === 'files')
+										updateViewTab(owner, tab.id, {
+											directory: view.directory,
+											label: view.isHome
+												? $i18n.t('Home')
+												: view.directory?.split('/').filter(Boolean).pop() || $i18n.t('Files')
+										});
+								}}
+								onFilesMoved={() => {
+									if (owner !== viewEntry) return;
+									for (const other of tabs.tabs) {
+										if (
+											other.id !== tab.id &&
+											other.kind === 'files' &&
+											other.terminalId === tab.terminalId
+										)
+											void fileViews[other.id]?.refreshDirectory?.();
+									}
+								}}
 								gitStatus={fileGitStatuses[tab.terminalId] ?? null}
-								gitConnection={fileConnection}
+								gitTarget={fileTarget}
 								gitDiffMode={fileGitDiffModes[tab.terminalId] ?? 'unified'}
 								gitHideWhitespace={fileGitHideWhitespace[tab.terminalId] ?? false}
 								bind:this={fileViews[tab.id]}
 								bind:dirty={dirtyFiles[tab.id]}
 								terminalId={tab.terminalId}
 								initialFile={tab.kind === 'file' ? { path: tab.path!, page: tab.page } : null}
-								initialDirectory={tab.kind === 'files' ? (tab.path ?? null) : null}
+								initialDirectory={tab.kind === 'files' ? (tab.directory ?? tab.path ?? null) : null}
 								active={panelVisible && visibleTabIds.has(tab.id)}
 								manageFileRequests={false}
 								showTerminalDock={tab.kind === 'files'}
-								onOpenFile={(path, page) => openFile(path, tab.terminalId!, page)}
-								onBrowseDirectory={(path) => openFiles(tab.terminalId, path)}
+								onOpenFile={(path, page) =>
+									openFile(path, tab.terminalId!, page, fileTarget?.context.modelId)}
+								onBrowseDirectory={(path) =>
+									openFiles(tab.terminalId, path, false, fileTarget?.context.modelId)}
 								{onAskFile}
 								overlay={dragged}
-								{chatId}
+								chatId={owner.chatId}
 								bind:terminalContext={fileContexts[tab.id]}
 							/>
 						</div>
-						{#if tab.kind === 'files' && fileConnection}
+						{#if tab.kind === 'files' && fileTarget}
 							<GitBar
+								bind:this={gitViews[tab.id]}
+								initialView={owner.transient[`git:${tab.id}`]}
 								bind:status={fileGitStatuses[tab.terminalId]}
 								bind:diffMode={fileGitDiffModes[tab.terminalId]}
 								bind:hideWhitespace={fileGitHideWhitespace[tab.terminalId]}
-								connection={fileConnection}
-								{chatId}
-								directory={fileContexts[tab.id]?.currentDirectory ?? tab.path ?? '.'}
+								target={fileTarget}
+								chatId={owner.chatId}
+								directory={fileContexts[tab.id]?.currentDirectory ??
+									tab.directory ??
+									tab.path ??
+									'.'}
 								active={panelVisible && visibleTabIds.has(tab.id)}
-								onOpenFile={(path) => openFile(path, tab.terminalId!)}
-								onOpenDirectory={(path) => openFiles(tab.terminalId, path)}
+								onOpenFile={(path) =>
+									openFile(path, tab.terminalId!, null, fileTarget?.context.modelId)}
+								onOpenDirectory={(path) =>
+									openFiles(tab.terminalId, path, false, fileTarget?.context.modelId)}
 							/>
 						{/if}
 					</div>
@@ -1414,7 +2083,7 @@
 				{/if}
 			</div>
 		{/each}
-		{#if !tabs.tabs.length && canOpenNewTab}<div
+		{#if viewReady && !chatLoading && !viewError && !tabs.tabs.length && canOpenNewTab}<div
 				class="flex h-full items-center justify-center p-4 text-center text-xs text-gray-400"
 			>
 				{$i18n.t('Open a tab using the + menu.')}
@@ -1455,9 +2124,12 @@
 				}}
 			>
 				{#each group.tabIds.map((id) => tabs.tabs.find((tab) => tab.id === id)!) as tab (tab.id)}
+					{@const PageIcon =
+						tab.kind === 'page' ? pageIcons[tab.href?.split(/[/?#]/)[1] ?? ''] : null}
 					<div
 						role="presentation"
 						data-panel-tab={tab.id}
+						use:activateFilesOnDrag={tab}
 						on:click={() => selectTab(tab.id)}
 						class="panel-tab flex cursor-pointer items-center gap-1.5 ps-2.5 pe-2 h-7 rounded-lg text-sm font-normal whitespace-nowrap shrink-0 transition {group.activeId ===
 						tab.id
@@ -1473,14 +2145,19 @@
 							aria-controls={`${domId(tab.id)}-view`}
 							aria-selected={group.activeId === tab.id}
 							tabindex={group.activeId === tab.id ? 0 : -1}
-							title={tab.kind === 'chat' ? title : (tab.path ?? tab.label)}
+							title={tab.kind === 'chat' ? title : (tab.directory ?? tab.path ?? tab.label)}
 							aria-label={tab.kind === 'chat' ? title : undefined}
 							class="flex h-full items-center gap-1.5 min-w-0"
 						>
-							{#if tab.kind === 'file'}
+							{#if (tab.kind === 'chat' && chatStreaming) || (tab.kind === 'side' && sideChatStreaming[tab.id])}
+								<Spinner className="size-3.5" />
+								<span class="sr-only">{$i18n.t('Generating...')}</span>
+							{:else if tab.kind === 'file'}
 								<Icon name={fileIconName(tab.label)} size={14} strokeWidth={1.4} />
 							{:else if tab.kind === 'comments'}
 								<Annotation className="size-3.5 shrink-0" />
+							{:else if PageIcon}
+								<svelte:component this={PageIcon} className="size-3.5 shrink-0" />
 							{:else}
 								<Icon name={tabIcon(tab.kind)} size={14} />
 							{/if}
@@ -1518,7 +2195,7 @@
 					</div>
 				{/each}
 			</div>
-			{#if canOpenNewTab}
+			{#if canOpenNewTab && viewReady && !chatLoading}
 				<Dropdown align="start" closeOnSelect>
 					<button
 						type="button"
@@ -1527,8 +2204,8 @@
 					>
 					<div slot="content">
 						<DropdownMenu className="min-w-56">
-							{#if showFilesMenuItem}
-								<button on:click={() => openFiles()}
+							{#if showFilesTab}
+								<button on:click={() => openFiles($selectedTerminalId, undefined, true)}
 									><Icon name="folder" size={14} /><span class="flex-1 text-start"
 										>{$i18n.t('Files')}</span
 									><HotkeyHint name="openFiles" className="ms-auto" /></button
@@ -1635,6 +2312,10 @@
 {/if}
 
 <style>
+	.panel-tab {
+		-webkit-touch-callout: none;
+	}
+
 	.panel-tab:not(:has(:global(button:not([role='tab'])))) {
 		padding-inline: 0.625rem;
 	}

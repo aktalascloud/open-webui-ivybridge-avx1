@@ -5,14 +5,17 @@
 	import Switch from '../../common/Switch.svelte';
 	import ChromeBrowser from './ChromeBrowser.svelte';
 	import {
-		createBrowserSession,
+		getBrowserSession,
 		updateBrowserSession,
-		closeBrowserSession,
 		browserViewUrl,
 		browserFrameUrl,
 		type BrowserSession
 	} from '$lib/apis/terminal/browser';
-	import { getPortProxyUrl, type TerminalConnection } from '$lib/apis/terminal';
+	import {
+		getPortProxyUrl,
+		TerminalRequestError,
+		type TerminalTarget
+	} from '$lib/apis/terminal';
 	import PortList from '../FileNav/PortList.svelte';
 	import { settings } from '$lib/stores';
 	import Icon from '../FileNav/Icon.svelte';
@@ -20,17 +23,27 @@
 
 	const i18n = getContext<any>('i18n');
 	export let baseUrl = '';
-	export let connection: TerminalConnection | null = null;
-	export let chatId: string | null = null;
+	export let target: TerminalTarget | null = null;
+
 	export let active = true;
 	export let initialUrl = '';
+	export let sessionId = '';
+	export let onUnavailable: (message: string, status?: number) => void = () => {};
+	let ready: Promise<void> = Promise.resolve();
+	export async function bindChat(id: string) {
+		await ready;
+		if (sessionTarget?.context.chatId === id) return;
+		if (sessionTarget?.context.chatId || !session || !sessionTarget)
+			throw new Error('Browser is not connected');
+		await updateBrowserSession(sessionTarget, session.id, { chat_id: id });
+		sessionTarget.context.chatId = id;
+	}
 	export let overlay = false;
 	export let onNavigate: (url: string, label: string) => void = () => {};
 	export let onOpenBrowser: (url: string) => void = () => {};
 	export let onClose: (() => void) | null = null;
 	let session: BrowserSession | null = null;
-	let sessionChatId = chatId;
-	let sessionConnection = connection;
+	let sessionTarget = target;
 	let chrome: ChromeBrowser;
 	let switching = false;
 	let deviceMode: 'desktop' | 'mobile' = 'desktop';
@@ -39,31 +52,24 @@
 	let chromeBack = false;
 	let chromeForward = false;
 	let frameReady = false;
-	$: viewUrl = session && sessionConnection ? browserViewUrl(sessionConnection, session) : '';
-	$: if (session && sessionConnection) {
-		void updateBrowserSession(sessionConnection, sessionChatId, session.id, { active }).catch(
+	$: viewUrl = session && sessionTarget ? browserViewUrl(sessionTarget, session) : '';
+	$: if (session && sessionTarget) {
+		void updateBrowserSession(sessionTarget, session.id, { active }).catch(
 			() => {}
 		);
 	}
-	$: if (session && sessionConnection && chatId && !sessionChatId) {
-		const savedChatId = chatId;
-		void updateBrowserSession(sessionConnection, sessionChatId, session.id, {
-			chat_id: savedChatId
-		})
-			.then(() => (sessionChatId = savedChatId))
-			.catch(() => {});
-	}
+
 	const persist = (url: string, title: string) => {
-		if (session && sessionConnection)
-			void updateBrowserSession(sessionConnection, sessionChatId, session.id, { url, title }).catch(
+		if (session && sessionTarget)
+			void updateBrowserSession(sessionTarget, session.id, { url, title }).catch(
 				() => {}
 			);
 	};
-	const switchMode = async (mode: 'proxy' | 'chrome', remember = true) => {
-		if (!session || !sessionConnection || switching || session.mode === mode) return;
+	const switchMode = async (mode: 'proxy' | 'chrome', force = false) => {
+		if (!session || !sessionTarget || switching || (!force && session.mode === mode)) return;
 		switching = true;
 		try {
-			session = await updateBrowserSession(sessionConnection, sessionChatId, session.id, {
+			session = await updateBrowserSession(sessionTarget, session.id, {
 				mode,
 				url: currentUrl
 			});
@@ -72,14 +78,28 @@
 				history = [];
 				historyIndex = -1;
 				if (currentUrl)
-					frameUrl = browserFrameUrl(browserViewUrl(sessionConnection, session), currentUrl);
+					frameUrl = browserFrameUrl(browserViewUrl(sessionTarget, session), currentUrl);
 			}
 			error = '';
-			if (remember) localStorage.setItem('browserMode', mode);
+			return true;
 		} catch (reason) {
 			error = reason instanceof Error ? reason.message : String(reason);
+			if (mode === 'chrome') {
+				switching = false;
+				await fallbackToProxy(error);
+			}
 		} finally {
 			switching = false;
+		}
+	};
+	const fallbackToProxy = async (message: string) => {
+		if (!session || !sessionTarget || switching) return;
+		// The server may already be in Chrome mode even if its startup request failed.
+		const switched = await switchMode('proxy', true);
+		connectionStatus = '';
+		if (switched) {
+			loading = false;
+			error = `${$i18n.t('Chrome failed. Switched to Proxy.')} ${message}`;
 		}
 	};
 	const frameCommand = (command: string, url?: string) =>
@@ -122,8 +142,8 @@
 			? Number(url.port || (url.protocol === 'https:' ? 443 : 80))
 			: null;
 	const source = (url: URL) => {
-		if (session && sessionConnection)
-			return browserFrameUrl(browserViewUrl(sessionConnection, session), url.href);
+		if (session && sessionTarget)
+			return browserFrameUrl(browserViewUrl(sessionTarget, session), url.href);
 		const port = localPort(url);
 		if (port === null) return url.href;
 		if (!baseUrl) throw new Error($i18n.t('Select a terminal to open localhost URLs.'));
@@ -236,47 +256,35 @@
 	onMount(() => {
 		let disposed = false;
 		const release = () => {
-			if (session && sessionConnection)
-				void closeBrowserSession(sessionConnection, sessionChatId, session.id).catch(() => {});
+			if (session && sessionTarget)
+				void updateBrowserSession(sessionTarget, session.id, {
+					active: false
+				}).catch(() => {});
 		};
 		const heartbeat = setInterval(() => {
-			if (session && sessionConnection)
-				void updateBrowserSession(sessionConnection, sessionChatId, session.id, {}).catch(() => {});
+			if (session && sessionTarget)
+				void updateBrowserSession(sessionTarget, session.id, {}).catch(() => {});
 		}, 60_000);
 		window.addEventListener('message', receiveNavigation);
 		window.addEventListener('pagehide', release);
-		void (async () => {
-			if (sessionConnection) {
-				try {
-					const created = await createBrowserSession(sessionConnection, sessionChatId, initialUrl);
-					if (disposed) {
-						await closeBrowserSession(sessionConnection, sessionChatId, created.id);
-						return;
-					}
-					session = created;
-					currentUrl = created.url || initialUrl;
-					const savedMode = localStorage.getItem('browserMode');
-					const mode =
-						savedMode === 'proxy' || savedMode === 'chrome'
-							? savedMode
-							: created.chrome_available
-								? 'chrome'
-								: 'proxy';
-					if (mode !== 'chrome' || created.chrome_available) {
-						await switchMode(mode, false);
-					}
-					if (disposed) {
-						release();
-						return;
-					}
-					await tick();
-				} catch (reason) {
-					error = 'Browser sessions unavailable. Update Open Terminal. ' + String(reason);
-					return;
+		ready = (async () => {
+			try {
+				if (!sessionTarget || !sessionId) throw new Error('Session no longer available');
+				const restored = await getBrowserSession(sessionTarget, sessionId);
+				if (disposed) return;
+				session = restored;
+				currentUrl = restored.url;
+				urlInput = restored.url;
+				if (restored.mode === 'proxy' && restored.url) {
+					frameUrl = browserFrameUrl(browserViewUrl(sessionTarget, restored), restored.url);
+					remember(restored.url);
 				}
+				onNavigate(restored.url, restored.title || restored.url || 'Browser');
+			} catch (reason) {
+				if (disposed) return;
+				error = String(reason);
+				onUnavailable(error, reason instanceof TerminalRequestError ? reason.status : undefined);
 			}
-			if (initialUrl) navigate(initialUrl);
-			else addressInput?.focus();
 		})();
 		return () => {
 			disposed = true;
@@ -345,7 +353,7 @@
 				>
 				<div slot="content">
 					<DropdownMenu className="w-48 font-normal">
-						{#each session.chrome_available ? ['proxy', 'chrome'] : ['proxy'] as mode}
+						{#each session.chrome_available ? ['chrome', 'proxy'] : ['proxy'] as mode}
 							<button
 								type="button"
 								role="menuitemradio"
@@ -424,6 +432,7 @@
 					mobile={deviceMode === 'mobile'}
 					{quality}
 					onError={(message) => (error = message)}
+					onFailure={(message) => void fallbackToProxy(message)}
 					onStatus={(message) => (connectionStatus = message)}
 					onState={(state) => {
 						if (!state.url) return;
@@ -449,19 +458,17 @@
 					on:load={loaded}
 				></iframe>{/key}
 		{/if}
-		{#if !currentUrl && !frameUrl}<div class="flex h-full overflow-y-auto px-6 pt-8 pb-20">
+		{#if !currentUrl && !frameUrl}<div class="flex h-full overflow-y-auto p-6">
 				<div class="m-auto w-full max-w-xs">
 					<div class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
 						<Icon name="browser" size={18} strokeWidth={1.4} class="text-gray-400" />
 						{$i18n.t('Browser')}
 					</div>
-					{#if connection}
+					{#if target}
 						<div class="mt-3">
 							<PortList
-								baseUrl={connection.baseUrl}
+								{target}
 								previewBaseUrl={baseUrl}
-								apiKey={connection.key}
-								{chatId}
 								{active}
 								on:previewPort={(event) => navigate(`http://localhost:${event.detail}/`)}
 							/>

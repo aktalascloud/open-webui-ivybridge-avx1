@@ -211,7 +211,8 @@ class BrowserMode(unittest.IsolatedAsyncioTestCase):
         self.proxy = AsyncMock(return_value='response')
         return load('routers/terminals.py', {'browser_http', 'browser_ws'}, {
             'HTTPException': HTTPException, 'browser_access': AsyncMock(return_value=(NS(id='owner'), data)),
-            'proxy_terminal': self.proxy, 'Config': NS(get=AsyncMock(return_value=[{'id': 'server'}])),
+            '_proxy_terminal': self.proxy, 'browser_context': lambda data: {'chat_id': data['chat']},
+            'find_terminal_connection': AsyncMock(return_value={'id': 'server'}), 'terminal_headers': lambda _: {}, 'Config': NS(get=AsyncMock(return_value=[{'id': 'server'}])),
             'get_terminal_connections': AsyncMock(return_value=[{'id':'server'}]),
             'get_terminal_client':lambda *a,**k:Context(client),
             'ENABLE_TOOL_SERVERS': True, 'has_connection_access': AsyncMock(return_value=True),

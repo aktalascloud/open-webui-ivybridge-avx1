@@ -1,22 +1,16 @@
 <script lang="ts">
+	export let modelId: string | null = null;
 	import { resolveLocalizedResource } from '$lib/utils/localizedContent';
 	import { getContext, onDestroy } from 'svelte';
+	import type { Readable, Writable } from 'svelte/store';
 	import { getPrompts } from '$lib/apis/prompts';
 	import { getSkillItems } from '$lib/apis/skills';
 	import {
 		listTerminalSkills,
-		resolveTerminalConnection,
+		resolveTerminalTarget,
 		type TerminalSkill
 	} from '$lib/apis/terminal';
-	import {
-		user,
-		chatId,
-		selectedTerminalId,
-		settings,
-		terminalServers,
-		terminalSkills,
-		visibleControls
-	} from '$lib/stores';
+	import { user, chatId, settings, terminalServers, visibleControls } from '$lib/stores';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import ChatBubbleDotted from '$lib/components/icons/ChatBubbleDotted.svelte';
 	import ChatBubbleDottedChecked from '$lib/components/icons/ChatBubbleDottedChecked.svelte';
@@ -30,6 +24,8 @@
 	const i18n: any = getContext('i18n');
 
 	export let query = '';
+	export let selectedTerminalId: Readable<string | null>;
+	export let terminalSkills: Writable<any[]>;
 	export let onSelect = (e) => {};
 	export let canCompact = false;
 	export let canCompare = false;
@@ -122,13 +118,12 @@
 	});
 
 	const getTerminalItems = async (query = ''): Promise<TerminalSkill[]> => {
-		const connection = resolveTerminalConnection(
+		const target = resolveTerminalTarget(
 			$selectedTerminalId,
 			$terminalServers ?? [],
 			$settings?.terminalServers ?? [],
-			localStorage.token
-		);
-		const items = await listTerminalSkills(connection, $chatId || null).catch(() => []);
+			localStorage.token, { chatId: $chatId || null, modelId: modelId });
+		const items = await listTerminalSkills(target).catch(() => []);
 		terminalSkills.set(items);
 		const q = query.trim().toLowerCase();
 		return q
@@ -381,7 +376,7 @@
 		{:else if item.data.id === 'comments' || item.data.id === 'side'}
 			<button
 				type="button"
-				aria-label={$i18n.t(item.data.id === 'side' ? 'Side chat' : 'Comments')}
+				aria-label={item.data.id === 'side' ? $i18n.t('Side chat') : $i18n.t('Comments')}
 				class="slash-command-row flex items-center gap-2 w-full h-6 px-2 rounded-xl text-[0.8125rem] text-left transition-colors duration-75 hover:bg-gray-50/40 dark:hover:bg-gray-800/40
 					{commandIdx === selectedIdx ? 'app-interactive-active selected-command-option-button' : ''}"
 				on:mousedown={(e) => e.preventDefault()}
@@ -399,7 +394,7 @@
 				</span>
 				<span class="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
 					<span class="min-w-0 flex-1 truncate"
-						>{$i18n.t(item.data.id === 'side' ? 'Side chat' : 'Comments')}</span
+						>{item.data.id === 'side' ? $i18n.t('Side chat') : $i18n.t('Comments')}</span
 					>
 					<span class="app-muted max-w-24 shrink-0 truncate text-[0.625rem]">/{item.data.id}</span>
 				</span>

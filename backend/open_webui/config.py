@@ -1964,6 +1964,8 @@ USER_PERMISSIONS_FEATURES_API_KEYS = os.getenv('USER_PERMISSIONS_FEATURES_API_KE
 
 USER_PERMISSIONS_FEATURES_MEMORIES = os.getenv('USER_PERMISSIONS_FEATURES_MEMORIES', 'True').lower() == 'true'
 
+USER_PERMISSIONS_FEATURES_SUBAGENTS = os.getenv('USER_PERMISSIONS_FEATURES_SUBAGENTS', 'True').lower() == 'true'
+
 USER_PERMISSIONS_FEATURES_AUTOMATIONS = os.getenv('USER_PERMISSIONS_FEATURES_AUTOMATIONS', 'False').lower() == 'true'
 
 USER_PERMISSIONS_FEATURES_CALENDAR = os.getenv('USER_PERMISSIONS_FEATURES_CALENDAR', 'True').lower() == 'true'
@@ -2052,6 +2054,7 @@ DEFAULT_USER_PERMISSIONS = {
         'image_generation': USER_PERMISSIONS_FEATURES_IMAGE_GENERATION,
         'code_interpreter': USER_PERMISSIONS_FEATURES_CODE_INTERPRETER,
         'memories': USER_PERMISSIONS_FEATURES_MEMORIES,
+        'subagents': USER_PERMISSIONS_FEATURES_SUBAGENTS,
         'automations': USER_PERMISSIONS_FEATURES_AUTOMATIONS,
         'calendar': USER_PERMISSIONS_FEATURES_CALENDAR,
         'webhooks': USER_PERMISSIONS_FEATURES_USER_WEBHOOKS,
@@ -2076,6 +2079,10 @@ if SKILL_CONTENT_MAX_CHARS is not None and SKILL_CONTENT_MAX_CHARS <= 0:
 SKILL_PREVIEW_MAX_CHARS = int(os.environ['SKILL_PREVIEW_MAX_CHARS']) if os.getenv('SKILL_PREVIEW_MAX_CHARS') else None
 if SKILL_PREVIEW_MAX_CHARS is not None and SKILL_PREVIEW_MAX_CHARS <= 0:
     raise ValueError('SKILL_PREVIEW_MAX_CHARS must be a positive integer or unset')
+
+VIEW_CHAT_MAX_CHARS = int(os.environ['VIEW_CHAT_MAX_CHARS']) if os.getenv('VIEW_CHAT_MAX_CHARS') else None
+if VIEW_CHAT_MAX_CHARS is not None and VIEW_CHAT_MAX_CHARS <= 0:
+    raise ValueError('VIEW_CHAT_MAX_CHARS must be a positive integer or unset')
 
 ENABLE_CHANNELS = os.getenv('ENABLE_CHANNELS', 'False').lower() == 'true'
 
@@ -2266,12 +2273,16 @@ CONTEXT_COMPACTION_MODEL = os.getenv('CONTEXT_COMPACTION_MODEL', '')
 ENABLE_CONTEXT_COMPACTION = os.getenv('ENABLE_CONTEXT_COMPACTION', 'False').lower() == 'true'
 
 ENABLE_TOOL_PERMISSIONS = os.getenv('ENABLE_TOOL_PERMISSIONS', 'False').lower() == 'true'
+ENABLE_TOOL_CALL_LABELS = os.getenv('ENABLE_TOOL_CALL_LABELS', 'False').lower() == 'true'
 ENABLE_TOOL_PERMISSIONS_AUTO = os.getenv('ENABLE_TOOL_PERMISSIONS_AUTO', 'False').lower() == 'true'
-TOOL_PERMISSIONS_DECISIONS_API_BASE_URL = os.getenv('TOOL_PERMISSIONS_DECISIONS_API_BASE_URL', 'https://api.openai.com/v1')
-TOOL_PERMISSIONS_DECISIONS_API_KEY = os.getenv('TOOL_PERMISSIONS_DECISIONS_API_KEY', '')
-TOOL_PERMISSIONS_DECISIONS_MODEL = os.getenv('TOOL_PERMISSIONS_DECISIONS_MODEL', 'gpt-6-luna')
-TOOL_PERMISSIONS_DECISIONS_THRESHOLD = float(os.getenv('TOOL_PERMISSIONS_DECISIONS_THRESHOLD', '0.5'))
-TOOL_PERMISSIONS_DECISIONS_PROMPT = os.getenv('TOOL_PERMISSIONS_DECISIONS_PROMPT', '')
+TOOL_PERMISSIONS_AUTO_ENGINE = os.getenv('TOOL_PERMISSIONS_AUTO_ENGINE', '')
+TOOL_PERMISSIONS_AUTO_PROMPT = os.getenv('TOOL_PERMISSIONS_AUTO_PROMPT', '')
+TOOL_PERMISSIONS_AUTO_DECISIONS_API_BASE_URL = os.getenv(
+    'TOOL_PERMISSIONS_AUTO_DECISIONS_API_BASE_URL', 'https://api.openai.com/v1'
+)
+TOOL_PERMISSIONS_AUTO_DECISIONS_API_KEY = os.getenv('TOOL_PERMISSIONS_AUTO_DECISIONS_API_KEY', '')
+TOOL_PERMISSIONS_AUTO_DECISIONS_MODEL = os.getenv('TOOL_PERMISSIONS_AUTO_DECISIONS_MODEL', 'gpt-6-luna')
+TOOL_PERMISSIONS_AUTO_DECISIONS_THRESHOLD = float(os.getenv('TOOL_PERMISSIONS_AUTO_DECISIONS_THRESHOLD', '0.5'))
 
 
 CONTEXT_COMPACTION_TOKEN_THRESHOLD = int(os.getenv('CONTEXT_COMPACTION_TOKEN_THRESHOLD', '80000'))
@@ -2963,6 +2974,7 @@ DEFAULT_CONFIG = {
     'skills.lazy_loading.enable': ENABLE_SKILL_LAZY_LOADING,
     'skills.content_max_chars': SKILL_CONTENT_MAX_CHARS,
     'skills.preview_max_chars': SKILL_PREVIEW_MAX_CHARS,
+    'chats.view_max_chars': VIEW_CHAT_MAX_CHARS,
     'direct.enable': ENABLE_DIRECT_CONNECTIONS,
     'direct.integrations.enable': ENABLE_DIRECT_INTEGRATIONS,
     'ollama.enable': ENABLE_OLLAMA_API,
@@ -3305,12 +3317,14 @@ DEFAULT_CONFIG = {
     'chat.context_compaction.retention_percentage': CONTEXT_COMPACTION_RETENTION_PERCENTAGE,
     'chat.context_compaction.prompt_template': CONTEXT_COMPACTION_PROMPT_TEMPLATE,
     'chat.tool_permissions.enable': ENABLE_TOOL_PERMISSIONS,
+    'chat.tool_call_labels.enable': ENABLE_TOOL_CALL_LABELS,
     'chat.tool_permissions.auto.enable': ENABLE_TOOL_PERMISSIONS_AUTO,
-    'chat.tool_permissions.decisions.api_base_url': TOOL_PERMISSIONS_DECISIONS_API_BASE_URL,
-    'chat.tool_permissions.decisions.api_key': TOOL_PERMISSIONS_DECISIONS_API_KEY,
-    'chat.tool_permissions.decisions.model': TOOL_PERMISSIONS_DECISIONS_MODEL,
-    'chat.tool_permissions.decisions.threshold': TOOL_PERMISSIONS_DECISIONS_THRESHOLD,
-    'chat.tool_permissions.decisions.prompt': TOOL_PERMISSIONS_DECISIONS_PROMPT,
+    'chat.tool_permissions.auto.engine': TOOL_PERMISSIONS_AUTO_ENGINE,
+    'chat.tool_permissions.auto.prompt': TOOL_PERMISSIONS_AUTO_PROMPT,
+    'chat.tool_permissions.auto.decisions.api_base_url': TOOL_PERMISSIONS_AUTO_DECISIONS_API_BASE_URL,
+    'chat.tool_permissions.auto.decisions.api_key': TOOL_PERMISSIONS_AUTO_DECISIONS_API_KEY,
+    'chat.tool_permissions.auto.decisions.model': TOOL_PERMISSIONS_AUTO_DECISIONS_MODEL,
+    'chat.tool_permissions.auto.decisions.threshold': TOOL_PERMISSIONS_AUTO_DECISIONS_THRESHOLD,
     'chat.tool_search.enable': ENABLE_TOOL_SEARCH,
     'chat.tool_search.engine': TOOL_SEARCH_ENGINE,
     'chat.tool_search.decisions.api_base_url': TOOL_SEARCH_DECISIONS_API_BASE_URL,

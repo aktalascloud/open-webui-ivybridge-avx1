@@ -43,35 +43,20 @@ test('actual discovery function filters advertised tools and preserves connectio
   assert.equal(result[0].id,'123abc');assert.deepEqual(result[0].specs,[specs[0]]);
 });
 
-test('actual side-chat send isolates mic metadata and cannot alias an explicit server id to its index', async () => {
-  const source=fs.readFileSync(new URL('../src/lib/components/chat/ChatTabs/SideChat.svelte',import.meta.url),'utf8');
-  const start=source.indexOf('\tconst send =');
-  const end=source.indexOf('\tconst stop =',start);
-  assert.ok(start>=0&&end>start);
-  const body=stripTypeScriptTypes(source.slice(start,end));
-  for(const sideVoice of [false,true]){
-    const nodes=new Map();
-    for(const id of ['chat-input','side-fixture'])nodes.set(id,{textContent:'same',addEventListener(){}});
-    globalThis.document={getElementById:id=>nodes.get(id)};
-    mic.mark('same');
-    if(sideVoice)mic.mark('same','side-fixture');
-    let payload;
-    const context={canSend:true,disposed:false,sending:false,recovering:false,temporary:true,isShared:false,originalChatId:null,parentFolderId:null,sideChatAllowed:true,draft:'same',files:[],busy:false,atSelectedModel:{id:'model'},
-      selectedModels:['model'],error:'',id:'temporary-fixture',inputId:'side-fixture',
-      $i18n:{t:value=>value},$socket:{connected:true,id:'fixture-socket'},sideModelId:'model',
-      tick:async()=>{},input:{uploadPendingFiles:async()=>true,setText(){}},uuidv4:()=>String(Math.random()),
-      messages:[],context:[],params:{},toolApprovalMode:'prompt',selectedToolIds:['direct_server:kept','direct_server:0'],
-      selectedSkillIds:[],selectedFilterIds:[],autoScroll:false,scroll:async()=>{},request:null,
-      localStorage:{token:'synthetic'},$models:[{id:'model'}],$config:{features:{enable_tool_servers:true}},
-      $toolServers:[{id:'wrong',url:'https://wrong.invalid'},{id:'kept',url:'https://kept.invalid'}],
-      $terminalServers:[],$selectedTerminalId:null,$settings:{},system:'',
-      webSearchEnabled:false,imageGenerationEnabled:false,codeInterpreterEnabled:false,
-      isRasterImageContentType:()=>false,__assistantMicOrigin:mic,isSelectedDirectToolServer,
-      generateOpenAIChatCompletion:async(_token,data)=>{payload=data;return{};},getErrorMessage:String};
-    const send=new Function('context',`with(context){${body};return send;}`)(context);
-    await send();
-    assert.deepEqual(payload.tool_servers,[{id:'kept',url:'https://kept.invalid'}]);
-    assert.deepEqual(payload.user_message.meta,sideVoice?{input_source:'microphone'}:undefined);
-    assert.deepEqual(mic.peek('same'),{input_source:'microphone'});
-  }
+test('shared side-chat composer preserves mic provenance and exact tool IDs', () => {
+  const source = fs.readFileSync(new URL('../src/lib/components/chat/Chat.svelte', import.meta.url), 'utf8');
+  const side = fs.readFileSync(new URL('../src/lib/components/chat/Tabs/SideChat.svelte', import.meta.url), 'utf8');
+  assert.match(side, /side=\{true\}/);
+  const micExpression = source.match(/const microphoneMeta = (.*);/)[1];
+  const select = source.match(/\.filter\(\s*\(server, idx\) => isSelectedDirectToolServer\(server, idx, toolServerIds\)\s*\)/)[0];
+  const provenance = new Function('__assistantMicOrigin', 'userPrompt', 'inputId', 'return ' + micExpression);
+  const filtered = new Function('servers', 'isSelectedDirectToolServer', 'toolServerIds', 'return servers' + select);
+  const nodes = new Map(['chat-input', 'side-fixture'].map(id => [id, {textContent:'same', addEventListener(){}}]));
+  globalThis.document = {getElementById:id => nodes.get(id)};
+  mic.mark('same', 'chat-input');
+  assert.equal(provenance(mic, 'same', 'side-fixture'), undefined);
+  mic.mark('same', 'side-fixture');
+  assert.deepEqual(provenance(mic, 'same', 'side-fixture'), {input_source:'microphone'});
+  assert.deepEqual(provenance(mic, 'same', 'chat-input'), {input_source:'microphone'});
+  assert.deepEqual(filtered([{id:'wrong',url:'https://wrong.invalid'}, {id:'kept',url:'https://kept.invalid'}], isSelectedDirectToolServer, ['kept','0']), [{id:'kept',url:'https://kept.invalid'}]);
 });

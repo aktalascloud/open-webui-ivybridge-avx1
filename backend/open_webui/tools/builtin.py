@@ -33,6 +33,7 @@ from open_webui.retrieval.vector.async_client import ASYNC_VECTOR_DB_CLIENT
 from open_webui.routers.images import (
     CreateImageForm,
     EditImageForm,
+    get_image_data_url,
     image_edits,
     image_generations,
 )
@@ -62,6 +63,7 @@ from open_webui.routers.memories import (
 )
 from open_webui.routers.retrieval import search_web as _search_web
 from open_webui.socket.main import close_changed_note_documents, sio
+from open_webui.tools.visualizations import render_visualization  # noqa: F401 — re-exported
 from open_webui.tools.knowledge_fs import kb_exec  # noqa: F401 — re-exported
 from open_webui.utils.access_control.files import has_access_to_note_files
 from open_webui.utils.chat_id import is_saved_chat_id
@@ -69,7 +71,7 @@ from open_webui.utils.json_codec import JSONCodec
 from open_webui.utils.notifications import notify_target
 from open_webui.utils.sanitize import sanitize_code
 from open_webui.utils.skill_files import SkillFile, SkillFileOperation, skill_content_page, skill_overview
-from open_webui.utils.terminals import upload_files_to_terminal
+from open_webui.utils.terminals import get_terminal_file, upload_files_to_terminal
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +95,7 @@ async def _has_write_access_to_note(note, user_id: str) -> bool:
 
 
 async def _emit_note_updated(request: Request, user: dict, note) -> None:
-    await sio.emit('events:note', note.model_dump(), to=f'note:{note.id}')
+    await sio.emit('events', {'data': {'type': 'note:updated', 'data': note.model_dump()}}, to=f'note:{note.id}')
     await publish_event(
         request,
         EVENTS.NOTE_UPDATED,
@@ -461,7 +463,7 @@ async def edit_image(
     Supports targeted edits such as adding, removing, replacing, inpainting, extending, or compositing image content.
 
     :param prompt: A description of the transformation to apply to the provided images
-    :param image_urls: Source image URLs to modify or use as composition inputs
+    :param image_urls: Source image URLs or absolute file paths to modify or use as composition inputs
     :param size: Optional output size in WIDTHxHEIGHT pixels (e.g. "1536x1024"), supported by the configured image model.
         Omit to use the configured default.
     :return: Image URLs and, when a terminal is selected, terminal_path for display_file or further processing.
@@ -472,9 +474,15 @@ async def edit_image(
     try:
         user = UserModel(**__user__) if __user__ else None
 
+        resolved_images = []
+        for url in image_urls:
+            if url.startswith('/') and not url.startswith('/api/v1/files/'):
+                data = await get_terminal_file(__request__, user, __metadata__ or {}, url, max_bytes=50 * 1024 * 1024)
+                url = await asyncio.to_thread(get_image_data_url, data)
+            resolved_images.append(url)
         images = await image_edits(
             request=__request__,
-            form_data=EditImageForm(prompt=prompt, image=image_urls, size=size),
+            form_data=EditImageForm(prompt=prompt, image=resolved_images, size=size),
             metadata=(
                 {'channel_id': __chat_id__.removeprefix('channel:'), 'message_id': __message_id__}
                 if isinstance(__chat_id__, str) and __chat_id__.startswith('channel:')
@@ -1623,6 +1631,40 @@ async def replace_note_content(
 # Chats tools
 
 
+async def search_users(
+    query: str,
+    count: int = 5,
+    __user__: dict = None,
+) -> str:
+    """
+    Search users by name or email, including to resolve @mentions. To mention a user,
+    copy their exact mention token into your reply. Only users with chat access are notified.
+
+    :param query: Name or email to search for
+    :param count: Maximum results to return (default: 5, maximum: 20)
+    :return: JSON list of users with id, name, email, and mention token
+    """
+    if not __user__ or __user__.get('role') not in {'user', 'admin'}:
+        return JSONCodec.dumps({'error': 'Verified user context required'})
+
+    try:
+        result = await Users.get_users(
+            filter={'query': query, 'roles': ['user', 'admin']},
+            sort={'order_by': 'name', 'direction': 'asc'},
+            limit=max(1, min(count, 20)),
+        )
+        return JSONCodec.dumps(
+            [
+                {'id': user.id, 'name': user.name, 'email': user.email, 'mention': f'<@U:{user.id}>'}
+                for user in result['users']
+            ],
+            ensure_ascii=False,
+        )
+    except Exception:
+        log.exception('search_users failed')
+        return JSONCodec.dumps({'error': 'Could not search users'})
+
+
 async def search_chats(
     query: str,
     count: int = 5,
@@ -1750,6 +1792,24 @@ async def view_chat(
                 )
             current_id = msg.get('parentId') if msg else None
 
+        truncation = {}
+        max_chars = await Config.get('chats.view_max_chars')
+        if max_chars and sum(len(str(message['content'] or '')) for message in messages) > max_chars:
+            remaining_chars = max_chars
+            kept_messages = []
+            for message in messages:
+                if remaining_chars <= 0:
+                    break
+                content = str(message['content'] or '')[:remaining_chars]
+                kept_messages.append({**message, 'content': content})
+                remaining_chars -= len(content)
+            truncation = {
+                'truncated': True,
+                'total_messages': len(messages),
+                'returned_messages': len(kept_messages),
+            }
+            messages = kept_messages
+
         # Reverse to get chronological order
         messages.reverse()
 
@@ -1760,6 +1820,7 @@ async def view_chat(
                 'messages': messages,
                 'updated_at': chat.updated_at,
                 'created_at': chat.created_at,
+                **truncation,
             },
             ensure_ascii=False,
         )
@@ -4045,8 +4106,9 @@ async def search_tools(
     """
     Discover available tools by capability and return their full definitions.
     Pass the exact tool name when you already know it.
-    Invoke a result with call_tool(tool_name, params), where params is a JSON-encoded object
-    matching the tool's parameters. Do not call deferred tools directly by name.
+    Invoke results with call_tool(calls=[{"tool_name": "exact_name", "params": "{}"}, ...]).
+    Each params value is a JSON-encoded object matching that tool's parameters.
+    Batch independent calls together. Do not call deferred tools directly by name.
 
     :param query: Keywords describing the capability you need (e.g. "jira create issue"), or an exact tool name
     :param count: Maximum number of results to return (default: 5, max: 20)

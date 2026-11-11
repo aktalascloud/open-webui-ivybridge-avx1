@@ -950,20 +950,6 @@
 		</div>
 
 		{#if permissions.chat.temporary || defaultPermissions?.chat?.temporary}
-			<div class="ml-2 flex flex-col">
-				<div class="flex w-full justify-between my-1">
-					<div class="self-center text-xs font-normal">
-						{$i18n.t('Allow Side Chat')}
-					</div>
-					<Switch bind:state={permissions.chat.side_chat} ariaLabel={$i18n.t('Allow Side Chat')} />
-				</div>
-				{#if defaultPermissions?.chat?.side_chat && !permissions.chat.side_chat}
-					<div class="text-xs text-gray-500">
-						{$i18n.t('This is a default user permission and will remain enabled.')}
-					</div>
-				{/if}
-			</div>
-
 			<div class="flex flex-col w-full">
 				<div class="flex w-full justify-between my-1">
 					<div class=" self-center text-xs font-normal">
@@ -983,6 +969,20 @@
 				{/if}
 			</div>
 		{/if}
+
+		<div class="flex flex-col w-full">
+			<div class="flex w-full justify-between my-1">
+				<div class="self-center text-xs font-normal">
+					{$i18n.t('Allow Side Chat')}
+				</div>
+				<Switch bind:state={permissions.chat.side_chat} ariaLabel={$i18n.t('Allow Side Chat')} />
+			</div>
+			{#if defaultPermissions?.chat?.side_chat && !permissions.chat.side_chat}
+				<div class="text-xs text-gray-500">
+					{$i18n.t('This is a default user permission and will remain enabled.')}
+				</div>
+			{/if}
+		</div>
 	</div>
 
 	<hr class=" border-gray-100/30 dark:border-gray-850/30" />
@@ -1173,6 +1173,24 @@
 					<Switch bind:state={permissions.features.memories} ariaLabel={$i18n.t('Memories')} />
 				</div>
 				{#if defaultPermissions?.features?.memories && !permissions.features.memories}
+					<div>
+						<div class="text-xs text-gray-500">
+							{$i18n.t('This is a default user permission and will remain enabled.')}
+						</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
+
+		{#if $config?.features?.enable_subagents}
+			<div class="flex flex-col w-full">
+				<div class="flex w-full justify-between my-1">
+					<div class=" self-center text-xs font-normal">
+						{$i18n.t('Sub-agents')}
+					</div>
+					<Switch bind:state={permissions.features.subagents} ariaLabel={$i18n.t('Sub-agents')} />
+				</div>
+				{#if defaultPermissions?.features?.subagents && !permissions.features.subagents}
 					<div>
 						<div class="text-xs text-gray-500">
 							{$i18n.t('This is a default user permission and will remain enabled.')}

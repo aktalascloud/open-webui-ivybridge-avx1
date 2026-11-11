@@ -9,8 +9,9 @@ import { type Writable, derived, get, writable } from 'svelte/store';
 import type { CommentTarget } from '$lib/apis/comments';
 import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
+import type { FolderDetails } from './folderStates';
 import type { Socket } from 'socket.io-client';
-import type { AudioQueue } from '$lib/utils/audio';
+import type { AudioQueue, NotificationSoundStyle } from '$lib/utils/audio';
 import type { I18nOverrides } from '$lib/utils/translationDictionary';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
@@ -77,9 +78,13 @@ export const pinnedNotes = writable([]);
 export const tags = writable([]);
 export const folders = writable([]);
 
-export const selectedFolder = writable(null);
+export const selectedFolder = writable<FolderDetails | null>(null);
 
 export const models: Writable<Model[]> = writable([]);
+
+export const baseModels = derived(models, ($models) =>
+	$models.filter((model) => model.owned_by !== 'terminal')
+);
 
 export const knowledge: Writable<null | Document[]> = writable(null);
 export const tools = writable(null);
@@ -96,14 +101,6 @@ export type WorkspaceAction = {
 	visible?: boolean;
 };
 
-export const workspaceCounts: Writable<Record<WorkspaceSection, number | null>> = writable({
-	models: null,
-	knowledge: null,
-	prompts: null,
-	skills: null,
-	tools: null
-});
-export const workspaceActions: Writable<WorkspaceAction[]> = writable([]);
 export const adminUserCount: Writable<number | null> = writable(null);
 export const adminGroupCount: Writable<number | null> = writable(null);
 export const adminLeaderboardCount: Writable<number | null> = writable(null);
@@ -175,13 +172,21 @@ export const showSettings: Writable<boolean | string | SettingsModalRequest> = w
 export const showChangelog = writable(false);
 
 export const showTabs = writable<
-	boolean | 'comments' | 'side' | (CommentTarget & { tab: 'comments'; comment_id?: string })
+	| boolean
+	| 'comments'
+	| 'side'
+	| 'voice'
+	| (CommentTarget & { tab: 'comments'; comment_id?: string })
 >(false);
 export const showEmbeds = writable(false);
 export const showOverview = writable(false);
 export const showArtifacts = writable(false);
 export const showCallOverlay = writable(false);
-export const showFileNav = writable(false);
+export const showFileNav = writable<{
+	terminalId: string;
+	directory: string;
+	chatId: string | null;
+} | null>(null);
 export type FileNavOpenRequest = string | { path: string; page?: number | null };
 export const showFileNavPath: Writable<FileNavOpenRequest | null> = writable(null);
 export const showFileNavDir: Writable<string | null> = writable(null);
@@ -210,12 +215,11 @@ export type DesktopEvent =
 export const desktopEvent: Writable<DesktopEvent | null> = writable(null);
 
 export const isLastActiveTab = writable(true);
-export const playingNotificationSound = writable(false);
 
 export type Model = OpenAIModel | OllamaModel | AgentModel;
 
 export interface AgentModel extends BaseModel {
-	owned_by: 'agent';
+	owned_by: 'terminal';
 	agent: {
 		terminal_id: string;
 		provider: 'codex' | 'claude-code' | 'cursor' | 'grok' | 'opencode' | 'cline' | 'gemini' | 'pi';
@@ -227,7 +231,7 @@ type BaseModel = {
 	id: string;
 	name: string;
 	info?: ModelConfig;
-	owned_by: 'ollama' | 'openai' | 'arena' | 'agent';
+	owned_by: 'ollama' | 'openai' | 'arena' | 'terminal';
 };
 
 export interface OpenAIModel extends BaseModel {
@@ -283,6 +287,7 @@ type Settings = {
 	collapseCodeBlocks?: boolean;
 	expandDetails?: boolean;
 	notificationSound?: boolean;
+	notificationSoundType?: NotificationSoundStyle;
 	notificationSoundAlways?: boolean;
 	stylizedPdfExport?: boolean;
 	notifications?: any;
@@ -297,6 +302,7 @@ type Settings = {
 	responseAutoCopy?: any;
 	richTextInput?: boolean;
 	showFormattingToolbar?: boolean;
+	showInputSelections?: boolean;
 	params?: any;
 	userLocation?: any;
 	webSearch?: any;

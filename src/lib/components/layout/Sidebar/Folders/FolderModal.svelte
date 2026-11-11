@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext, createEventDispatcher, onMount, tick } from 'svelte';
+	import { getContext, createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as I18n } from 'i18next';
 
@@ -14,7 +14,8 @@
 	import { toast } from 'svelte-sonner';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { user, config, models } from '$lib/stores';
+	import { baseModels, user, config, settings } from '$lib/stores';
+	import { getModels } from '$lib/apis';
 	import ModelSelector from '$lib/components/chat/ModelSelector/Selector.svelte';
 	import FileNav from '$lib/components/chat/FileNav.svelte';
 	import FolderOpen from '$lib/components/icons/FolderOpen.svelte';
@@ -50,6 +51,47 @@
 	let showAccessModal = false;
 	let showAdvanced = false;
 	let showDirectoryPicker = false;
+	let terminalModels = [];
+	let modelsLoading = false;
+	let modelRequest = 0;
+	let modelTimer: ReturnType<typeof setTimeout>;
+
+	const loadTerminalModels = (visible: boolean, terminalId: string, cwd: string) => {
+		const request = ++modelRequest;
+		clearTimeout(modelTimer);
+		terminalModels = [];
+		modelsLoading = visible && !!terminalId;
+		if (!modelsLoading) return;
+
+		modelTimer = setTimeout(async () => {
+			try {
+				const available = await getModels(
+					localStorage.token,
+					$config?.features?.enable_direct_integrations
+						? ($settings?.directConnections ?? null)
+						: null,
+					false,
+					false,
+					{ terminalId, cwd: cwd.trim() }
+				);
+				if (request === modelRequest) terminalModels = available;
+			} catch (error) {
+				if (request === modelRequest) toast.error(`${error}`);
+			} finally {
+				if (request === modelRequest) modelsLoading = false;
+			}
+		}, 250);
+	};
+
+	$: modelTerminalId = data.terminal_id;
+	$: modelDirectory = data.working_directory;
+	$: loadTerminalModels(show, modelTerminalId, modelDirectory);
+	$: folderModels = modelTerminalId ? terminalModels : $baseModels;
+
+	onDestroy(() => {
+		clearTimeout(modelTimer);
+		modelRequest++;
+	});
 
 	const submitHandler = async () => {
 		loading = true;
@@ -289,7 +331,10 @@
 								description={$i18n.t(
 									'Select the terminal used by default for new chats in this folder.'
 								)}
-								onChange={() => (data.working_directory = '')}
+								onChange={() => {
+									data.working_directory = '';
+									data.model_ids = data.model_ids.filter((id) => !id.startsWith('agent:'));
+								}}
 							/>
 							{#if data.terminal_id}
 								<div
@@ -344,7 +389,8 @@
 										<ModelSelector
 											id="folder-default"
 											placeholder={$i18n.t('Use default')}
-											items={$models.map((model) => ({
+											disabled={modelsLoading}
+											items={folderModels.map((model) => ({
 												value: model.id,
 												label: model.name,
 												model
@@ -357,6 +403,7 @@
 											bind:values={data.model_ids}
 										/>
 									</div>
+									{#if modelsLoading}<Spinner className="size-3" />{/if}
 									{#if data.model_ids.length}
 										<button
 											type="button"
@@ -439,8 +486,8 @@
 
 {#if show && showDirectoryPicker && data.terminal_id}
 	<Modal bind:show={showDirectoryPicker} ariaLabel={$i18n.t('Choose working directory')} size="md">
-		<div class="p-4">
-			<div class="mb-3 flex items-center justify-between text-sm">
+		<div class="px-2 py-4">
+			<div class="mb-3 flex items-center justify-between px-2 text-sm">
 				<span>{$i18n.t('Choose working directory')}</span>
 				<button
 					type="button"

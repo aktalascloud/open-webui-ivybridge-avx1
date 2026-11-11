@@ -87,9 +87,7 @@ class Stream:
     def set_timeout(self, timeout):
         self.read_timeout = timeout.sock_read if timeout.sock_read and timeout.sock_read > 0 else None
         if timeout.total and timeout.total > 0:
-            self.timeout_handle = asyncio.get_running_loop().call_later(
-                timeout.total, self.fail, 'Request timed out'
-            )
+            self.timeout_handle = asyncio.get_running_loop().call_later(timeout.total, self.fail, 'Request timed out')
 
     async def send(self, operation, data=b'', **fields):
         while len(data) > self.credit and not self.closed:
@@ -355,23 +353,42 @@ async def notify(user_id, notification_id, title, body, path):
     if not presences:
         return
     user = await Users.get_user_by_id(user_id)
-    if not user or user.role == 'pending' or not user.settings or not (user.settings.ui or {}).get('notificationEnabled', False):
+    if (
+        not user
+        or user.role == 'pending'
+        or not user.settings
+        or not (user.settings.ui or {}).get('notificationEnabled', False)
+    ):
         return
-    payload = json.dumps({
-        'id': str(notification_id)[:200], 'user_id': user_id,
-        'title': str(title)[:256], 'body': str(body)[:4096], 'path': path,
-    }).encode()
+    payload = json.dumps(
+        {
+            'id': str(notification_id)[:200],
+            'user_id': user_id,
+            'title': str(title)[:256],
+            'body': str(body)[:4096],
+            'path': path,
+        }
+    ).encode()
     for presence in presences:
         row = await AuthSessions.get(presence['session'])
         if not row or row.user_id != user_id or row.refresh_token_id is None or row.expires_at <= time.time():
             continue
         with suppress(Exception):
-            await asyncio.wait_for(hub.send(presence, {
-                'type': 'notification', 'stream': str(uuid4()), 'sequence': 0,
-            }, payload), 10)
+            await asyncio.wait_for(
+                hub.send(
+                    presence,
+                    {
+                        'type': 'notification',
+                        'stream': str(uuid4()),
+                        'sequence': 0,
+                    },
+                    payload,
+                ),
+                10,
+            )
 
 
-async def get_terminal_connections(user):
+async def get_terminal_connections(user, include_templates=True):
     """Resolve personal targets alongside existing configured servers."""
     user_id = user['id'] if isinstance(user, dict) else user.id
     connections = list(await Config.get('terminal_server.connections', []) or [])
@@ -391,10 +408,16 @@ async def get_terminal_connections(user):
                 'enabled': True,
                 'owner_id': user_id,
                 'config': {
+                    'chat_uploads': 'filesystem',
                     'access_grants': [{'principal_type': 'user', 'principal_id': user_id, 'permission': 'read'}]
                 },
             }
         )
+    if include_templates:
+        from open_webui.utils.terminals import list_template_connections
+        managed = [c for c in connections if c.get('server_type') == 'orchestrator']
+        connections = [c for c in connections if c.get('server_type') != 'orchestrator']
+        connections.extend(await list_template_connections(user, managed))
     return connections
 
 

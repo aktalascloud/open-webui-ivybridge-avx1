@@ -21,12 +21,14 @@ from open_webui.models.config import Config
 from open_webui.models.folders import Folders
 from open_webui.utils.access_control import has_permission
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.agents.discovery import get_models as get_agent_models
 from open_webui.utils.automations import (
     execute_automation,
     next_n_runs_ns,
     next_run_ns,
     rrule_interval_seconds,
     validate_rrule,
+    validate_automation_terminal,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -196,6 +198,26 @@ async def get_automation_items(
     }
 
 
+@router.get('/models')
+async def get_automation_models(
+    request: Request,
+    terminal_id: str,
+    cwd: str | None = None,
+    automation_id: str | None = None,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    await check_automations_permission(request, user)
+    automation = None
+    if automation_id:
+        automation = await Automations.get_by_id(automation_id, db=db)
+        check_automation_access(automation, user)
+    metadata = {'terminal_id': terminal_id}
+    if automation:
+        metadata.update(model_id=automation.data.get('model_id'), automation_id=automation.id)
+    return await get_agent_models(request, user, metadata, cwd=cwd)
+
+
 # Create New Automation
 
 
@@ -209,6 +231,7 @@ async def create_new_automation(
     await check_automations_permission(request, user)
     await check_automation_folder_access(form_data.folder_id, user, db)
     await check_automation_channel_access(form_data, user, db)
+    await validate_automation_terminal(request, user, form_data.data.model_dump())
     try:
         await validate_rrule(form_data.data.rrule, tz=user.timezone)
     except ValueError as e:
@@ -264,6 +287,7 @@ async def update_automation_by_id(
     check_automation_access(automation, user)
     await check_automation_folder_access(form_data.folder_id, user, db)
     await check_automation_channel_access(form_data, user, db)
+    await validate_automation_terminal(request, user, form_data.data.model_dump(), id)
 
     try:
         await validate_rrule(form_data.data.rrule, tz=user.timezone)

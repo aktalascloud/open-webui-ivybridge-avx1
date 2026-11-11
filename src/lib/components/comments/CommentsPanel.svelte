@@ -124,25 +124,25 @@
 				}
 			);
 	};
-	const changed = (data: CommentResource) => {
+	const changed = (event: { data?: { type?: string; data?: CommentResource } }) => {
+		const { type, data } = event?.data ?? {};
+		if (!data) return;
 		if (
 			data.resource_type !== resource?.resource_type ||
 			data.resource_id !== resource?.resource_id
 		)
 			return;
+		if (type === 'comments:unavailable') {
+			fail(new CommentError(403, $i18n.t('Comments are no longer available.')));
+			return;
+		}
+		if (type !== 'comments:changed') return;
 		clearTimeout(refreshTimer);
 		refreshTimer = setTimeout(refresh, 150);
 	};
 	const reconnect = () => {
 		join();
 		refresh();
-	};
-	const unavailable = (data: CommentResource) => {
-		if (
-			data?.resource_type === resource?.resource_type &&
-			data?.resource_id === resource?.resource_id
-		)
-			fail(new CommentError(403, $i18n.t('Comments are no longer available.')));
 	};
 	const revealInitialPosition = () => {
 		if (!alive || loading || !revealPending || !commentList) return;
@@ -207,22 +207,19 @@
 	});
 	$: if ($socket !== connection) {
 		connection?.emit('comments:leave', { subscription_id: subscriptionId });
-		connection?.off('comments:changed', changed);
+		connection?.off('events', changed);
 		connection?.off('connect', reconnect);
-		connection?.off('comments:unavailable', unavailable);
 		connection = $socket;
-		connection?.on('comments:changed', changed);
+		connection?.on('events', changed);
 		connection?.on('connect', reconnect);
-		connection?.on('comments:unavailable', unavailable);
 		join();
 	}
 	onDestroy(() => {
 		alive = false;
 		clearTimeout(refreshTimer);
 		connection?.emit('comments:leave', { subscription_id: subscriptionId });
-		connection?.off('comments:changed', changed);
+		connection?.off('events', changed);
 		connection?.off('connect', reconnect);
-		connection?.off('comments:unavailable', unavailable);
 	});
 </script>
 
@@ -260,8 +257,14 @@
 		class:flex={!items.length}
 		class:flex-col={!items.length}
 	>
-		{#if loading}<div class="flex justify-center py-5"><Spinner className="size-5" /></div>{/if}
-		{#if error}<div class="px-4 py-2">
+		{#if loading}<div class="flex items-center justify-center py-5" class:flex-1={!items.length}>
+				<Spinner className="size-5" />
+			</div>{/if}
+		{#if error && !loading}<div
+				class={items.length
+					? 'px-4 py-2'
+					: 'flex flex-1 flex-col items-center justify-center px-4 py-6 text-center'}
+			>
 				<p role="alert" class="text-xs text-gray-500 dark:text-gray-400">{error}</p>
 				<button
 					type="button"
@@ -270,7 +273,7 @@
 				>
 			</div>{/if}
 		{#if resource && !loading}
-			{#if !items.length}<div
+			{#if !items.length && !error}<div
 					class="flex flex-1 items-center justify-center px-4 py-6 text-center text-xs text-gray-500"
 				>
 					{$i18n.t('No comments yet')}

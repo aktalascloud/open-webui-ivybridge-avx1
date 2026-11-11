@@ -79,6 +79,7 @@ from open_webui.tools.builtin import (
     read_memory_path,
     replace_memory_content,
     replace_note_content,
+    render_visualization,
     search_calendar_events,
     search_channel_messages,
     search_channels,
@@ -87,6 +88,7 @@ from open_webui.tools.builtin import (
     search_knowledge_files,
     search_memories,
     search_notes,
+    search_users,
     search_web,
     timer,
     toggle_automation,
@@ -125,13 +127,9 @@ from open_webui.utils.plugin import (
     load_tool_module_by_id,
     set_tool_module_in_cache,
 )
-from open_webui.utils.tether import RelayInterrupted, get_terminal_connections, get_terminal_client
+from open_webui.utils.tether import RelayInterrupted, get_terminal_client
 from open_webui.utils.terminals import (
-    TERMINAL_CONTEXT_HEADER,
     get_terminal_server_url,
-    terminal_context_available,
-    terminal_context_config,
-    terminal_context_id,
 )
 from open_webui.utils.voice_avatar import avatar_animation_tools
 from pydantic import BaseModel, Field, create_model
@@ -723,6 +721,9 @@ async def get_builtin_tools(
             'type': 'builtin',
         }
 
+    if is_builtin_tool_enabled('visualizations', False):
+        builtin_functions.append(render_visualization)
+
     # Time utilities - available for date calculations
     if is_builtin_tool_enabled('time'):
         builtin_functions.extend([get_current_timestamp, calculate_timestamp])
@@ -792,9 +793,9 @@ async def get_builtin_tools(
                 ]
             )
 
-    # Chats tools - search and fetch user's chat history
+    # Chats tools - search chat history and the user directory
     if is_builtin_tool_enabled('chats'):
-        builtin_functions.extend([search_chats, view_chat])
+        builtin_functions.extend([search_chats, view_chat, search_users])
 
     if (
         is_builtin_tool_enabled('subagents')
@@ -802,6 +803,7 @@ async def get_builtin_tools(
         and getattr(request.state, 'internal', False) is not True
         and getattr(request.state, 'direct', False) is not True
         and not is_temporary_chat_id(metadata.get('chat_id'))
+        and await has_user_permission('subagents')
     ):
         builtin_functions.extend([delegate_task, timer])
 
@@ -1378,7 +1380,9 @@ async def get_terminal_cwd(
     """Fetch the current working directory from a terminal server."""
     try:
         cwd_url = f'{base_url.rstrip("/")}/files/cwd'
-        async with get_terminal_client(base_url, headers.get('X-User-Id'), 
+        async with get_terminal_client(
+            base_url,
+            headers.get('X-User-Id'),
             timeout=aiohttp.ClientTimeout(total=5),
             trust_env=True,
         ) as session:
@@ -1406,7 +1410,9 @@ async def get_terminal_system_prompt(
     """
     base = base_url.rstrip('/')
     try:
-        async with get_terminal_client(base_url, headers.get('X-User-Id'), 
+        async with get_terminal_client(
+            base_url,
+            headers.get('X-User-Id'),
             timeout=aiohttp.ClientTimeout(total=3),
             trust_env=True,
         ) as session:
@@ -1443,7 +1449,7 @@ async def set_terminal_servers(request: Request):
     # Terminal connections store id/name at top level; translate to info dict
     server_configs = []
     for connection in connections:
-        if not connection.get('url'):
+        if not connection.get('url') or connection.get('server_type') == 'orchestrator':
             continue
 
         enabled = connection.get('enabled', True)
@@ -1483,8 +1489,6 @@ async def set_terminal_servers(request: Request):
         headers = {}
         if connection.get('auth_type', 'bearer') == 'bearer':
             headers.update(bearer_auth_header(connection.get('key', '')))
-        if connection.get('policy_id'):
-            headers['X-User-Id'] = 'system'
         prompt = await get_terminal_system_prompt(server['url'], headers)
         if prompt:
             server['system_prompt'] = prompt
@@ -1545,11 +1549,8 @@ async def get_terminal_tools(
     if not ENABLE_TOOL_SERVERS:
         return {}
 
-    connections = await get_terminal_connections(user)
-    connection = next(
-        (terminal_connection for terminal_connection in connections if terminal_connection.get('id') == terminal_id),
-        None,
-    )
+    from open_webui.utils.terminals import find_terminal_connection, terminal_headers
+    connection = await find_terminal_connection(user, terminal_id, extra_params.get('__metadata__', {}), request=request)
     if connection is None:
         raise RuntimeError(f"Terminal server '{terminal_id}' not found")
     if not connection.get('enabled', True):
@@ -1560,11 +1561,20 @@ async def get_terminal_tools(
         raise RuntimeError(f'Access denied to terminal {terminal_id}')
 
     # Find the cached spec data for this terminal
-    if connection.get('owner_id') == user.id:
+    if connection.get('template_id'):
+        url = get_terminal_server_url(connection)
+        discovery_headers = {**bearer_auth_header(connection['key']), **terminal_headers(connection)}
+        openapi = await get_tool_server_data(url + '/openapi.json', discovery_headers)
+        server_data = {'id': terminal_id, 'url': url, 'openapi': openapi, 'specs': convert_openapi_to_tool_payload(openapi)}
+    elif connection.get('owner_id') == user.id:
         url = connection['url']
         openapi = await get_tool_server_data(url + '/openapi.json', {'X-User-Id': user.id})
-        server_data = {'id': terminal_id, 'url': url, 'openapi': openapi,
-                       'specs': convert_openapi_to_tool_payload(openapi)}
+        server_data = {
+            'id': terminal_id,
+            'url': url,
+            'openapi': openapi,
+            'specs': convert_openapi_to_tool_payload(openapi),
+        }
     else:
         terminal_servers = await get_terminal_servers(request)
         server_data = next((server for server in terminal_servers if server.get('id') == terminal_id), None)
@@ -1592,20 +1602,11 @@ async def get_terminal_tools(
 
     # Use chat_id as the per-session key for cwd tracking
     metadata = extra_params.get('__metadata__', {})
-    terminal_context = 'automation' if metadata.get('automation_id') else 'chat'
-    if not terminal_context_available(connection, terminal_context):
-        raise RuntimeError(f"Terminal server '{terminal_id}' is not available for {terminal_context}")
-
     session_id = metadata.get('chat_id')
     if session_id:
         headers['X-Session-Id'] = session_id
 
-    context_id = terminal_context_id(connection, metadata, terminal_context)
-    config = terminal_context_config(connection, terminal_context)
-    if isinstance(config, dict) and config.get('context_id') in {'chat_id', 'automation_id'} and not context_id:
-        raise RuntimeError(f"Terminal server '{terminal_id}' requires a saved {terminal_context} context")
-    if context_id:
-        headers[TERMINAL_CONTEXT_HEADER] = context_id
+    headers.update(terminal_headers(connection))
 
     # Fetch live with the user's credentials so prompt changes apply without a restart
     connection_config = connection.get('config') or {}
@@ -1634,12 +1635,19 @@ async def get_terminal_tools(
 
         async def make_tool_function(fn_name, srv_data, hdrs, cks):
             async def tool_function(**kwargs):
+                call_headers = dict(hdrs)
+                if connection.get('template_id'):
+                    current = await find_terminal_connection(user, terminal_id,
+                        {**metadata, 'scope': connection.get('scope')}, request=request)
+                    if current is None:
+                        raise HTTPException(403, 'Terminal access revoked')
+                    call_headers.update(terminal_headers(current))
                 params = dict(kwargs)
                 if fn_name == 'display_file':
                     params.pop('page', None)
                 return await execute_tool_server(
                     url=srv_data['url'],
-                    headers=hdrs,
+                    headers=call_headers,
                     cookies=cks,
                     name=fn_name,
                     params=params,
@@ -1918,8 +1926,11 @@ async def execute_tool_server(
             else:
                 body_params = params
 
-        async with get_terminal_client(url, (headers or {}).get('X-User-Id'), 
-            trust_env=True, timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER)
+        async with get_terminal_client(
+            url,
+            (headers or {}).get('X-User-Id'),
+            trust_env=True,
+            timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER),
         ) as session:
             request_method = getattr(session, http_method.lower())
 

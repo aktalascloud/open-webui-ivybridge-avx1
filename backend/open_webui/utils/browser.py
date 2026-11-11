@@ -3,7 +3,7 @@ from cryptography.fernet import InvalidToken
 from open_webui.utils.auth import create_token, decode_token, get_optional_verified_user_from_request
 
 
-def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None, *, owner_token):
+def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None, *, owner_token, resource='browser'):
     from open_webui.utils.oauth import encrypt_data
 
     relay = encrypt_data(
@@ -22,6 +22,8 @@ def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=N
             'chat': chat_id,
             'session': session['id'],
             'mode': session.get('mode', 'proxy'),
+            'resource': resource,
+            'model': (headers or {}).get('X-Terminal-Model-Id'),
             'relay': relay,
         },
     )
@@ -43,7 +45,7 @@ async def browser_access(server_id, sid, ticket, request):
         relay = decrypt_data(data['relay'])
         owner_token = relay.pop('owner_token')
         capability = relay.pop('capability')
-        if not isinstance(capability, str) or not capability:
+        if not isinstance(capability, str) or (not capability and data.get('resource') != 'files'):
             raise ValueError('Missing browser capability')
         if not isinstance(owner_token, str) or not owner_token:
             raise ValueError('Missing browser owner credential')

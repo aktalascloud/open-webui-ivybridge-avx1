@@ -5,11 +5,15 @@
 	import { WebLinksAddon } from '@xterm/addon-web-links';
 	import { WebglAddon } from '@xterm/addon-webgl';
 	import '@xterm/xterm/css/xterm.css';
-	import { terminalRequest, type TerminalConnection } from '$lib/apis/terminal';
+	import {
+		terminalRequest,
+		TerminalRequestError,
+		type TerminalTarget
+	} from '$lib/apis/terminal';
 	import { assignTerminalChat, openTerminalSocket } from '$lib/apis/terminal/socket';
 
-	export let connection: TerminalConnection;
-	export let chatId: string | null = null;
+	export let target: TerminalTarget;
+
 	export let overlay = false;
 	export let active = true;
 	export let readOnly = false;
@@ -24,8 +28,8 @@
 	let themeObserver: MutationObserver;
 	let pingInterval: ReturnType<typeof setInterval>;
 	let destroyed = false;
-	let sessionId = '';
-	let sessionChatId = chatId;
+	export let sessionId = '';
+	export let onUnavailable: (message: string, status?: number) => void = () => {};
 	let bindingChat: Promise<void> | null = null;
 	let finishConnection: (ready: boolean) => void;
 	const connectionReady = new Promise<boolean>((resolve) => (finishConnection = resolve));
@@ -40,20 +44,20 @@
 	let reconnecting = false;
 
 	export async function bindChat(id: string) {
-		if (readOnly || destroyed || sessionChatId === id) return;
-		if (sessionChatId) throw new Error('Terminal already belongs to another chat');
+		if (readOnly || destroyed || target.context.chatId === id) return;
+		if (target.context.chatId) throw new Error('Terminal already belongs to another chat');
 		if (!(await connectionReady) || !ws) throw new Error('Terminal is not connected');
 		if (!bindingChat) {
 			bindingChat = assignTerminalChat(ws, id)
 				.then(() => {
-					sessionChatId = id;
+					target.context.chatId = id;
 				})
 				.finally(() => {
 					bindingChat = null;
 				});
 		}
 		await bindingChat;
-		if (sessionChatId !== id) throw new Error('Terminal already belongs to another chat');
+		if (target.context.chatId !== id) throw new Error('Terminal already belongs to another chat');
 	}
 
 	function reportActivity(visible: boolean) {
@@ -107,29 +111,14 @@
 	async function connect() {
 		connecting = true;
 		try {
-			if (!sessionId) {
-				const session = await terminalRequest<{ id: string }>(
-					connection,
-					sessionChatId,
-					'/api/terminals',
-					{
-						method: 'POST'
-					}
-				);
-				sessionId = session.id;
-			}
-			if (destroyed) {
-				await terminalRequest(
-					connection,
-					sessionChatId,
-					`/api/terminals/${encodeURIComponent(sessionId)}`,
-					{ method: 'DELETE' }
-				);
-				return;
-			}
+			if (!sessionId) throw new Error('Session no longer available');
+			await terminalRequest(
+				target,
+				`/api/terminals/${encodeURIComponent(sessionId)}`
+			);
+			if (destroyed) return;
 			ws = openTerminalSocket(
-				connection,
-				sessionChatId,
+				target,
 				`/api/terminals/${encodeURIComponent(sessionId)}`,
 				() => {
 					if (destroyed) return;
@@ -209,10 +198,16 @@
 				if (destroyed) return;
 				if (event.code === 1000 || [4001, 4003, 4004].includes(event.code)) {
 					reconnecting = false;
+					onUnavailable(
+						event.code === 4001 || event.code === 4003
+							? 'Terminal access denied'
+							: 'Session no longer available',
+						event.code === 4001 || event.code === 4003 ? 403 : 404
+					);
 					write(
 						event.code === 4001 || event.code === 4003
 							? '\r\n[Terminal access denied. Check your sign-in and permissions.]\r\n'
-							: '\r\n[Terminal session ended. Open a new terminal to continue.]\r\n'
+							: '\r\n[Session no longer available.]\r\n'
 					);
 					return;
 				}
@@ -227,15 +222,16 @@
 		} catch (error) {
 			if (destroyed) return;
 			disconnect();
+			onUnavailable(
+				String(error),
+				error instanceof TerminalRequestError ? error.status : undefined
+			);
 			write(`\r\n\x1b[31m[${error}]\x1b[0m\r\n`);
 		}
 	}
 
 	$: if (active && term) requestAnimationFrame(fit);
 	$: if (connected) reportActivity(active);
-	$: if (connected && chatId && !sessionChatId) {
-		void bindChat(chatId).catch((error) => write(`\r\n[${error}]\r\n`));
-	}
 
 	onMount(() => {
 		document.addEventListener('visibilitychange', reportVisibility);

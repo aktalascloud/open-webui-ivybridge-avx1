@@ -304,8 +304,13 @@ async def publish_note_presence(note_id: str):
         if REDIS is not None and not await lock.owned():
             return
         await sio.emit(
-            'note:presence',
-            {'note_id': note_id, 'users': sorted(people.values(), key=lambda person: person['id'])},
+            'events',
+            {
+                'data': {
+                    'type': 'note:presence',
+                    'data': {'note_id': note_id, 'users': sorted(people.values(), key=lambda person: person['id'])},
+                }
+            },
             room=f'note:{note_id}',
         )
 
@@ -592,7 +597,7 @@ async def disconnect_sessions_for_users(user_ids: list[str], *, refresh_access: 
     for sid in session_ids:
         if refresh_access:
             try:
-                await sio.emit('access:updated', {}, to=sid)
+                await sio.emit('events', {'data': {'type': 'access:updated'}}, to=sid)
             except Exception:
                 log.exception('Failed to notify session %s about changed access', sid)
         try:
@@ -1055,15 +1060,18 @@ async def ydoc_document_join(sid, data):
         user_name = user.get('name', '')
         user_color = data.get('user_color', '#000000')
 
-        if (
-            sid not in await YDOC_MANAGER.get_users(document_id)
-            and await YDOC_MANAGER.count_documents_for_user(sid) >= YDOC_MANAGER.MAX_DOCUMENTS_PER_SESSION
-        ):
-            log.warning(f'Session {sid} is at the open-document limit. Rejecting join.')
-            return
+        # Serialise per user so parallel joins cannot exceed the limit
+        async with SOCKET_EVENT_LOCKS.setdefault(('user', user_id), asyncio.Lock()):
+            user_sids = get_session_ids_by_user_ids([user_id])
+            if sid not in await YDOC_MANAGER.get_users(document_id) and (
+                sum([await YDOC_MANAGER.count_documents_for_user(user_sid) for user_sid in user_sids])
+                >= YDOC_MANAGER.MAX_DOCUMENTS_PER_USER
+            ):
+                log.warning('User %s is at the open-document limit. Rejecting join.', user_id)
+                return
 
-        log.info('User %s joining document %s', user_id, document_id)
-        await YDOC_MANAGER.add_user(document_id=document_id, user_id=sid)
+            log.info('User %s joining document %s', user_id, document_id)
+            await YDOC_MANAGER.add_user(document_id=document_id, user_id=sid)
 
         # Join Socket.IO room
         await sio.enter_room(sid, f'doc_{document_id}')
@@ -1156,11 +1164,16 @@ async def document_save_handler(document_id, data, user):
         )
         if saved:
             await sio.emit(
-                'events:note',
+                'events',
                 {
-                    'id': note_id,
-                    'page': get_page(saved.data, page['id']),
-                    'updated_at': saved.updated_at,
+                    'data': {
+                        'type': 'note:updated',
+                        'data': {
+                            'id': note_id,
+                            'page': get_page(saved.data, page['id']),
+                            'updated_at': saved.updated_at,
+                        },
+                    }
                 },
                 to=f'note:{note_id}',
             )

@@ -463,7 +463,7 @@ async def lifespan(app: FastAPI):
                         'path': '/internal',
                         'query_string': b'',
                         'headers': Headers({}).raw,
-                        'client': ('127.0.0.1', 12345),
+                        'client': ('', 12345),
                         'server': ('127.0.0.1', 80),
                         'scheme': 'http',
                         'app': app,
@@ -625,6 +625,7 @@ app.state.SCIM_TOKEN = SCIM_TOKEN
 # Models
 
 app.state.BASE_MODELS = []
+app.state.BASE_MODELS_SNAPSHOT = None
 
 # WebUI
 
@@ -929,7 +930,9 @@ async def get_models(
         from open_webui.utils.agents.discovery import get_models as get_agent_models
 
         try:
-            models.extend(await get_agent_models(request, user, terminal_id, chat_id, cwd=cwd))
+            models.extend(
+                await get_agent_models(request, user, {'terminal_id': terminal_id, 'chat_id': chat_id}, cwd=cwd)
+            )
         except Exception as exc:
             log.debug('Agent discovery unavailable: %s', type(exc).__name__)
     return {'data': models}
@@ -1120,7 +1123,7 @@ async def chat_completion(
         folder_defaults = await get_folder_terminal_defaults(user, form_data.get('folder_id'))
         if 'terminal_id' not in form_data and folder_defaults.get('terminal_id'):
             form_data['terminal_id'] = folder_defaults['terminal_id']
-        if not requested_directory and form_data.get('terminal_id') == folder_defaults.get('terminal_id'):
+        if requested_directory is None and form_data.get('terminal_id') == folder_defaults.get('terminal_id'):
             requested_directory = folder_defaults.get('working_directory')
     else:
         requested_directory = None
@@ -1133,7 +1136,10 @@ async def chat_completion(
         if len(parts) != 4:
             raise HTTPException(400, 'Invalid agent model')
         candidates = await get_agent_models(
-            request, user, form_data.get('terminal_id'), form_data.get('chat_id'), provider=parts[2],
+            request,
+            user,
+            form_data,
+            provider=parts[2],
             cwd=requested_directory,
         )
         agent_model = next((item for item in candidates if item['id'] == model_id), None)
@@ -1300,6 +1306,7 @@ async def chat_completion(
         )
         approval_resume = getattr(request.state, 'tool_approval_resume', None)
         metadata = {
+            'model_id': model_id,
             'tool_approval_resume': approval_resume[2]
             if approval_resume and approval_resume[:2] == (chat_id, form_data.get('assistant_message_id'))
             else None,
@@ -1468,6 +1475,9 @@ async def chat_completion(
                                 'id': chat_id,
                                 'title': 'New Chat',
                                 'models': [entry['model_id'] for entry in message_ids],
+                                'terminal_id': (model.get('agent') or {}).get('terminal_id')
+                                or form_data.get('terminal_id'),
+                                'working_directory': requested_directory or '',
                                 'history': {
                                     'currentId': all_assistant_ids[0] if all_assistant_ids else user_message_id,
                                     'messages': history_messages,
@@ -1681,7 +1691,17 @@ async def chat_completion(
                 if model.get('agent'):
                     from open_webui.utils.agents.runner import run as run_agent
 
-                    return await run_agent(request, form_data, user, metadata, model)
+                    response = await run_agent(request, form_data, user, metadata, model)
+                    if tasks and TASKS.TITLE_GENERATION in tasks:
+                        title_tasks = {TASKS.TITLE_GENERATION: tasks[TASKS.TITLE_GENERATION]}
+                        ctx = await build_chat_response_context(
+                            request, form_data, user, model, metadata, title_tasks, []
+                        )
+                        try:
+                            await background_tasks_handler(ctx)
+                        except Exception:
+                            log.exception('Error generating agent chat title')
+                    return response
                 # Saved chats load the message after approved tool calls run, so their results are kept
                 if metadata.get('assistant_message_id') and not is_saved_chat_id(metadata.get('chat_id')):
                     ctx = await build_chat_response_context(request, form_data, user, model, metadata, tasks, [])
@@ -1855,6 +1875,7 @@ async def chat_completion(
             # Per-model metadata: own message_id + model
             per_model_metadata = {
                 **metadata,
+                'model_id': entry['model_id'],
                 'chat_context': copy.deepcopy(metadata['chat_context']),
                 'message_id': assistant_message_id,
                 'task_id': str(uuid4()),
@@ -1862,7 +1883,14 @@ async def chat_completion(
 
             if is_saved_chat_id(chat_id):
                 await Chats.upsert_message_to_chat_by_id_and_message_id(
-                    chat_id, assistant_message_id, {'meta': {'task_id': per_model_metadata['task_id']}}, touch=False
+                    chat_id,
+                    assistant_message_id,
+                    {
+                        'meta': {'task_id': per_model_metadata['task_id']},
+                        # Agent models disappear with their terminal.
+                        **({'modelName': agent_model['name']} if agent_model else {}),
+                    },
+                    touch=False,
                 )
 
             # Per-model form_data: own model
@@ -2339,8 +2367,14 @@ async def get_app_config(request: Request):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail='Invalid token',
             )
-        if data is not None and 'id' in data and await is_valid_token(data, request.app.state.redis):
-            user = await Users.get_user_by_id(data['id'])
+        if data is not None and 'id' in data:
+            try:
+                if await is_valid_token(data, request.app.state.redis):
+                    user = await Users.get_user_by_id(data['id'])
+            except HTTPException as e:
+                # A deleted or deactivated account gets the public config
+                if e.status_code != status.HTTP_401_UNAUTHORIZED:
+                    raise
 
     group_defaults = None
     if user is not None and user.role in ('admin', 'user'):

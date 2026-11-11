@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { TerminalContext } from '$lib/types';
+	import type { Writable } from 'svelte/store';
 	import { toast } from 'svelte-sonner';
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
@@ -57,6 +58,8 @@
 	export let prompt = '';
 	export let files = [];
 	export let terminalContext: TerminalContext | null = null;
+	export let selectedTerminalId: Pick<Writable<string | null>, 'subscribe' | 'set'>;
+	export let terminalSkills: Writable<any[]>;
 	export let messageInput = null;
 
 	export let selectedToolIds = [];
@@ -123,7 +126,7 @@
 		!$selectedFolder.write_access;
 </script>
 
-<div class="m-auto w-full max-w-[58rem] px-1 md:@2xl:px-20 translate-y-6 py-24 text-center">
+<div class="m-auto w-full max-w-[58rem] px-1 md:@3xl:px-20 translate-y-6 py-24 text-center">
 	{#if $temporaryChatEnabled}
 		<Tooltip
 			content={$i18n.t("This chat won't appear in history and your messages will not be saved.")}
@@ -145,10 +148,10 @@
 					onUpdate={async () => {
 						await Promise.all([refreshChatList(localStorage.token), refreshFolderChatLists(null)]);
 					}}
-					onDelete={async () => {
+					onDelete={async (deletedFolder: { id: string }) => {
 						await Promise.all([refreshChatList(localStorage.token), refreshFolderChatLists(null)]);
 
-						selectedFolder.set(null);
+						if ($selectedFolder?.id === deletedFolder.id) selectedFolder.set(null);
 					}}
 				/>
 			{:else}
@@ -259,8 +262,10 @@
 			<div class="text-base font-normal @md:max-w-3xl w-full py-3 {atSelectedModel ? 'mt-2' : ''}">
 				{#if !($selectedFolder && folderReadOnly)}
 					<MessageInput
+						{selectedTerminalId}
+						{terminalSkills}
 						{chatId}
-						{terminalContext}
+						bind:terminalContext
 						{callActive}
 						{callEnabled}
 						bind:this={messageInput}

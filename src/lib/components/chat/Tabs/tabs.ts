@@ -1,9 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { TerminalContext } from '$lib/types';
-import type { TerminalConnection } from '$lib/apis/terminal';
+import type { TerminalTarget } from '$lib/apis/terminal';
 
 export type PanelTabKind =
 	| 'chat'
+	| 'page'
 	| 'files'
 	| 'file'
 	| 'terminal'
@@ -18,16 +19,20 @@ export type PanelTab = {
 	id: string;
 	kind: PanelTabKind;
 	label: string;
+	href?: string;
 	initialPrompt?: string;
 	chatId?: string;
 	sideChatNumber?: number;
+	sideChat?: boolean;
 	terminalId?: string;
 	terminalNumber?: number;
 	path?: string;
 	page?: number | null;
+	sessionId?: string;
+	directory?: string;
 	dirty?: boolean;
 	untitled?: boolean;
-	connection?: TerminalConnection;
+	target?: TerminalTarget;
 	browserBaseUrl?: string;
 	context?: TerminalContext | null;
 };
@@ -50,6 +55,11 @@ export type PanelTabs = {
 	groups: PanelGroup[];
 	activeGroupId: string;
 	layout: PanelLayout;
+};
+export type ChatViewState = {
+	schemaVersion: 1;
+	selectedTerminalId: string | null;
+	panels: PanelTabs;
 };
 export type PanelRect = { left: number; top: number; width: number; height: number };
 export type PanelDivider = PanelRect & {
@@ -140,6 +150,20 @@ export function openTab(state: PanelTabs, tab: PanelTab): PanelTabs {
 				},
 		tab.id
 	);
+}
+
+export function openTabInSidePanel(state: PanelTabs, tab: PanelTab): PanelTabs {
+	const mainGroup = state.groups.find((group) => group.tabIds.includes(mainChatTabId));
+	if (!mainGroup) return openTab(state, tab);
+	if (state.tabs.some((item) => item.id === tab.id) && !mainGroup.tabIds.includes(tab.id))
+		return activateTab(state, tab.id);
+	const sideGroup =
+		state.groups.find((group) => group.id === state.activeGroupId && group.id !== mainGroup.id) ??
+		state.groups.find((group) => group.id !== mainGroup.id);
+	const next = openTab(activateTab(state, mainChatTabId), tab);
+	return sideGroup
+		? moveTabToGroup(next, tab.id, sideGroup.id)
+		: splitTab(next, tab.id, mainGroup.id, 'right');
 }
 
 function removeLayoutGroup(layout: PanelLayout, groupId: string): PanelLayout | null {
@@ -287,3 +311,17 @@ export function panelPositions(layout: PanelLayout) {
 
 export const fileTabId = (terminalId: string, path: string) =>
 	JSON.stringify(['file', terminalId, path]);
+
+// Queries selecting an editor resource identify a tab; view queries stay within it.
+export function pageTabKey(url: URL): string | null {
+	if (url.pathname.startsWith('/workspace/functions')) return null;
+	if (
+		!/^\/(?:$|c\/|channels\/|notes(?:\/|$)|automations(?:\/|$)|calendar(?:\/|$)|workspace(?:\/|$)|playground(?:\/|$)|home(?:\/|$))/.test(
+			url.pathname
+		)
+	)
+		return null;
+	const path = url.pathname.replace(/\/$/, '') || '/';
+	const id = path.endsWith('/edit') ? url.searchParams.get('id') : null;
+	return path + (path === '/' ? url.search : id ? `?id=${encodeURIComponent(id)}` : '');
+}

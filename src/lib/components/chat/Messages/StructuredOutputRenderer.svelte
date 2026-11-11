@@ -5,6 +5,7 @@
 	import Image from '$lib/components/common/Image.svelte';
 	import ToolCallDisplay from '$lib/components/common/ToolCallDisplay.svelte';
 	import ToolOutputFile from './ToolOutputFile.svelte';
+	import VisualizationToolCall from './VisualizationToolCall.svelte';
 	import { resolveChatMessageToolCall } from '$lib/apis/chats';
 	import { settings } from '$lib/stores';
 	import { toast } from 'svelte-sonner';
@@ -33,6 +34,7 @@
 	export let editCodeBlock = true;
 	export let topPadding = false;
 	export let allowEmbeds = false;
+	export let allowToolApproval: boolean = false;
 	export let sourceIds: string[] = [];
 	export let formatMessageContent: (content: string) => string = (content) => content;
 	export let onSave: any = () => {};
@@ -131,6 +133,20 @@
 				{displayItem.text}
 			</div>
 		{/if}
+	{:else if displayItem.type === 'visualization'}
+		<VisualizationToolCall
+			call={displayItem.call}
+			result={displayItem.result}
+			{chatId}
+			{messageId}
+			messageDone={done}
+			{allowEmbeds}
+			{compactPreview}
+			resolvable={!!chatId && !!messageId && (save || allowToolApproval)}
+			resolving={resolvingCallId === (displayItem.call.call_id ?? displayItem.call.id)}
+			onResolve={(approved) =>
+				resolveToolCall(displayItem.call.call_id ?? displayItem.call.id ?? '', approved)}
+		/>
 	{:else if displayItem.type === 'image'}
 		<Image src={displayItem.src} alt={$i18n.t('Generated Image')} />
 	{:else if displayItem.type === 'detail_group'}
@@ -140,7 +156,7 @@
 			messageDone={done}
 			{compactPreview}
 			{allowEmbeds}
-			resolvable={!!chatId && !!messageId && save}
+			resolvable={!!chatId && !!messageId && (save || allowToolApproval)}
 			{resolvingCallId}
 			onResolve={resolveToolCall}
 		>
@@ -152,7 +168,7 @@
 							attributes={detailToken.attributes}
 							resultContent={detailToken.text}
 							grouped={true}
-							resolvable={!!chatId && !!messageId && save}
+							resolvable={!!chatId && !!messageId && (save || allowToolApproval)}
 							resolving={resolvingCallId === detailToken.attributes?.id}
 							onResolve={(approved) => resolveToolCall(detailToken.attributes?.id ?? '', approved)}
 							open={$settings?.expandDetails ?? false}
@@ -202,7 +218,7 @@
 		</ConsecutiveDetailsGroup>
 	{:else if displayItem.type === 'file'}
 		{#if displayItem.item?.displayed || $settings?.terminalFileDisplay === 'inline'}
-			<ToolOutputFile item={displayItem.item} {chatId} />
+			<ToolOutputFile item={displayItem.item} {chatId} modelId={model?.id ?? null} />
 		{/if}
 	{:else if displayItem.type === 'context_compaction'}
 		<ContextCompactionLabel summary={displayItem.summary} {compactPreview} />
@@ -214,7 +230,7 @@
 				attributes={detailToken.attributes}
 				resultContent={detailToken.text}
 				{allowEmbeds}
-				resolvable={!!chatId && !!messageId && save}
+				resolvable={!!chatId && !!messageId && (save || allowToolApproval)}
 				resolving={resolvingCallId === detailToken.attributes?.id}
 				onResolve={(approved) => resolveToolCall(detailToken.attributes?.id ?? '', approved)}
 				open={$settings?.expandDetails ?? false}

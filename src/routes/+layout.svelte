@@ -1,5 +1,10 @@
 <script>
 	import { setTheme } from '$lib/utils/theme';
+	import {
+		playNotificationSound,
+		setNotificationSoundEnabled,
+		unlockNotificationAudio
+	} from '$lib/utils/audio';
 	import CommentsHost from '$lib/components/comments/CommentsHost.svelte';
 	import { io } from 'socket.io-client';
 	import { spring } from 'svelte/motion';
@@ -31,7 +36,6 @@
 		isApp,
 		appInfo,
 		toolServers,
-		playingNotificationSound,
 		channels,
 		channelId,
 		channelRequestQueues,
@@ -43,11 +47,13 @@
 		desktopEvent
 	} from '$lib/stores';
 	import { refreshChatList } from '$lib/stores/chatList';
+	import { clearFolderStates, updateFolderChatLists, beginFolderOpening } from '$lib/stores/folderStates';
 	import { getFileBlobById, getFileContentById } from '$lib/apis/files';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { beforeNavigate } from '$app/navigation';
 	import { updated } from '$app/state';
+	beforeNavigate(() => beginFolderOpening());
 
 	import i18n, { initI18n, getLanguages, changeLanguage } from '$lib/i18n';
 
@@ -86,7 +92,7 @@
 	import { getUserSettings } from '$lib/apis/users';
 	import { getChannelById, getChannels } from '$lib/apis/channels';
 	import { shouldNotifyChannelMessage } from '$lib/utils/channelNotifications';
-	import { resolveTerminalConnection, terminalRequest } from '$lib/apis/terminal';
+	import { resolveTerminalTarget, terminalRequest } from '$lib/apis/terminal';
 
 	const unregisterServiceWorkers = async () => {
 		if ('serviceWorker' in navigator) {
@@ -681,13 +687,13 @@
 			} else if (type === 'request:terminal') {
 				try {
 					if (!$config?.features?.enable_tool_servers) throw new Error('Tool servers are disabled');
-					const connection = resolveTerminalConnection(
+					const target = resolveTerminalTarget(
 						data.terminal_id,
 						[],
 						$config?.features?.enable_direct_integrations ? ($settings?.terminalServers ?? []) : [],
-						localStorage.token
+						localStorage.token, { chatId: event.chat_id ?? null }
 					);
-					if (!connection) throw new Error('Terminal Not Found');
+					if (!target) throw new Error('Terminal Not Found');
 					let options = {};
 					if (data.file) {
 						const blob = await getFileBlobById(localStorage.token, data.file.id);
@@ -695,7 +701,7 @@
 						body.append('file', blob, data.file.name);
 						options = { method: 'POST', body };
 					}
-					const result = await terminalRequest(connection, event.chat_id, data.path, options);
+					const result = await terminalRequest(target, data.path, options);
 					cb?.({ data: result });
 				} catch (error) {
 					cb?.({ error: `${error}` });
@@ -803,15 +809,10 @@
 				if (done) {
 					if (
 						($settings?.notificationSound ?? true) &&
-						($settings?.notificationSoundAlways ?? false)
+						($settings?.notificationSoundAlways ?? false) &&
+						$isLastActiveTab
 					) {
-						playingNotificationSound.set(true);
-
-						const audio = new Audio(`/audio/notification.mp3`);
-						audio.play().finally(() => {
-							// Ensure the global state is reset after the sound finishes
-							playingNotificationSound.set(false);
-						});
+						void playNotificationSound($settings?.notificationSoundType);
 					}
 
 					if ($isLastActiveTab) {
@@ -836,13 +837,15 @@
 								goto(`/c/${event.chat_id}`);
 							},
 							content: contentPreview,
-							title: displayTitle
+							title: displayTitle,
+							playSound: !($settings?.notificationSoundAlways ?? false)
 						},
 						duration: 15000,
 						unstyled: true
 					});
 				}
 			} else if (type === 'chat:title') {
+				updateFolderChatLists({ id: event.chat_id, title: data });
 				await refreshChatList(localStorage.token);
 			} else if (type === 'chat:tags') {
 				tags.set(await getAllTags(localStorage.token));
@@ -1310,6 +1313,7 @@
 		let queueUserId = $user?.id;
 		const unsubscribeQueueUser = user.subscribe(async (value) => {
 			if (queueUserId !== value?.id) {
+				clearFolderStates();
 				channelRequestQueues.set({});
 				queueUserId = value?.id;
 			}
@@ -1340,9 +1344,12 @@
 		};
 		window.addEventListener('beforeunload', beforeUnloadHandler);
 
+		const sessionUserRequest = localStorage.token ? getSessionUser(localStorage.token) : null;
+		sessionUserRequest?.catch(() => {});
+
 		let backendConfig = null;
 		try {
-			backendConfig = await getBackendConfig();
+			backendConfig = await getBackendConfig(localStorage.token);
 			console.log('Backend config:', backendConfig);
 		} catch (error) {
 			if (error?.authRedirect) {
@@ -1380,20 +1387,15 @@
 			if ($config) {
 				await setupSocket($config.features?.enable_websocket ?? true);
 
-				if (localStorage.token) {
+				if (sessionUserRequest) {
 					// Get Session User Info
-					const sessionUser = await getSessionUser(localStorage.token).catch((error) => {
+					const sessionUser = await sessionUserRequest.catch((error) => {
 						toast.error(`${error}`);
 						return null;
 					});
 
 					if (sessionUser) {
 						await user.set(sessionUser);
-						try {
-							await config.set(await getBackendConfig());
-						} catch (error) {
-							console.error('Error refreshing backend config:', error);
-						}
 
 						// Keep user timezone in sync on every app load/refresh
 						const timezone = getUserTimezone();
@@ -1491,11 +1493,20 @@
 		}
 	}
 
+	$: if (typeof window !== 'undefined')
+		setNotificationSoundEnabled($settings?.notificationSound ?? true);
+
+	const unlockNotificationSound = () => {
+		if ($settings?.notificationSound ?? true) void unlockNotificationAudio();
+	};
+
 	onDestroy(() => {
 		stopTether();
 		bc.close();
 	});
 </script>
+
+<svelte:window on:click={unlockNotificationSound} on:keydown={unlockNotificationSound} />
 
 <svelte:head>
 	<!-- LICENSE covers this Open WebUI branding surface, including name, logo,

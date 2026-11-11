@@ -20,6 +20,99 @@ INCOMPLETE_CALL_ERROR = (
 )
 
 
+def add_tool_call_metadata(tools, *, labels=False, approval=False, language='English'):
+    """Extend request-local schemas; markers identify metadata owned by the application."""
+    for name, tool in list(tools.items()):
+        spec = tool.get('spec') or {}
+        schema = spec.get('parameters') or {}
+        if (
+            tool.get('tool_id') == 'builtin:call_tool'
+            or schema.get('type', 'object') != 'object'
+            or any(key in schema for key in ('$ref', 'oneOf', 'anyOf', 'allOf', 'if'))
+        ):
+            continue
+        properties = schema.get('properties', {})
+        injected, markers = {}, {}
+        if labels and not tool.get('hidden') and not tool.get('display_labels') and '__labels__' not in properties:
+            injected['__labels__'] = {
+                'type': 'object',
+                'description': (
+                    f'Short UI labels in {language}. Describe the action and its subject, not technical tool names. '
+                    'Use at most 8 words and 120 characters each, without a trailing period. '
+                    'The completed label describes the action taken, not an unverified outcome.'
+                ),
+                'properties': {
+                    'running': {'type': 'string', 'description': 'While running, e.g. "Searching for flights".'},
+                    'completed': {'type': 'string', 'description': 'After success, e.g. "Searched for flights".'},
+                },
+                'required': ['running', 'completed'],
+                'additionalProperties': False,
+            }
+            markers['display_labels'] = True
+        if (
+            approval
+            and not tool.get('approval_review')
+            and '__approval__' not in properties
+            and tool.get('tool_id') != 'builtin:search_tools'
+            and not (name == 'ask_user' and tool.get('type') == 'builtin')
+        ):
+            injected['__approval__'] = {
+                'type': 'object',
+                'properties': {
+                    'required': {
+                        'type': 'boolean',
+                        'description': 'Whether this call needs human approval under the approval policy. '
+                        'When uncertain, use true.',
+                    },
+                },
+                'required': ['required'],
+                'additionalProperties': False,
+            }
+            markers['approval_review'] = True
+        if injected:
+            tools[name] = {
+                **tool,
+                **markers,
+                'spec': {
+                    **spec,
+                    'parameters': {
+                        **schema,
+                        'type': 'object',
+                        'properties': {**injected, **properties},
+                        'required': [*injected, *schema.get('required', [])],
+                    },
+                },
+            }
+
+
+_TOOL_APPROVAL_PROMPT_RE = re.compile(r'\n?<tool_approval_policy>\n.*?</tool_approval_policy>', re.DOTALL)
+
+
+def strip_tool_approval_prompt(prompt):
+    """Remove request-specific approval instructions before rebuilding or reusing a prompt."""
+    return _TOOL_APPROVAL_PROMPT_RE.sub('', prompt) if prompt else prompt
+
+
+def set_tool_call_metadata(item, tools):
+    """Copy application-owned display metadata, never trusting provider annotations."""
+    if item.get('type') != 'function_call':
+        return
+    tool = tools.get(item.get('name'), {})
+    for field, source in (('tool_id', 'tool_id'), ('tool_type', 'type')):
+        item.pop(field, None)
+        if tool.get(source):
+            item[field] = tool[source]
+    item.pop('tool_targets', None)
+    if tool.get('type') == 'builtin' and tool.get('tool_id') == 'builtin:call_tool':
+        item['tool_targets'] = {
+            name: {'tool_id': target['tool_id'], 'tool_type': target['type']}
+            for name, target in tools.items()
+            if target.get('type') == 'builtin' and target.get('tool_id') and not target.get('hidden')
+        }
+    if tool.get('hidden') is True:
+        item['hidden'] = True
+
+
 def parse_arguments(raw):
     """Accept complete JSON or JSON-compatible Python literals, never invent missing values."""
     if isinstance(raw, str):
@@ -212,16 +305,29 @@ def tool_repetition_error(call, previous_calls):
     return None
 
 
-def prepare_tool_call(call, schema=None):
+def prepare_tool_call(call, schema=None, *, display_labels=False, approval_review=False):
     """Normalize a call before approval; return an actionable error for the model."""
-    raw = call.get('arguments', '{}')
+    original_arguments = call.get('arguments', '{}')
     try:
-        arguments = normalize_arguments(raw, schema)
+        arguments = dict(parse_arguments(original_arguments))
+        if display_labels and '__labels__' in arguments:
+            labels = arguments.pop('__labels__')
+            call.pop('display_labels', None)
+            if isinstance(labels, dict) and all(
+                isinstance(labels.get(key), str) and 0 < len(labels[key].strip()) <= 120
+                for key in ('running', 'completed')
+            ):
+                call['display_labels'] = {key: labels[key].strip() for key in ('running', 'completed')}
+        if approval_review and '__approval__' in arguments:
+            approval = arguments.pop('__approval__')
+            valid = isinstance(approval, dict) and set(approval) == {'required'} and type(approval['required']) is bool
+            call['permission_review'] = {'engine': '', 'required': approval['required'] if valid else True}
+        arguments = normalize_arguments(arguments, schema)
     except ValueError as exc:
         return f'Error: {exc} Correct the arguments before retrying.'
     normalized = json.dumps(arguments, ensure_ascii=False)
-    if normalized != raw:
-        call.setdefault('original_arguments', raw)
+    if normalized != original_arguments:
+        call.setdefault('original_arguments', original_arguments)
     call['arguments'] = normalized
     return None
 

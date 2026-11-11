@@ -47,6 +47,7 @@
 	} from '$lib/utils';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 	import { resolveLocalizedModelName } from '$lib/utils/localizedContent';
+	import { isTemporaryChatId } from '$lib/utils/chatId';
 	import equal from 'fast-deep-equal';
 
 	import Name from './Name.svelte';
@@ -129,6 +130,7 @@
 			usage?: unknown;
 		};
 		annotation?: { type: string; rating: number };
+		meta?: { response_ended_at?: number };
 	}
 
 	export let chatId = '';
@@ -186,8 +188,9 @@
 
 	export let isLastMessage = true;
 	export let readOnly = false;
-	export let shareMode: 'continue' | null = null;
+	export let writeAccess = false;
 	export let allowDelete = true;
+	export let allowToolApproval: boolean = false;
 	export let compactPreview = false;
 	export let editCodeBlock = true;
 	export let topPadding = false;
@@ -204,6 +207,7 @@
 		? resolveLocalizedModelName(model, $i18n.language)
 		: message.modelName || message.model;
 	$: model = $models.find((m) => m.id === message.model);
+	$: responseTimestamp = message?.meta?.response_ended_at ?? message?.timestamp;
 
 	$: statusEntries = message?.statusHistory ?? [...(message?.status ? [message?.status] : [])];
 	$: hasVisibleStatus =
@@ -894,13 +898,15 @@
 										!readOnly &&
 										($settings?.showFloatingActionButtons ?? true)}
 									save={(!readOnly && (!message.user_id || message.user_id === $user?.id)) ||
-										(shareMode === 'continue' && message.user_id === $user?.id)}
+										(writeAccess && message.user_id === $user?.id)}
 									preview={!readOnly}
 									{compactPreview}
 									editCodeBlock={!readOnly && editCodeBlock}
 									{topPadding}
 									done={message?.done ?? false}
 									allowEmbeds={!readOnly}
+									allowToolApproval={allowToolApproval &&
+										(!message.user_id || message.user_id === $user?.id)}
 									{model}
 									onTaskClick={async (e) => {
 										console.log(e);
@@ -975,18 +981,18 @@
 					</div>
 				</div>
 
-				{#if compactPreview && message.timestamp}
+				{#if compactPreview && responseTimestamp}
 					<div class="mt-0.5 flex justify-start whitespace-nowrap text-gray-600 dark:text-gray-500">
 						<Tooltip
 							className="flex self-center"
-							content={formatMessageTimestampFull(message.timestamp * 1000, $i18n.language)}
+							content={formatMessageTimestampFull(responseTimestamp * 1000, $i18n.language)}
 							placement="bottom"
 						>
 							<time
-								datetime={new Date(message.timestamp * 1000).toISOString()}
+								datetime={new Date(responseTimestamp * 1000).toISOString()}
 								class="ml-1 shrink-0 whitespace-nowrap text-[0.6875rem] tabular-nums text-gray-400 dark:text-gray-600 select-none"
 							>
-								{formatMessageTimestamp(message.timestamp * 1000, $i18n.language)}
+								{formatMessageTimestamp(responseTimestamp * 1000, $i18n.language)}
 							</time>
 						</Tooltip>
 					</div>
@@ -1231,6 +1237,12 @@
 										.split('\n')
 										.map((line) => line.slice(2))
 										.map((line) => (line.endsWith(',') ? line.slice(0, -1) : line))
+										.map((line) =>
+											line.replace(
+												/: (\d+)$/,
+												(_, count) => `: ${Number(count).toLocaleString($i18n.language)}`
+											)
+										)
 										.join('\n')}
 									<span id="usage-{message.id}" hidden>{usage}</span>
 									<Tooltip
@@ -1334,8 +1346,8 @@
 									</Tooltip>
 								{/if}
 
-								{#if (!readOnly && (!message.user_id || message.user_id === $user?.id)) || (shareMode === 'continue' && message.user_id === $user?.id)}
-									{#if !readOnly && !$temporaryChatEnabled && ($config?.features.enable_message_rating ?? true) && ($user?.role === 'admin' || ($user?.permissions?.chat?.rate_response ?? true))}
+								{#if (!readOnly && (!message.user_id || message.user_id === $user?.id)) || (writeAccess && message.user_id === $user?.id)}
+									{#if !readOnly && !$temporaryChatEnabled && !isTemporaryChatId(chatId) && ($config?.features.enable_message_rating ?? true) && ($user?.role === 'admin' || ($user?.permissions?.chat?.rate_response ?? true))}
 										<Tooltip content={$i18n.t('Good Response')} placement="bottom">
 											<button
 												aria-label={$i18n.t('Good Response')}
@@ -1458,7 +1470,7 @@
 									{/if}
 								{/if}
 
-								{#if (!readOnly && (!message.user_id || message.user_id === $user?.id)) || shareMode === 'continue'}
+								{#if (!readOnly && (!message.user_id || message.user_id === $user?.id)) || writeAccess}
 									{#if canBranch && ($user?.role === 'admin' || ($user?.permissions?.chat?.regenerate_response ?? true))}
 										{#if $settings?.regenerateMenu ?? true}
 											<button
@@ -1608,7 +1620,7 @@
 									{/if}
 								{/if}
 
-								{#if (!readOnly && (!message.user_id || message.user_id === $user?.id)) || (shareMode === 'continue' && message.user_id === $user?.id)}
+								{#if (!readOnly && (!message.user_id || message.user_id === $user?.id)) || (writeAccess && message.user_id === $user?.id)}
 									{#each (!readOnly && model?.actions) || [] as action}
 										<Tooltip
 											content={resolveLocalizedFunction(
@@ -1683,17 +1695,17 @@
 										{/if}
 									{/if}
 
-									{#if message.timestamp}
+									{#if responseTimestamp}
 										<Tooltip
 											className="flex self-center"
-											content={formatMessageTimestampFull(message.timestamp * 1000, $i18n.language)}
+											content={formatMessageTimestampFull(responseTimestamp * 1000, $i18n.language)}
 											placement="bottom"
 										>
 											<time
-												datetime={new Date(message.timestamp * 1000).toISOString()}
+												datetime={new Date(responseTimestamp * 1000).toISOString()}
 												class="hover-reveal ml-1 shrink-0 whitespace-nowrap text-[0.6875rem] tabular-nums text-gray-400 dark:text-gray-600 select-none"
 											>
-												{formatMessageTimestamp(message.timestamp * 1000, $i18n.language)}
+												{formatMessageTimestamp(responseTimestamp * 1000, $i18n.language)}
 											</time>
 										</Tooltip>
 									{/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getContext, onDestroy, onMount } from 'svelte';
-	import { getTerminalFeatures, type TerminalConnection } from '$lib/apis/terminal';
+	import { getTerminalFeatures, type TerminalTarget } from '$lib/apis/terminal';
 	import { watchTerminalFiles } from '$lib/apis/terminal/events';
 	import {
 		gitRequest,
@@ -11,6 +11,7 @@
 		type GitCommit,
 		type GitBranch
 	} from '$lib/apis/terminal/git';
+	import { copyToClipboard } from '$lib/utils';
 	import Icon from '../FileNav/Icon.svelte';
 	import GitDiff from './GitDiff.svelte';
 	import { parseDiffRows } from '../Messages/diff';
@@ -20,7 +21,7 @@
 	import Tooltip from '../../common/Tooltip.svelte';
 	import GitPullRequests from './GitPullRequests.svelte';
 
-	export let connection: TerminalConnection | null = null;
+	export let target: TerminalTarget | null = null;
 	export let directory = '.';
 	export let chatId: string | null = null;
 	export let active = false;
@@ -28,10 +29,12 @@
 	export let onOpenDirectory: (path: string) => void = () => {};
 	const i18n = getContext<any>('i18n');
 	export let status: GitStatus | null = null;
-	let expanded = false;
+	export let initialView: any = null;
+	let expanded = initialView?.expanded ?? false;
+	export const captureView = () => ({ expanded, summary, description, height, listWidth, view });
 	export let diffMode: 'unified' | 'split' = 'unified';
 	export let hideWhitespace = false;
-	let view: 'changes' | 'history' | 'pull requests' = 'changes';
+	let view: 'changes' | 'history' | 'pull requests' = initialView?.view ?? 'changes';
 	let prCapabilities: { available: boolean; default_branch?: string } | null = null;
 	let prRoot = '';
 	let selected: { path: string; staged: boolean; untracked: boolean } | null = null;
@@ -62,20 +65,20 @@
 	let showRename = false;
 	let showUncommit = false;
 	let showDeleteBranch = false;
-	let summary = '';
-	let description = '';
+	let summary = initialView?.summary ?? '';
+	let description = initialView?.description ?? '';
 	let error = '';
 	let detectionError = '';
 	let busy = false;
 	let loadingDiff = false;
 	let confirmDiscard = false;
 	let discardFile: GitFile | null = null;
-	let height = 280;
+	let height = initialView?.height ?? 280;
 	let resizing = false;
 	let resizeY = 0;
 	let resizeHeight = 0;
 	let splitWidth = 0;
-	let listWidth: number | null = null;
+	let listWidth: number | null = initialView?.listWidth ?? null;
 	let resizingList = false;
 	let resizeListX = 0;
 	let resizeListWidth = 0;
@@ -135,6 +138,17 @@
 				? 'push'
 				: 'fetch';
 	$: syncLabel = { publish: 'Publish', pull: 'Pull', push: 'Push', fetch: 'Fetch' }[syncAction];
+	// Extraction hints for the dynamic feedback labels below.
+	// $i18n.t('Published')
+	// $i18n.t('Pulled')
+	// $i18n.t('Pushed')
+	// $i18n.t('Fetched')
+	// $i18n.t('Publishing…')
+	// $i18n.t('Pulling…')
+	// $i18n.t('Pushing…')
+	// $i18n.t('Fetching…')
+	// $i18n.t('Staging…')
+	// $i18n.t('Unstaging…')
 	$: syncMessage = syncFeedback
 		? syncComplete
 			? { publish: 'Published', pull: 'Pulled', push: 'Pushed', fetch: 'Fetched' }[syncFeedback]
@@ -170,13 +184,13 @@
 		operation: string,
 		params: Record<string, string> = {},
 		body?: Record<string, unknown>
-	) => gitRequest<T>(connection!, chatId, status?.root ?? directory, operation, params, body);
+	) => gitRequest<T>(target!, status?.root ?? directory, operation, params, body);
 	const refresh = (force = false): Promise<void> => {
-		if (!connection || !active || !gitEnabled || (!force && document.hidden))
+		if (!target || !active || !gitEnabled || (!force && document.hidden))
 			return Promise.resolve();
 		if (pending) return pending;
 		const current = generation;
-		const task = gitRequest<GitStatus>(connection, chatId, directory, 'status')
+		const task = gitRequest<GitStatus>(target, directory, 'status')
 			.then((next) => {
 				if (current !== generation) return;
 				detectionError = '';
@@ -227,6 +241,7 @@
 		watchError = '';
 		gitEnabled = false;
 		if (key !== context) {
+			const restoring = !context && initialView;
 			clearSyncFeedback();
 			pendingStaging = null;
 			context = key;
@@ -235,7 +250,7 @@
 			status = null;
 			error = '';
 			detectionError = '';
-			expanded = false;
+			expanded = restoring?.expanded ?? false;
 			showBranches =
 				showWorktrees =
 				showRename =
@@ -243,15 +258,16 @@
 				showDeleteBranch =
 				confirmDiscard =
 					false;
-			summary = description = '';
+			summary = restoring?.summary ?? '';
+			description = restoring?.description ?? '';
 			commits = [];
 			prCapabilities = null;
 			prRoot = '';
-			view = 'changes';
+			view = restoring?.view ?? 'changes';
 			resetSelection();
 		}
-		if (enabled && connection) {
-			const features = await getTerminalFeatures(connection, chatId);
+		if (enabled && target) {
+			const features = await getTerminalFeatures(target);
 			if (version !== configuration || !mounted) return;
 			gitEnabled = features.git === true;
 			if (!gitEnabled) {
@@ -262,8 +278,7 @@
 			if (features.events !== true) return;
 			const current = generation;
 			stopWatching = watchTerminalFiles(
-				connection,
-				chatId,
+				target,
 				directory,
 				async () => {
 					// An event arriving during a status request must refresh after that request.
@@ -276,7 +291,7 @@
 			);
 		}
 	};
-	$: configure(JSON.stringify([connection, chatId, directory]), mounted && active);
+	$: configure(JSON.stringify([target, chatId, directory]), mounted && active);
 
 	const selectFile = async (file: GitFile, staged: boolean) => {
 		resetSelection();
@@ -356,8 +371,7 @@
 		error = '';
 		try {
 			const result = await gitAction<{ path?: string }>(
-				connection!,
-				chatId,
+				target!,
 				status?.root ?? directory,
 				action,
 				fields
@@ -523,9 +537,7 @@
 													>{/if}
 												<button
 													on:click={async () => {
-														try {
-															await navigator.clipboard.writeText(branch.name);
-														} catch {
+														if (!(await copyToClipboard(branch.name))) {
 															error = $i18n.t('Could not copy branch name');
 														}
 													}}><Icon name="copy" size={13} />{$i18n.t('Copy branch name')}</button
@@ -794,12 +806,11 @@
 						</div>
 					</Dropdown>
 				</div>
-				{#if view === 'pull requests' && connection && status.root}
+				{#if view === 'pull requests' && target && status.root}
 					{#key status.root}<GitPullRequests
 							mode={diffMode}
 							{hideWhitespace}
-							{connection}
-							{chatId}
+							{target}
 							directory={status.root}
 							branch={status.branch}
 							defaultBranch={prCapabilities?.default_branch ?? 'main'}
@@ -941,7 +952,7 @@
 										</div>
 									{/each}
 									{#if !status.files.length}<div
-											class="flex h-full items-center justify-center text-[0.6875rem] text-gray-400 dark:text-gray-600"
+											class="flex h-full items-center justify-center p-3 text-center text-[0.6875rem] text-gray-400 dark:text-gray-600"
 										>
 											{$i18n.t('No changes')}
 										</div>{/if}
@@ -1025,9 +1036,7 @@
 																><Icon name="undo" size={13} />{$i18n.t('Undo last commit')}</button
 															>{/if}<button
 															on:click={async () => {
-																try {
-																	await navigator.clipboard.writeText(commit.hash);
-																} catch {
+																if (!(await copyToClipboard(commit.hash))) {
 																	error = $i18n.t('Could not copy commit hash');
 																}
 															}}><Icon name="copy" size={13} />{$i18n.t('Copy commit hash')}</button
@@ -1037,7 +1046,7 @@
 											>
 										</div>{/each}
 									{#if !commits.length}<div
-											class="flex h-full items-center justify-center text-[0.6875rem] text-gray-400 dark:text-gray-600"
+											class="flex h-full items-center justify-center p-3 text-center text-[0.6875rem] text-gray-400 dark:text-gray-600"
 										>
 											{$i18n.t('No commits yet')}
 										</div>{/if}
@@ -1114,20 +1123,22 @@
 										>{/if}
 								</div>
 								<div class="min-h-0 flex-1 overflow-auto scrollbar-hidden text-[0.6875rem]">
-									{#if loadingDiff}<p class="p-3 text-gray-400">
+									{#if loadingDiff}<p
+											class="flex h-full items-center justify-center p-3 text-center text-gray-400"
+										>
 											{$i18n.t('Loading...')}
 										</p>{:else if diff}<GitDiff
 											code={diff}
 											mode={diffMode}
 											{hideWhitespace}
 										/>{:else}<div
-											class="flex h-full items-center justify-center text-gray-400 dark:text-gray-600"
+											class="flex h-full items-center justify-center p-3 text-center text-gray-400 dark:text-gray-600"
 										>
 											{$i18n.t('No text changes')}
 										</div>{/if}
 								</div>
 							{:else}<div
-									class="flex h-full items-center justify-center text-[0.6875rem] text-gray-400 dark:text-gray-600"
+									class="flex h-full items-center justify-center p-3 text-center text-[0.6875rem] text-gray-400 dark:text-gray-600"
 								>
 									{$i18n.t(
 										view === 'history'
@@ -1157,6 +1168,9 @@
 	</div>
 {/if}
 
+<!-- Retired warning: keep its translation.
+{$i18n.t('Discard unsaved working-tree changes to this file? This cannot be undone.')}
+-->
 <ConfirmDialog
 	bind:show={confirmDiscard}
 	title={$i18n.t('Discard changes')}

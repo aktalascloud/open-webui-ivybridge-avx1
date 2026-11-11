@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
+	import { resolveTerminalTarget } from '$lib/apis/terminal';
 	import type { TerminalContext } from '$lib/types';
 	import {
 		estimateTokens,
@@ -23,6 +24,7 @@
 	dayjs.extend(relativeTime);
 
 	import { onMount, tick, getContext, createEventDispatcher } from 'svelte';
+	import type { Writable } from 'svelte/store';
 
 	import { createPicker, getAuthToken } from '$lib/utils/google-drive-picker';
 	import { pickAndDownloadFile } from '$lib/utils/onedrive-file-picker';
@@ -39,14 +41,12 @@
 		showCallOverlay,
 		tools,
 		skills,
-		terminalSkills,
 		toolServers,
 		terminalServers,
 		user as _user,
 		showTabs,
 		showSettings,
 		showFileNavDir,
-		selectedTerminalId,
 		TTSWorker,
 		temporaryChatEnabled,
 		sideChatRequest,
@@ -58,6 +58,7 @@
 		isHeicImage,
 		normalizeImageFile,
 		compressImage,
+		copyToClipboard,
 		createMessagesList,
 		extractContentFromFile,
 		extractCurlyBraceWords,
@@ -73,7 +74,7 @@
 		isRasterImageContentType
 	} from '$lib/utils';
 	import { uploadFile } from '$lib/apis/files';
-	import { getCwd, uploadNewFileToTerminal } from '$lib/apis/terminal';
+	import { filesystemFile, getCwd, uploadNewFileToTerminal } from '$lib/apis/terminal';
 	import { isSavedChatId } from '$lib/utils/chatId';
 	import { generateAutoCompletion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
@@ -118,7 +119,6 @@
 	import Terminal from '../icons/Terminal.svelte';
 	import IntegrationsMenu from './MessageInput/IntegrationsMenu.svelte';
 	import TerminalMenu from './MessageInput/TerminalMenu.svelte';
-	import Component from '../icons/Component.svelte';
 	import PlusAlt from '../icons/PlusAlt.svelte';
 	import Dropdown from '../common/Dropdown.svelte';
 
@@ -136,6 +136,8 @@
 	import TaskList from './Messages/ResponseMessage/TaskList.svelte';
 
 	const i18n: any = getContext('i18n');
+	export let selectedTerminalId: Pick<Writable<string | null>, 'subscribe' | 'set'>;
+	export let terminalSkills: Writable<any[]>;
 
 	type AskUserPrompt = {
 		id?: string;
@@ -266,6 +268,7 @@
 	export let oauthRedirectHandler: Function = () => {};
 
 	let showTerminalMenu = false;
+	let terminalControlsInMenu = false;
 
 	function fitControlLabels(controls: HTMLElement) {
 		let frame: number;
@@ -273,8 +276,12 @@
 			cancelAnimationFrame(frame);
 			frame = requestAnimationFrame(() => {
 				const labels = controls.querySelectorAll<HTMLElement>('[data-input-label]');
+				const terminalControls = controls.querySelector<HTMLElement>('[data-terminal-controls]');
 				// Measure all labels together so separate controls cannot compete for the same space.
 				for (const label of labels) label.style.display = '';
+				if (terminalControls) terminalControls.style.display = '';
+				terminalControlsInMenu = !!terminalControls && controls.scrollWidth > controls.clientWidth;
+				if (terminalControls && terminalControlsInMenu) terminalControls.style.display = 'none';
 				if (controls.scrollWidth > controls.clientWidth) {
 					for (const label of labels) label.style.display = 'none';
 				}
@@ -319,10 +326,12 @@
 	let copiedStatusChatId = false;
 	let selectedValvesType = 'tool'; // 'tool' or 'function'
 	let selectedValvesItemId = null;
-	let integrationsMenuCloseOnOutsideClick = true;
+	let showInputMenu = false;
+	let inputMenuTab = '';
+	let inputMenuCloseOnOutsideClick = true;
 
 	$: if (!showValvesModal) {
-		integrationsMenuCloseOnOutsideClick = true;
+		inputMenuCloseOnOutsideClick = true;
 	}
 
 	let chatInputDraft: any;
@@ -370,15 +379,20 @@
 
 	const textVariableHandler = async (text: string) => {
 		if (text.includes('{{CLIPBOARD}}')) {
-			const clipboardText = await navigator.clipboard.readText().catch((err) => {
+			let clipboardText: string;
+			try {
+				clipboardText = await navigator.clipboard.readText();
+			} catch (error) {
 				toast.error($i18n.t('Failed to read clipboard contents'));
-				return '{{CLIPBOARD}}';
-			});
+				clipboardText = '{{CLIPBOARD}}';
+			}
 
-			const clipboardItems = await navigator.clipboard.read().catch((err) => {
-				console.error('Failed to read clipboard items:', err);
-				return [];
-			});
+			let clipboardItems: ClipboardItem[] = [];
+			try {
+				clipboardItems = await navigator.clipboard.read();
+			} catch (error) {
+				console.error('Failed to read clipboard items:', error);
+			}
 
 			for (const item of clipboardItems) {
 				for (const type of item.types) {
@@ -605,7 +619,7 @@
 
 	const copyStatusChatId = async () => {
 		if (!chatId) return;
-		await navigator.clipboard.writeText(chatId);
+		if (!(await copyToClipboard(chatId))) return;
 		copiedStatusChatId = true;
 		setTimeout(() => {
 			copiedStatusChatId = false;
@@ -938,6 +952,8 @@
 		.map((id) => ($models.find((model) => model.id === id) || {})?.filters ?? [])
 		.reduce((acc, filters) => acc.filter((f1) => filters.some((f2) => f2.id === f1.id)));
 
+	$: showInputSelections = $settings?.showInputSelections ?? false;
+
 	let showToolsButton = false;
 	$: showToolsButton = ($tools ?? []).length > 0 || ($toolServers ?? []).length > 0;
 
@@ -1060,24 +1076,31 @@
 		fileItem.error = '';
 		files = files;
 		try {
-			const terminal = getFilesystemUploadTerminal(fileItem.terminal_id);
+			const server = getFilesystemUploadTerminal(fileItem.terminal_id);
+			const terminal = server
+				? resolveTerminalTarget(
+						fileItem.terminal_id,
+						$terminalServers ?? [],
+						($settings as any)?.terminalServers ?? [],
+						localStorage.token,
+						{ chatId: sessionId, modelId: selectedModels[0] ?? null }
+					)
+				: null;
 			if (!terminal) throw new Error($i18n.t('The attached file’s terminal is unavailable.'));
 			if (fileItem.session_id && fileItem.session_id !== sessionId)
 				throw new Error($i18n.t('Attached files must belong to this chat.'));
-			if (terminal.contexts?.chat?.context_id === 'chat_id' && !isSavedChatId(sessionId))
+			if (server.scope === 'chat' && !isSavedChatId(sessionId))
 				throw new Error($i18n.t('A saved chat is required for this terminal'));
 
 			const cwd =
 				(terminalContext?.terminalId === fileItem.terminal_id
 					? terminalContext?.currentDirectory
-					: null) || (await getCwd(terminal.url, terminal.key, sessionId || undefined))?.cwd;
+					: null) || (await getCwd(terminal))?.cwd;
 			if (!cwd) throw new Error($i18n.t('Could not determine the upload folder.'));
 			const uploadedFile = await uploadNewFileToTerminal(
-				terminal.url,
-				terminal.key,
+				terminal,
 				cwd,
-				fileItem.file,
-				sessionId || undefined
+				fileItem.file
 			);
 			if (!uploadedFile) throw new Error($i18n.t('Failed to upload file.'));
 
@@ -1159,7 +1182,7 @@
 			fileItem.file = file;
 			fileItem.terminal_id = $selectedTerminalId;
 			fileItem.session_id = chatId || null;
-			if (!chatId && filesystemUploadTerminal.contexts?.chat?.context_id === 'chat_id') {
+			if (!chatId && filesystemUploadTerminal.scope === 'chat') {
 				fileItem.status = 'pending';
 				files = files;
 				return;
@@ -1410,9 +1433,12 @@
 		// (e.g. Notes, Workspace, pinned Models), which also set 'text/plain'.
 		if (
 			e.dataTransfer?.types?.includes('Files') ||
+			e.dataTransfer?.types?.includes('application/x-terminal-file') ||
 			e.dataTransfer?.types?.includes('application/x-open-webui-drag')
 		) {
 			dragged = true;
+			if (e.dataTransfer?.types.includes('application/x-terminal-file'))
+				e.dataTransfer.dropEffect = 'copy';
 		} else {
 			dragged = false;
 		}
@@ -1428,7 +1454,62 @@
 	const onDrop = async (e: DragEvent) => {
 		if (!isAttachmentDrop(e)) return;
 		e.preventDefault();
-		console.log(e);
+		const terminalFiles = e.dataTransfer?.getData('application/x-terminal-file');
+		if (terminalFiles) {
+			e.stopPropagation();
+			dragged = false;
+			try {
+				if ($_user?.role !== 'admin' && !($_user?.permissions?.chat?.file_upload ?? true))
+					throw new Error($i18n.t('You do not have permission to upload files.'));
+				const entries = JSON.parse(terminalFiles);
+				if (
+					!Array.isArray(entries) ||
+					entries.some(
+						(entry) =>
+							!entry ||
+							typeof entry.path !== 'string' ||
+							!entry.path ||
+							typeof entry.name !== 'string' ||
+							typeof entry.terminal_id !== 'string' ||
+							!entry.terminal_id ||
+							(entry.session_id !== null && typeof entry.session_id !== 'string')
+					)
+				)
+					throw new Error($i18n.t('Invalid file attachment.'));
+				const attachments = entries.map((entry) =>
+					filesystemFile(entry, entry.terminal_id, entry.session_id)
+				);
+				const existing = files.filter((file) => file.type === 'filesystem');
+				const terminalId = existing[0]?.terminal_id ?? attachments[0]?.terminal_id;
+				if (
+					attachments.some(
+						(file) =>
+							file.terminal_id !== terminalId || (file.session_id && file.session_id !== chatId)
+					)
+				)
+					throw new Error(
+						$i18n.t('Attached files must belong to this chat and the same terminal.')
+					);
+				const additions = attachments.filter(
+					(file, index) =>
+						!existing.some((item) => (item.path ?? item.url ?? item.id) === file.path) &&
+						attachments.findIndex((item) => item.path === file.path) === index
+				);
+				if (
+					$config?.file?.max_count != null &&
+					files.length + additions.length > $config.file.max_count
+				)
+					throw new Error(
+						$i18n.t('You can only chat with a maximum of {{maxCount}} file(s) at a time.', {
+							maxCount: $config.file.max_count
+						})
+					);
+				files = [...files, ...additions];
+			} catch (error) {
+				toast.error(error instanceof Error ? error.message : String(error));
+			}
+			return;
+		}
 
 		// Check if the dropped data is a sidebar chat, folder, note, or model item
 		const textData = e.dataTransfer?.getData('text/plain');
@@ -1569,7 +1650,10 @@
 			{
 				char: '@',
 				render: getSuggestionRenderer(CommandSuggestionList, {
+					modelId: () => selectedModels[0] ?? null,
 					i18n,
+					selectedTerminalId,
+					terminalSkills,
 					fileUploadEnabled: () => fileUploadEnabled,
 					onSelect: (e) => {
 						const { type, data } = e;
@@ -1665,7 +1749,10 @@
 						.run();
 				},
 				render: getSuggestionRenderer(CommandSuggestionList, {
+					modelId: () => selectedModels[0] ?? null,
 					i18n,
+					selectedTerminalId,
+					terminalSkills,
 					canCompact: () => !!history?.currentId && contextCompactionEnabled,
 					compactDisabled: () => isActive,
 					canStatus: () => !!history?.currentId,
@@ -1732,7 +1819,10 @@
 			{
 				char: '#',
 				render: getSuggestionRenderer(CommandSuggestionList, {
+					modelId: () => selectedModels[0] ?? null,
 					i18n,
+					selectedTerminalId,
+					terminalSkills,
 					fileUploadEnabled: () => fileUploadEnabled,
 					onSelect: (e) => {
 						const { type, data } = e;
@@ -1771,7 +1861,10 @@
 			{
 				char: '$',
 				render: getSuggestionRenderer(CommandSuggestionList, {
+					modelId: () => selectedModels[0] ?? null,
 					i18n,
+					selectedTerminalId,
+					terminalSkills,
 					onSelect: (e) => {
 						focus({ preventScroll: true });
 					},
@@ -1793,7 +1886,10 @@
 					editor.chain().focus().deleteRange(range).insertContent(emoji).run();
 				},
 				render: getSuggestionRenderer(CommandSuggestionList, {
+					modelId: () => selectedModels[0] ?? null,
 					i18n,
+					selectedTerminalId,
+					terminalSkills,
 					onSelect: (e) => {
 						focus({ preventScroll: true });
 					},
@@ -1872,7 +1968,7 @@
 	onConnect={(id) =>
 		oauthRedirectHandler({ id, serverId: id.split(':').at(-1), authType: 'mcp' }, chatInputDraft)}
 />
-<SkillsModal bind:show={showSkills} {selectedSkillIds} />
+<SkillsModal bind:show={showSkills} {selectedSkillIds} {terminalSkills} />
 
 <InputVariablesModal
 	bind:show={showInputVariablesModal}
@@ -1889,7 +1985,7 @@
 		await tick();
 	}}
 	on:close={() => {
-		integrationsMenuCloseOnOutsideClick = true;
+		inputMenuCloseOnOutsideClick = true;
 	}}
 />
 
@@ -2503,7 +2599,9 @@
 							<div class=" flex justify-between mt-0.5 mb-2 mx-0.5 max-w-full" dir="ltr">
 								<div class="ml-1 self-end flex items-center">
 									<InputMenu
-										onCompare={openComparison}
+										bind:show={showInputMenu}
+										bind:tab={inputMenuTab}
+										closeOnOutsideClick={inputMenuCloseOnOutsideClick}
 										bind:files
 										selectedModels={selectedModelIds}
 										fileUploadCapableModels={getFilesystemUploadTerminal(
@@ -2560,8 +2658,10 @@
 										onClose={async () => {
 											await tick();
 
-											const chatInput = document.getElementById(inputId);
-											chatInput?.focus();
+											if (!$mobile) {
+												const chatInput = document.getElementById(inputId);
+												chatInput?.focus();
+											}
 										}}
 									>
 										<button
@@ -2572,58 +2672,62 @@
 										>
 											<PlusAlt className="size-5" />
 										</button>
+
+										<svelte:fragment slot="terminal">
+											{#if showTerminalSelector && terminalControlsInMenu}
+												<TerminalMenu
+													{selectedTerminalId}
+													modelId={selectedModels[0] ?? null}
+													inMenu
+													{chatId}
+													bind:terminalContext
+													disabled={generating}
+												/>
+												<div class="h-px mx-1 my-1 bg-gray-100 dark:bg-gray-800"></div>
+											{/if}
+										</svelte:fragment>
+
+										<!-- Retired menu label: keep its translation. {$i18n.t('Integrations')} -->
+										<svelte:fragment slot="integrations">
+											{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
+												<IntegrationsMenu
+													{selectedTerminalId}
+													{terminalSkills}
+													bind:show={showInputMenu}
+													bind:tab={inputMenuTab}
+													selectedModels={selectedModelIds}
+													{toggleFilters}
+													{showWebSearchButton}
+													{showImageGenerationButton}
+													{showCodeInterpreterButton}
+													bind:selectedToolIds
+													bind:selectedSkillIds
+													bind:selectedFilterIds
+													bind:webSearchEnabled
+													bind:imageGenerationEnabled
+													bind:codeInterpreterEnabled
+													oauthRedirectHandler={(tool: {
+														id: string;
+														serverId: string;
+														authType?: string | null;
+													}) => oauthRedirectHandler(tool, chatInputDraft)}
+													{onWebSearchToggle}
+													onShowValves={(e) => {
+														const { type, id } = e;
+														selectedValvesType = type;
+														selectedValvesItemId = id;
+														showValvesModal = true;
+														inputMenuCloseOnOutsideClick = false;
+													}}
+												/>
+											{/if}
+										</svelte:fragment>
 									</InputMenu>
 
-									{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
-										<div
-											class="flex self-center w-[0.0625rem] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50 shrink-0"
-										/>
-
-										<IntegrationsMenu
-											selectedModels={selectedModelIds}
-											{toggleFilters}
-											{showWebSearchButton}
-											{showImageGenerationButton}
-											{showCodeInterpreterButton}
-											bind:selectedToolIds
-											bind:selectedSkillIds
-											bind:selectedFilterIds
-											bind:webSearchEnabled
-											bind:imageGenerationEnabled
-											bind:codeInterpreterEnabled
-											oauthRedirectHandler={(tool: {
-												id: string;
-												serverId: string;
-												authType?: string | null;
-											}) => oauthRedirectHandler(tool, chatInputDraft)}
-											{onWebSearchToggle}
-											closeOnOutsideClick={integrationsMenuCloseOnOutsideClick}
-											onShowValves={(e) => {
-												const { type, id } = e;
-												selectedValvesType = type;
-												selectedValvesItemId = id;
-												showValvesModal = true;
-												integrationsMenuCloseOnOutsideClick = false;
-											}}
-											onClose={async () => {
-												await tick();
-
-												if (!$mobile) {
-													const chatInput = document.getElementById(inputId);
-													chatInput?.focus();
-												}
-											}}
-										>
-											<button
-												type="button"
-												id="integration-menu-button"
-												class="bg-transparent hover:bg-gray-100/40 text-gray-700 dark:text-white dark:hover:bg-gray-800/40 rounded-full size-[1.875rem] flex justify-center items-center outline-hidden focus:outline-hidden shrink-0"
-												aria-label={$i18n.t('Integrations')}
-											>
-												<Component className="size-4.5" strokeWidth="1.5" />
-											</button>
-										</IntegrationsMenu>
-									{/if}
+									<div
+										aria-hidden="true"
+										class="flex self-center w-[0.0625rem] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50 shrink-0"
+									></div>
 
 									{#if hasChatVariables}
 										<Tooltip content={$i18n.t('Chat Variables')} placement="top">
@@ -2667,7 +2771,7 @@
 									{/if}
 
 									<div class="ml-1 flex gap-1.5 shrink-0">
-										{#if (selectedToolIds ?? []).length > 0 && $visibleControls['chat.selected_tools']}
+										{#if showInputSelections && (selectedToolIds ?? []).length > 0 && $visibleControls['chat.selected_tools']}
 											<Tooltip
 												content={$i18n.t('{{COUNT}} Available Tools', {
 													COUNT: (selectedToolIds ?? []).length
@@ -2690,7 +2794,7 @@
 											</Tooltip>
 										{/if}
 
-										{#if (selectedSkillIds ?? []).length > 0 && $visibleControls['chat.selected_skills']}
+										{#if showInputSelections && (selectedSkillIds ?? []).length > 0 && $visibleControls['chat.selected_skills']}
 											<Tooltip
 												content={$i18n.t('{{COUNT}} Available Skills', {
 													COUNT: (selectedSkillIds ?? []).length
@@ -2715,7 +2819,7 @@
 
 										{#each selectedFilterIds as filterId (filterId)}
 											{@const filter = toggleFilters.find((f) => f.id === filterId)}
-											{#if filter && $visibleControls['chat.selected_filters']}
+											{#if showInputSelections && filter && $visibleControls['chat.selected_filters']}
 												<Tooltip
 													content={resolveLocalizedFunction(
 														filter,
@@ -2784,7 +2888,7 @@
 											{/if}
 										{/each}
 
-										{#if webSearchEnabled && showWebSearchButton && $visibleControls['chat.selected_web_search']}
+										{#if showInputSelections && webSearchEnabled && showWebSearchButton && $visibleControls['chat.selected_web_search']}
 											<Tooltip content={$i18n.t('Web Search')} placement="top">
 												<button
 													aria-label={$i18n.t('Web Search')}
@@ -2801,7 +2905,7 @@
 											</Tooltip>
 										{/if}
 
-										{#if imageGenerationEnabled && showImageGenerationButton && $visibleControls['chat.selected_image_generation']}
+										{#if showInputSelections && imageGenerationEnabled && showImageGenerationButton && $visibleControls['chat.selected_image_generation']}
 											<Tooltip content={$i18n.t('Image')} placement="top">
 												<button
 													aria-label={$i18n.t('Image')}
@@ -2818,7 +2922,7 @@
 											</Tooltip>
 										{/if}
 
-										{#if codeInterpreterEnabled && showCodeInterpreterButton && $visibleControls['chat.selected_code_interpreter']}
+										{#if showInputSelections && codeInterpreterEnabled && showCodeInterpreterButton && $visibleControls['chat.selected_code_interpreter']}
 											<Tooltip content={$i18n.t('Code Interpreter')} placement="top">
 												<button
 													aria-label={codeInterpreterEnabled
@@ -2840,14 +2944,18 @@
 											</Tooltip>
 										{/if}
 
-										<!-- Terminal Server Selector -->
+										<!-- Keep this instance mounted to measure the full labels even while the controls are in the menu. -->
 										{#if showTerminalSelector}
-											<TerminalMenu
-												bind:show={showTerminalMenu}
-												disabled={generating ||
-													(!!history?.currentId &&
-														history.messages[history.currentId]?.done != true)}
-											/>
+											<div data-terminal-controls class="flex items-center gap-1.5 shrink-0">
+												<TerminalMenu
+													{selectedTerminalId}
+													modelId={selectedModels[0] ?? null}
+													bind:show={showTerminalMenu}
+													{chatId}
+													bind:terminalContext
+													disabled={generating}
+												/>
+											</div>
 										{/if}
 
 										{#each pendingOAuthTools as pendingTool (pendingTool.id)}
@@ -2972,7 +3080,7 @@
 														on:click={async () => {
 															if (callActive) {
 																showCallOverlay.set(true);
-																showTabs.set(true);
+																showTabs.set('voice');
 																return;
 															}
 															if (selectedModels.length > 1) {

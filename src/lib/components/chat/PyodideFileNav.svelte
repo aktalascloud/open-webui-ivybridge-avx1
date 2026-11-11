@@ -364,6 +364,7 @@
 	role="region"
 	aria-label={$i18n.t('Pyodide file browser')}
 >
+	<!-- Retired upload hint: keep its translation. {$i18n.t('Drop files here')} -->
 	<FilesOverlay show={isDragOver} />
 
 	{#if overlay}
@@ -427,14 +428,16 @@
 				<Spinner className="size-4" />
 			</div>
 		{:else if error}
-			<div class="flex items-center justify-center flex-1 p-6">
+			<div class="flex items-center justify-center flex-1 p-6 text-center">
 				<div class="text-xs text-gray-500 dark:text-gray-400">{error}</div>
 			</div>
 		{:else if entries.length === 0 && !creatingFolder && !creatingFile}
-			<div class="flex flex-col items-center justify-center flex-1 p-6 text-center gap-2">
-				<Folder className="size-5 text-gray-300 dark:text-gray-600" />
+			<div class="flex flex-1 items-center justify-center p-6 text-center">
 				<div class="text-xs text-gray-400 dark:text-gray-500">
+					<!-- Retired empty state: keep its translation.
 					{$i18n.t('No files yet. Upload files or run Python code to create them.')}
+					-->
+					{$i18n.t('This folder is empty')}
 				</div>
 			</div>
 		{/if}

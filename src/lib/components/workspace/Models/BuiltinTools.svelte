@@ -10,6 +10,10 @@
 
 	let toolLabels;
 	$: toolLabels = {
+		visualizations: {
+			label: $i18n.t('settings.admin.models.builtinTools.visualizations.label'),
+			description: $i18n.t('settings.admin.models.builtinTools.visualizations.description')
+		},
 		time: {
 			label: $i18n.t('settings.admin.models.builtinTools.time.label'),
 			description: $i18n.t('settings.admin.models.builtinTools.time.description')
@@ -107,11 +111,13 @@
 	export let builtinTools: Record<string, boolean> = {};
 	export let capabilities: Record<string, boolean> = {};
 	export let disabled = false;
-	$: enabledTools = allTools.filter((key) => builtinTools[key] !== false);
+	$: enabledTools = allTools.filter((key) => builtinTools[key] ?? key !== 'visualizations');
 
 	const setBuiltinTool = (tool: keyof typeof toolLabels, checked: boolean) => {
 		builtinTools = { ...builtinTools };
-		if (checked) {
+		if (tool === 'visualizations') {
+			builtinTools[tool] = checked;
+		} else if (checked) {
 			delete builtinTools[tool];
 		} else {
 			builtinTools[tool] = false;
@@ -120,42 +126,44 @@
 </script>
 
 <!-- Previous labels retained for i18n extraction: {$i18n.t('Used in native function calling mode. Workspace settings and user permissions still apply.')} -->
-<ModelSettingsSection
-	label={$i18n.t('settings.admin.models.builtinTools.title')}
-	description={$i18n.t(
-		'Choose which built-in tools this model can use when Builtin Tools is enabled.'
-	)}
->
-	<!-- Previous labels retained for i18n extraction:
-	{$i18n.t('All allowed')}
-	{$i18n.t('{{COUNT}} disabled')}
-	{$i18n.t('{{COUNT}} of {{TOTAL}} enabled')}
-	-->
-	<span slot="summary" class="flex min-w-0 items-center gap-1 text-gray-900 dark:text-gray-100">
-		<span class="min-w-0 truncate"
-			>{enabledTools
-				.slice(0, 3)
-				.map((key) => toolLabels[key].label)
-				.join(', ') || $i18n.t('None')}</span
-		>
-		{#if enabledTools.length > 3}<span class="shrink-0 text-gray-500"
-				>+{enabledTools.length - 3}</span
-			>{/if}
-	</span>
-	<!-- Previous labels retained for i18n extraction:
-	{$i18n.t('Search built-in tools')}
-	{$i18n.t('Assistance')}
-	{$i18n.t('Work')}
-	-->
-	<div class="grid grid-cols-1 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
-		{#each allTools.filter((key) => $visibleControls[`model_editor.tools.${key}`]) as key}
-			<ModelSettingToggle
-				label={toolLabels[key].label}
-				description={toolLabels[key].description}
-				checked={builtinTools[key] !== false}
-				{disabled}
-				on:change={(e) => setBuiltinTool(key, e.detail)}
-			/>
-		{/each}
-	</div>
-</ModelSettingsSection>
+{#if allTools.some((key) => $visibleControls[`model_editor.tools.${key}`])}
+	<ModelSettingsSection
+		label={$i18n.t('settings.admin.models.builtinTools.title')}
+		description={$i18n.t(
+			'Choose which built-in tools this model can use when Builtin Tools is enabled.'
+		)}
+	>
+		<!-- Previous labels retained for i18n extraction:
+		{$i18n.t('All allowed')}
+		{$i18n.t('{{COUNT}} disabled')}
+		{$i18n.t('{{COUNT}} of {{TOTAL}} enabled')}
+		-->
+		<span slot="summary" class="flex min-w-0 items-center gap-1 text-gray-900 dark:text-gray-100">
+			<span class="min-w-0 truncate"
+				>{enabledTools
+					.slice(0, 3)
+					.map((key) => toolLabels[key].label)
+					.join(', ') || $i18n.t('None')}</span
+			>
+			{#if enabledTools.length > 3}<span class="shrink-0 text-gray-500"
+					>+{enabledTools.length - 3}</span
+				>{/if}
+		</span>
+		<!-- Previous labels retained for i18n extraction:
+		{$i18n.t('Search built-in tools')}
+		{$i18n.t('Assistance')}
+		{$i18n.t('Work')}
+		-->
+		<div class="grid grid-cols-1 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
+			{#each allTools.filter((key) => $visibleControls[`model_editor.tools.${key}`]) as key}
+				<ModelSettingToggle
+					label={toolLabels[key].label}
+					description={toolLabels[key].description}
+					checked={builtinTools[key] ?? key !== 'visualizations'}
+					{disabled}
+					on:change={(e) => setBuiltinTool(key, e.detail)}
+				/>
+			{/each}
+		</div>
+	</ModelSettingsSection>
+{/if}
