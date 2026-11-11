@@ -1,0 +1,950 @@
+diff --git a/.avx1/frontend-contract.json b/.avx1/frontend-contract.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..63342a75c30830f4e44b4f10032aa5d72e21a1a1
+--- /dev/null
++++ b/.avx1/frontend-contract.json
+@@ -0,0 +1,29 @@
++{
++  "schema": 1,
++  "hooks": [
++    "microphone-provenance",
++    "voice-budget",
++    "speech-identity",
++    "local-call-emoji"
++  ],
++  "helper_sha256": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
++  "sources": {
++    "src/lib/utils/assistantCompatibility.js": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
++    "src/lib/components/chat/MessageInput.svelte": "2d7645db2675209f8df3005f2581b29cfb4c8c87794644bc8c79c896514d2828",
++    "src/lib/components/chat/Chat.svelte": "f33f10df524deaedc094fd0fd4aa17e46be6c6196b19c505f5675d35cbc109a7",
++    "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
++    "src/lib/components/chat/Messages/ResponseMessage.svelte": "9628a1d2cde80274f1e890e9f19c78ce059214fe7231ab0e2d3e5ec27a4c965f",
++    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "39c5d885756c7b15b1c9ee5801cd13bbd7a832a8d366536ec7d36545c2671869",
++    "src/lib/components/chat/ChatTabs/SideChat.svelte": "f977bfc4adcaf92f03ae420c0818877d865c5a5ce97315a1ec62c657f52da04c"
++  },
++  "reviewed_upstream_change": {
++    "upstream_commit": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
++    "scope": "Explicit model-selection callbacks and current-user Stop guard in MessageInput; abortable/stale-load protection in Chat; sandboxed MCPApp branch in ResponseMessage. Mic provenance, voice budget, speech identity, reasoning and CallOverlay unchanged. Source-helper tests and current saveControls cases passed; packaged Chromium required."
++  },
++  "reviewed_local_change": "Direct tool-server selection uses exact explicit IDs or legacy index only when no ID exists, including the new SideChat path. Mic provenance selects each actual editor DOM node/inputId. Voice-budget and speech-identity wire remain V1; private CODE/filter sources unchanged.",
++  "reviewed_mainstream_change": {
++    "upstream_commit": "055bd98f3a223cadd8be381422238ca9410cc9db",
++    "scope": "Native sessions/agents and scoped tool permissions; persistent side chats and file/voice-note tabs. Main/side microphone provenance and explicit tool-server IDs retained; helperV1 hash unchanged. Side-chat source fixture updated for current canSend/sending/recovering state. Stock call/VRM/STT/TTS hooks preserved.",
++    "checks": "5 actual tool policy/side-send and3 helper cases; full staged/package Chromium still required"
++  }
++}
+diff --git a/.avx1/frontend_contract.py b/.avx1/frontend_contract.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a48f633a754b522712ae8e4e15a1f1027e6ea075
+--- /dev/null
++++ b/.avx1/frontend_contract.py
+@@ -0,0 +1,36 @@
++"""Attest the reviewed source-level assistant hooks after a normal frontend build."""
++import hashlib
++import json
++from pathlib import Path
++import subprocess
++import sys
++
++ROOT = Path(__file__).resolve().parents[1]
++
++
++def digest(path):
++    return hashlib.sha256(path.read_bytes()).hexdigest()
++
++
++def main():
++    contract = json.loads((ROOT / ".avx1/frontend-contract.json").read_text("utf-8"))
++    for name, expected in contract["sources"].items():
++        actual = hashlib.sha256((ROOT / name).read_text('utf-8').encode('utf-8')).hexdigest()
++        if actual != expected:
++            raise RuntimeError("Assistant source hook changed; review and tests required: " + name)
++    if '--source-only' in sys.argv:
++        print('Reviewed assistant source hooks verified')
++        return
++    assets = ROOT / "build"
++    if not (assets / "index.html").is_file():
++        raise RuntimeError("Frontend output missing")
++    proof = {"schema": 1, "name": "owui-ivybridge-assistant-v1", "hooks": contract["hooks"],
++             "helper_sha256": contract["helper_sha256"], "sources": contract["sources"],
++             "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
++             "assets": {path.relative_to(assets).as_posix(): digest(path) for path in sorted(assets.rglob("*"))
++                        if path.is_file() and path.suffix in {".js", ".html"}}}
++    (assets / "assistant-compatibility.json").write_text(json.dumps(proof, indent=2)+"\n", encoding="utf-8")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/.avx1/frontend_contract.test.mjs b/.avx1/frontend_contract.test.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..b37391c6a152f7f1f95d2d9000c4aa14fd144bbb
+--- /dev/null
++++ b/.avx1/frontend_contract.test.mjs
+@@ -0,0 +1,60 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { __assistantMicOrigin as mic, __assistantVoiceBudget as voice } from '../src/lib/utils/assistantCompatibility.js';
++
++test('microphone provenance stays on the exact current draft and clears on replacement', () => {
++  let callbacks = {};
++  let node = {textContent: 'voice', innerText: 'voice', contains: () => true, addEventListener: (name, handler) => callbacks[name] = handler};
++  globalThis.document = {getElementById: () => node};
++  globalThis.getSelection = () => ({isCollapsed: false, anchorNode: node, focusNode: node, toString: () => 'voice'});
++  mic.mark('voice');
++  assert.deepEqual(mic.peek('voice'), {input_source: 'microphone'});
++  assert.equal(mic.peek('unrelated typed message'), undefined);
++  mic.change('voice edited');
++  assert.deepEqual(mic.peek('voice edited'), {input_source: 'microphone'});
++  callbacks.beforeinput();
++  assert.equal(mic.peek('voice edited'), undefined);
++  mic.mark('voice');
++  node = {...node};
++  assert.equal(mic.peek('voice'), undefined);
++});
++
++test('voice budget groups reports, stays message-scoped and preserves full text', () => {
++  voice.start('one', 1);
++  voice.start('two', 1);
++  assert.equal(voice.hold('one', '1С: выручка 100'), true);
++  assert.equal(voice.hold('two', 'Hello'), false);
++  assert.equal(voice.hold('one', 'Прибыль 20'), true);
++  const report = voice.finish('one', 'chat-one');
++  assert.equal(report.text, '1С: выручка 100 Прибыль 20');
++  assert.equal(report.options.speech_message_id, 'one');
++  assert.equal(report.options.speech_chat_id, 'chat-one');
++  assert.equal(voice.finish('two', 'chat-two'), null);
++  assert.equal(voice.finish('one', 'chat-one'), null);
++  assert.equal(voice.emoji('спасибо'), '😊');
++});
++
++test('simultaneous composer provenance is isolated by actual DOM node and input id', () => {
++  function editor(text) {
++    const callbacks = {};
++    const node = { textContent: text, innerText: text, contains: value => value === node,
++      addEventListener: (name, callback) => callbacks[name] = callback };
++    return { node, callbacks };
++  }
++  const main = editor('same'), side = editor('same');
++  const nodes = new Map([['chat-input', main.node], ['side-input', side.node]]);
++  globalThis.document = { getElementById: id => nodes.get(id) };
++  mic.mark('same');
++  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
++  assert.equal(mic.peek('same', 'side-input'), undefined);
++  mic.mark('same', 'side-input');
++  mic.change('side edited', 'side-input');
++  assert.deepEqual(mic.peek('side edited', 'side-input'), {input_source: 'microphone'});
++  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
++  globalThis.getSelection = () => ({ isCollapsed: false, anchorNode: side.node, focusNode: side.node, toString: () => 'same' });
++  side.callbacks.beforeinput();
++  assert.equal(mic.peek('side edited', 'side-input'), undefined);
++  assert.deepEqual(mic.peek('same'), {input_source: 'microphone'});
++  nodes.set('chat-input', editor('same').node);
++  assert.equal(mic.peek('same'), undefined);
++});
+diff --git a/.avx1/test_chat_model_preservation.mjs b/.avx1/test_chat_model_preservation.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..8442249144e75b96c43c9660f80b66890488c9f8
+--- /dev/null
++++ b/.avx1/test_chat_model_preservation.mjs
+@@ -0,0 +1,24 @@
++import fs from 'node:fs';
++import assert from 'node:assert/strict';
++import {test} from 'node:test';
++const source=fs.readFileSync(new URL('../src/lib/components/chat/Chat.svelte',import.meta.url),'utf8');
++const body=source.match(/const saveControls = async \(models: string\[\] \| null = null\) => \{([\s\S]*?)\n\t\};/)?.[1];
++assert.ok(body,'Actual saveControls callback must be found');
++const AsyncFunction=Object.getPrototypeOf(async()=>{}).constructor;
++async function execute(overrides={},models=null){
++ const calls=[];
++ const context={models,isShared:false,$chatId:'saved',$temporaryChatEnabled:false,chat:{id:'saved',chat:{models:['original'],files:[]}},
++  selectedModels:['fallback'],$models:[{id:'fallback'}],chatFiles:[],equal:(a,b)=>JSON.stringify(a)===JSON.stringify(b),
++  localStorage:{token:'fixture'},console:{error(){}},updateChatById:async(token,id,params)=>{calls.push(params);return null;},...overrides};
++ await new AsyncFunction(...Object.keys(context),body)(...Object.values(context));return calls;
++}
++test('temporary provider outage cannot autosave fallback over the saved model',async()=>{assert.equal((await execute()).length,0);});
++test('file edits during outage save files without rewriting the model',async()=>{
++ const calls=await execute({chatFiles:[{id:'file'}]});assert.equal(calls.length,1);assert.deepEqual(calls[0].files,[{id:'file'}]);assert.equal(calls[0].models,undefined);
++});
++test('explicit model selection still saves when original is available',async()=>{
++ const calls=await execute({},['fallback']);assert.deepEqual(calls[0].models,['fallback']);
++});
++test('shared/read-only chat causes no autosave',async()=>{assert.equal((await execute({isShared:true})).length,0);});
++
++test('background provider recovery does not autosave fallback either',async()=>{assert.equal((await execute({$models:[{id:'original'},{id:'fallback'}]})).length,0);});
+diff --git a/.avx1/test_frontend_browser.py b/.avx1/test_frontend_browser.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..dd07968300e97c387791c21b024674c345a3d8b5
+--- /dev/null
++++ b/.avx1/test_frontend_browser.py
+@@ -0,0 +1,80 @@
++"""Boot the packaged UI in Chromium against an isolated, offline backend."""
++import json
++import argparse
++import os
++from pathlib import Path
++import socket
++import subprocess
++import sys
++import time
++import urllib.request
++import uuid
++from common import ROOT,WORK
++
++parser=argparse.ArgumentParser()
++parser.add_argument('--check-bundle-only',action='store_true')
++parser.add_argument('--frontend',type=Path,default=ROOT/'build')
++args=parser.parse_args()
++# The previous regression resolved Svelte's server context into the client bundle.
++maps=list((args.frontend/'_app/immutable').rglob('*.js.map'))
++if not maps:raise RuntimeError('Browser sourcemaps missing from the test input')
++for mapping in maps:
++    data=json.loads(mapping.read_text('utf-8'))
++    if any('/svelte/src/internal/server/context.js' in source.replace('\\','/') for source in data.get('sources',[])):
++        raise RuntimeError('Svelte server context was included in the browser bundle')
++if args.check_bundle_only:
++    print('CLIENT_BUNDLE_USES_NO_SVELTE_SERVER_CONTEXT')
++    raise SystemExit(0)
++
++subprocess.run([sys.executable,'-m','pip','install','playwright>=1.58,<2'],check=True)
++subprocess.run([sys.executable,'-m','playwright','install','chromium'],check=True)
++from playwright.sync_api import sync_playwright
++with socket.socket() as probe:
++    probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
++from strata_reasoning_browser import ReasoningProvider
++reasoning_provider=ReasoningProvider()
++environment=dict(os.environ,DATA_DIR=str(WORK/('browser-smoke-data-'+uuid.uuid4().hex[:12])),WEBUI_SECRET_KEY='ci-local-browser-fixture-key',
++    OPENAI_API_BASE_URL=reasoning_provider.url,OPENAI_API_BASE_URLS=reasoning_provider.url,
++    OPENAI_API_KEY='ci-fixture-no-model',OPENAI_API_KEYS='ci-fixture-no-model',
++    OFFLINE_MODE='true',HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',ENABLE_VERSION_UPDATE_CHECK='false',
++    RAG_EMBEDDING_ENGINE='openai',RAG_OPENAI_API_BASE_URL='http://127.0.0.1:1/v1',
++    RAG_OPENAI_API_KEY='ci-fixture-no-network',RAG_EMBEDDING_MODEL_AUTO_UPDATE='false',WHISPER_MODEL_AUTO_UPDATE='false')
++launcher="import site,sys;site.addsitedir(sys.argv[1]);sys.path.insert(0,sys.argv[1]);sys.argv=['open-webui','serve','--host','127.0.0.1','--port',sys.argv[2]];from open_webui import app;app()"
++log=(WORK/'browser-smoke-server.log').open('w',encoding='utf-8')
++process=subprocess.Popen([sys.executable,'-c',launcher,str(WORK/'audit-packages'),str(port)],env=environment,stdout=log,stderr=log)
++try:
++    deadline=time.monotonic()+240
++    while True:
++        if process.poll() is not None:raise RuntimeError('Browser test backend exited; inspect the CI-only smoke log')
++        try:
++            with urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=2) as response:
++                if json.load(response).get('status') is True:break
++        except Exception:pass
++        if time.monotonic()>deadline:raise RuntimeError('Browser test backend startup timed out')
++        time.sleep(1)
++    with sync_playwright() as playwright:
++        browser=playwright.chromium.launch(headless=True)
++        page=browser.new_page()
++        errors=[]
++        page.on('pageerror',lambda error:errors.append(str(error)))
++        page.goto(f'http://127.0.0.1:{port}',wait_until='domcontentloaded')
++        form=page.locator('input[type="email"],input[type="password"]').first
++        onboarding=page.get_by_role('button',name='Get started',exact=True)
++        form.or_(onboarding).first.wait_for(state='visible',timeout=45000)
++        if onboarding.is_visible():onboarding.click()
++        form.wait_for(state='visible',timeout=45000)
++        if errors:raise RuntimeError('Packaged frontend JavaScript failed: '+errors[0])
++        from strata_reasoning_browser import check_strata_reasoning
++        check_strata_reasoning(browser,f'http://127.0.0.1:{port}',WORK,reasoning_provider)
++        browser.close()
++    print('CHROMIUM_PACKAGED_LOGIN_RENDERED_NO_PAGE_ERRORS')
++except Exception:
++    log.flush()
++    print((WORK/'browser-smoke-server.log').read_text('utf-8',errors='replace')[-6000:])
++    raise
++finally:
++    reasoning_provider.close()
++    process.terminate()
++    try:process.wait(timeout=20)
++    except subprocess.TimeoutExpired:process.kill();process.wait()
++    log.close()
+diff --git a/.avx1/test_responses_clients.py b/.avx1/test_responses_clients.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e40fd5e7c85e95b890ab434d1d4381481fc69267
+--- /dev/null
++++ b/.avx1/test_responses_clients.py
+@@ -0,0 +1,48 @@
++"""Exercise actual Responses-to-OpenAI adapter functions with synthetic events."""
++import ast
++import asyncio
++import json
++from pathlib import Path
++import time
++import unittest
++import uuid
++from typing import AsyncIterator
++
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++scope={'JSONCodec':json,'time':time,'uuid':uuid,'uuid4':uuid.uuid4,'AsyncIterator':AsyncIterator}
++def load(path,names):
++    tree=ast.parse((ROOT/path).read_text('utf-8'))
++    nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
++    assert len(nodes)==len(names)
++    exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),scope)
++load(Path('utils/misc.py'),{'chat_completion_template','chat_completion_message_template','chat_completion_chunk_template'})
++load(Path('utils/response.py'),{'usage_counter','normalize_usage','get_responses_finish_reason','convert_responses_usage_to_chat_completions','convert_responses_stream_to_chat_completions'})
++load(Path('routers/openai.py'),{'convert_responses_result'})
++
++class ResponsesClients(unittest.IsolatedAsyncioTestCase):
++    async def test_stream_tool_arguments_usage_and_length(self):
++        events=[{'type':'response.created','response':{'model':'fixture'}},
++            {'type':'response.output_item.added','output_index':3,'item':{'type':'function_call','call_id':'call1','name':'lookup','arguments':''}},
++            {'type':'response.function_call_arguments.delta','output_index':3,'delta':'{"x":1}'},
++            {'type':'response.incomplete','response':{'incomplete_details':{'reason':'max_output_tokens'},'usage':{'input_tokens':7,'output_tokens':3}}}]
++        async def stream():
++            for event in events:yield 'data: '+json.dumps(event)+'\n\n'
++        output=[line async for line in scope['convert_responses_stream_to_chat_completions'](stream())]
++        chunks=[json.loads(line[6:]) for line in output if line.startswith('data: {')]
++        self.assertEqual(chunks[0]['choices'][0]['delta']['tool_calls'][0]['id'],'call1')
++        self.assertEqual(chunks[1]['choices'][0]['delta']['tool_calls'][0]['index'],0)
++        self.assertEqual(chunks[-1]['usage']['prompt_tokens'],7)
++        self.assertEqual(chunks[-1]['choices'][0]['finish_reason'],'length')
++        self.assertEqual(output[-1],'data: [DONE]\n\n')
++    async def test_chat_completion_passes_through(self):
++        value='data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
++        async def stream():yield value
++        self.assertEqual([x async for x in scope['convert_responses_stream_to_chat_completions'](stream())],[value])
++    def test_nonstream_usage_and_filter_reason(self):
++        result=scope['convert_responses_result']({'model':'fixture','status':'incomplete','incomplete_details':{'reason':'content_filter'},'usage':{'input_tokens':8,'output_tokens':0},'output':[]})
++        self.assertEqual(result['usage']['prompt_tokens'],8)
++        self.assertEqual(result['usage']['completion_tokens'],0)
++        self.assertEqual(result['choices'][0]['finish_reason'],'content_filter')
++        self.assertIsInstance(result['created'],int)
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_suggestions.mjs b/.avx1/test_suggestions.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..70387d4f118d1e5c48144b62ec90089cc155e5d9
+--- /dev/null
++++ b/.avx1/test_suggestions.mjs
+@@ -0,0 +1,25 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import { resolveLocalizedPromptSuggestions as resolve } from '../src/lib/utils/localizedContent.ts';
++const ru = JSON.parse(fs.readFileSync(new URL('../src/lib/i18n/locales/ru-RU/translation.json', import.meta.url), 'utf8'));
++const t = (key) => ru[key] || key;
++test('stored stock English suggestions render in Russian without changing user records', () => {
++ const original = resolve(null, null, 'en-US');
++ const before = JSON.stringify(original);
++ const localized = resolve(original, null, 'ru-RU', t);
++ assert.equal(JSON.stringify(original), before);
++ assert.equal(localized.length, 6);
++ for (const prompt of localized) {
++  assert.match(prompt.title.join(' '), /[А-Яа-яЁё]/u);
++  assert.match(prompt.content, /[А-Яа-яЁё]/u);
++ }
++});
++test('custom prompts, explicit locale overrides and disabled suggestions are preserved', () => {
++ const stock = resolve(null, null, 'en-US')[0];
++ const custom = { ...stock, id: 'custom', title: ['My title', 'My subtitle'] };
++ assert.strictEqual(resolve([custom], null, 'ru-RU', t)[0], custom);
++ assert.deepEqual(resolve([], null, 'ru-RU', t), []);
++ const explicit = [{title: ['Авторский', 'запрос'], content: 'Текст пользователя'}];
++ assert.strictEqual(resolve(null, {'ru-RU': explicit}, 'ru-RU', t), explicit);
++});
+diff --git a/backend/open_webui/config.py b/backend/open_webui/config.py
+index 0a7bc6d968221681b3fcb5387876fe662c707ed7..836a58f5d955c3a2b63ba2dac0c32d58274ca743 100644
+--- a/backend/open_webui/config.py
++++ b/backend/open_webui/config.py
+@@ -2090,6 +2090,16 @@ ENABLE_CALENDAR = os.getenv('ENABLE_CALENDAR', 'True').lower() == 'true'
+ ENABLE_AUTOMATIONS = os.getenv('ENABLE_AUTOMATIONS', 'True').lower() == 'true'
+ 
+ ENABLE_SUBAGENTS = os.getenv('ENABLE_SUBAGENTS', 'False').lower() == 'true'
++try:
++    subagents_models = JSONCodec.loads(os.getenv('SUBAGENTS_MODELS', '[]'))
++    if not isinstance(subagents_models, list) or not all(isinstance(entry, dict) for entry in subagents_models):
++        raise ValueError('SUBAGENTS_MODELS must be a JSON list of objects')
++except Exception as e:
++    log.exception('Error loading SUBAGENTS_MODELS: %s', e)
++    subagents_models = []
++
++SUBAGENTS_MODELS = subagents_models
++
+ SUBAGENTS_BACKGROUND_ENABLED = os.getenv('SUBAGENTS_BACKGROUND_ENABLED', 'False').lower() == 'true'
+ # Leave empty for unlimited.
+ SUBAGENTS_MAX_CONCURRENT = os.getenv('SUBAGENTS_MAX_CONCURRENT', '')
+@@ -3262,6 +3272,7 @@ DEFAULT_CONFIG = {
+     'calendar.enable': ENABLE_CALENDAR,
+     'automations.enable': ENABLE_AUTOMATIONS,
+     'subagents.enable': ENABLE_SUBAGENTS,
++    'subagents.models': SUBAGENTS_MODELS,
+     'subagents.background_enabled': SUBAGENTS_BACKGROUND_ENABLED,
+     'subagents.max_concurrent': SUBAGENTS_MAX_CONCURRENT,
+     'subagents.max_async': SUBAGENTS_MAX_ASYNC,
+diff --git a/backend/open_webui/routers/configs.py b/backend/open_webui/routers/configs.py
+index cf0ebdeb8264af1ee631c5954238d069ce1a7d28..a0e47c62b80a506dc491a4a879a6be54dbe004b3 100644
+--- a/backend/open_webui/routers/configs.py
++++ b/backend/open_webui/routers/configs.py
+@@ -68,6 +68,7 @@ MODELS_CONFIG_KEYS = {
+ }
+ SUBAGENTS_CONFIG_KEYS = {
+     'ENABLE_SUBAGENTS': 'subagents.enable',
++    'SUBAGENTS_MODELS': 'subagents.models',
+     'SUBAGENTS_BACKGROUND_ENABLED': 'subagents.background_enabled',
+     'SUBAGENTS_MAX_CONCURRENT': 'subagents.max_concurrent',
+     'SUBAGENTS_MAX_ASYNC': 'subagents.max_async',
+@@ -799,6 +800,7 @@ async def set_models_config(request: Request, form_data: ModelsConfigForm, user=
+ 
+ class SubagentsConfigForm(BaseModel):
+     ENABLE_SUBAGENTS: bool
++    SUBAGENTS_MODELS: list[dict] = []
+     SUBAGENTS_BACKGROUND_ENABLED: bool
+     SUBAGENTS_MAX_CONCURRENT: int | None = Field(default=None, gt=0)
+     SUBAGENTS_MAX_ASYNC: int | None = Field(default=None, gt=0)
+@@ -834,7 +836,7 @@ async def set_subagents_config(
+     form_data: SubagentsConfigForm,
+     user=Depends(get_admin_user),
+ ):
+-    await Config.upsert(config_updates(form_data.model_dump(), SUBAGENTS_CONFIG_KEYS))
++    await Config.upsert(config_updates(form_data.model_dump(exclude_unset=True), SUBAGENTS_CONFIG_KEYS))
+     values = await get_config_values(SUBAGENTS_CONFIG_KEYS)
+     await publish_event(
+         request,
+diff --git a/backend/open_webui/routers/models.py b/backend/open_webui/routers/models.py
+index 91558b0c049d64b6dc3d62ff63e6a0d72373eebf..980ae1388452d096582d0153f63053edd40b5825 100644
+--- a/backend/open_webui/routers/models.py
++++ b/backend/open_webui/routers/models.py
+@@ -42,6 +42,7 @@ from open_webui.models.models import (
+     ModelModel,
+     ModelParams,
+     ModelResponse,
++    ModelVoiceAvatar,
+     Models,
+ )
+ from open_webui.storage.provider import Storage
+@@ -61,6 +62,7 @@ from open_webui.utils.voice_avatar import (
+     AVATAR_MAX_BYTES,
+     validate_voice_animation,
+     validate_voice_avatar,
++    new_model_avatar_default,
+ )
+ from pydantic import BaseModel, Field
+ from sqlalchemy.ext.asyncio import AsyncSession
+@@ -398,6 +400,12 @@ async def create_new_model(
+     )
+ 
+     await _verify_background_image(form_data.meta.background_image_url, user, db)
++    if 'voice_avatar' not in form_data.meta.model_fields_set:
++        default_avatar = new_model_avatar_default(
++            form_data.meta.model_dump(exclude_unset=True), await Config.get('models.default_metadata') or {}
++        )
++        if default_avatar:
++            form_data.meta.voice_avatar = ModelVoiceAvatar.model_validate(default_avatar)
+     await _verify_voice_avatar(form_data.meta.voice_avatar, user, db)
+ 
+     form_data.access_grants = await filter_allowed_access_grants(
+diff --git a/backend/open_webui/routers/openai.py b/backend/open_webui/routers/openai.py
+index f8323faa8c7f0babb0999208edd9bbf2dca7179c..d528f02d22347db4aa562dbad46549b8bb4ab9c2 100644
+--- a/backend/open_webui/routers/openai.py
++++ b/backend/open_webui/routers/openai.py
+@@ -2,6 +2,8 @@ from __future__ import annotations
+ 
+ import asyncio
+ import hashlib
++import secrets
++import hashlib
+ import logging
+ import re
+ import time
+@@ -10,6 +12,7 @@ from urllib.parse import quote, urlparse
+ 
+ import aiofiles
+ import aiohttp
++from open_webui.utils.strata_reasoning import apply_strata_reasoning_profile, has_strata_author_template
+ from aiocache import cached
+ from fastapi import APIRouter, Depends, HTTPException, Request, status
+ from fastapi.responses import (
+@@ -45,6 +48,7 @@ from open_webui.utils.headers import get_headers_and_cookies, include_user_info_
+ from open_webui.utils.json_codec import JSONCodec
+ from open_webui.utils.misc import convert_logit_bias_input_to_json, get_provider_function
+ from open_webui.utils.model_ids import strip_provider_model_prefix
++from open_webui.utils.free_llm import prepare_free_llm_payload
+ from open_webui.utils.payload import (
+     apply_model_params_to_body_openai,
+     apply_system_prompt_to_body,
+@@ -62,9 +66,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ log = logging.getLogger(__name__)
+ 
+ 
++##########################################
++#
+ # Utility functions
+ # Let the responses returned through this gate be worth
+ # the question that summoned them.
++#
++##########################################
+ 
+ # Headers that become stale after aiohttp auto-decompresses the upstream
+ # response body.  Forwarding them verbatim causes desktop / programmatic
+@@ -148,7 +156,11 @@ def openai_reasoning_model_handler(payload):
+     return payload
+ 
+ 
++##########################################
++#
+ # API routes
++#
++##########################################
+ 
+ router = APIRouter()
+ 
+@@ -389,6 +401,7 @@ async def get_anthropic_request_target(request: Request, form_data: dict, user:
+     url, key, api_config = await get_openai_connection(model['urlIdx'])
+     prefix_id = api_config.get('prefix_id')
+     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
++    payload = prepare_free_llm_payload(api_config, url, key, payload)
+ 
+     headers, cookies = await get_headers_and_cookies(request, url, key, api_config, user=user)
+ 
+@@ -1411,7 +1424,10 @@ async def generate_chat_completion(
+     if not await Config.get('openai.enable'):
+         raise HTTPException(status_code=503, detail='OpenAI API is disabled')
+ 
+-    # Let DB helpers own short-lived sessions so remote calls and streams do not hold pool connections.
++    # NOTE: We intentionally do NOT use Depends(get_async_session) here.
++    # Database operations (get_model_by_id, AccessGrants.has_access) manage their own short-lived sessions.
++    # This prevents holding a connection during the entire LLM call (30-60+ seconds),
++    # which would exhaust the connection pool under concurrent load.
+ 
+     # bypass_filter and bypass_system_prompt are read from request.state to prevent
+     # external clients from setting them via query parameter. Only internal
+@@ -1474,6 +1490,12 @@ async def generate_chat_completion(
+ 
+     prefix_id = api_config.get('prefix_id', None)
+     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
++    payload = prepare_free_llm_payload(api_config, url, key, payload)
++
++    payload = apply_strata_reasoning_profile(
++        payload, author_template=has_strata_author_template(model_info),
++        supported_modes=getattr(getattr(model_info, 'meta', None), 'strata_reasoning_modes', None),
++    )
+ 
+     # Add user info to the payload if the model is a pipeline
+     if 'pipeline' in model and model.get('pipeline'):
+@@ -1708,6 +1730,7 @@ async def embeddings(request: Request, form_data: dict, user):
+     url, key, api_config = await get_openai_connection(idx)
+ 
+     form_data['model'] = strip_provider_model_prefix(form_data['model'], api_config.get('prefix_id'))
++    form_data = prepare_free_llm_payload(api_config, url, key, form_data)
+     # Prepare payload/body
+     body = JSONCodec.dumps(form_data)
+ 
+@@ -1842,6 +1865,7 @@ async def responses(
+     url, key, api_config = await get_openai_connection(idx)
+ 
+     payload['model'] = strip_provider_model_prefix(payload['model'], api_config.get('prefix_id'))
++    payload = prepare_free_llm_payload(api_config, url, key, payload)
+     body = JSONCodec.dumps(payload)
+ 
+     r = None
+diff --git a/backend/open_webui/utils/audit.py b/backend/open_webui/utils/audit.py
+index edd0cbffe454ea4dfbdba6aa9d6073232800fb22..1b6d52058ea913e5b07eb7eaabd55f4213650130 100644
+--- a/backend/open_webui/utils/audit.py
++++ b/backend/open_webui/utils/audit.py
+@@ -214,7 +214,12 @@ class AuditLoggingMiddleware:
+ 
+         request.state.audit_request_id = str(uuid.uuid4())
+         request.state.audit_level = self.audit_level.value
+-        capture_body = not (request.url.path.startswith('/api/v1/auths') or request.url.path.startswith('/oauth/'))
++        capture_body = not (
++            request.url.path.startswith('/api/v1/auths')
++            or request.url.path.startswith('/oauth/')
++            or request.url.path.startswith('/api/v1/local-providers/')
++            or re.fullmatch(r'/api/v1/users/[^/]+/api_key(?:/rotate)?',request.url.path) is not None
++        )
+         async with self._audit_context(request) as context:
+ 
+             async def send_wrapper(message: ASGISendEvent) -> None:
+diff --git a/backend/open_webui/utils/headers.py b/backend/open_webui/utils/headers.py
+index 36d5bb07c79e2fd3f91cb9b3cd46e3a38759852f..f716f0a8f5f26fd835177c698e73a8c015c46ab7 100644
+--- a/backend/open_webui/utils/headers.py
++++ b/backend/open_webui/utils/headers.py
+@@ -181,6 +181,11 @@ async def get_headers_and_cookies(
+     user=None,
+ ):
+     config = config or {}
++    if config.get('provider') == 'freellm':
++        from open_webui.utils.free_llm import check_free_llm_request
++        check_free_llm_request(config, url, key)
++        # Never forward OWUI identities/session cookies to anonymous cloud services.
++        return {'Content-Type': 'application/json'}, {}
+     cookies = getattr(request, 'cookies', {}) if config.get('forward_cookies', False) else {}
+     headers = {
+         'Content-Type': 'application/json',
+diff --git a/backend/open_webui/utils/middleware.py b/backend/open_webui/utils/middleware.py
+index c7cd93798678160f33fbad1c7d4616d312f05e07..038a77d0272262b93700b7406d758c17b2d11950 100644
+--- a/backend/open_webui/utils/middleware.py
++++ b/backend/open_webui/utils/middleware.py
+@@ -1903,13 +1903,17 @@ def strip_reasoning_details(output: list) -> list:
+ 
+ def strip_tool_images(output: list, model: dict) -> list:
+     """Replace tool result images with a text note when the model has Vision turned off."""
+-    if (model.get('info', {}).get('meta', {}).get('capabilities') or {}).get('vision', True):
++    capabilities=(((model.get('info') or {}).get('meta') or {}).get('capabilities') or {})
++    if capabilities.get('vision', True):
+         return output
+     stripped_output = []
+     for item in output:
+         if isinstance(item, dict) and item.get('type') == 'function_call_output':
++            if not isinstance(item.get('output'),list):
++                stripped_output.append(item)
++                continue
+             parts = [
+-                {'type': 'input_text', 'text': '\n[image]'} if part.get('type') == 'input_image' else part
++                {'type': 'input_text', 'text': '\n[image]'} if isinstance(part,dict) and part.get('type') == 'input_image' else part
+                 for part in item.get('output', [])
+             ]
+             item = {**item, 'output': parts}
+diff --git a/backend/open_webui/utils/models.py b/backend/open_webui/utils/models.py
+index 40e44f303b80ada010cab3dd0b7f4380ed41bdfe..f979389a34923c1d2e8fd0ff5ec2eb4a460c7b10 100644
+--- a/backend/open_webui/utils/models.py
++++ b/backend/open_webui/utils/models.py
+@@ -362,7 +362,10 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
+ 
+     # Apply global model defaults to all models
+     # Per-model overrides take precedence over global defaults
+-    default_metadata = config.get('models.default_metadata') or {}
++    # Avatars are creation defaults, not a replacement for existing sphere/custom choices.
++    default_metadata = {
++        key: value for key, value in (config.get('models.default_metadata') or {}).items() if key != 'voice_avatar'
++    }
+ 
+     if default_metadata:
+         for model in models:
+diff --git a/backend/open_webui/utils/response.py b/backend/open_webui/utils/response.py
+index 374b5b49045e33e6727b31a1f3ac41b9511d845d..28e3e7d766814cce91884e45df5745c452aba4d8 100644
+--- a/backend/open_webui/utils/response.py
++++ b/backend/open_webui/utils/response.py
+@@ -1,5 +1,6 @@
+ import time
+ from numbers import Number
++from typing import AsyncIterator
+ from uuid import uuid4
+ 
+ from open_webui.utils.json_codec import JSONCodec
+diff --git a/src/lib/apis/index.ts b/src/lib/apis/index.ts
+index cdcd56a52a17fd4725df955cc4d9092bc8499d9f..de585c18df798b27a796352dfdd9dc3fcaf0f0f6 100644
+--- a/src/lib/apis/index.ts
++++ b/src/lib/apis/index.ts
+@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
+ import { config, selectedTerminalId, selectedFolder, chatId } from '$lib/stores';
+ import { WEBUI_BASE_URL } from '$lib/constants';
+ import { convertOpenApiToToolPayload, resolveSchema } from '$lib/utils';
++import { filterToolServerSpecs } from '$lib/utils/toolServerPolicy.js';
+ import { normalizeTags } from '$lib/utils/tags';
+ import { getOpenAIModelsDirect } from './openai';
+ 
+@@ -513,10 +514,11 @@ export const getToolServersData = async (servers: object[]) => {
+ 						const { openapi, info, specs } = {
+ 							openapi: res,
+ 							info: res.info,
+-							specs: convertOpenApiToToolPayload(res)
++                            specs: filterToolServerSpecs(convertOpenApiToToolPayload(res), server?.config?.function_name_filter_list)
+ 						};
+ 
+ 						const result: Record<string, any> = {
++                            ...(server?.id != null ? { id: server.id } : {}),
+ 							url: server?.url,
+ 							openapi: openapi,
+ 							info: info,
+diff --git a/src/lib/components/chat/Chat.svelte b/src/lib/components/chat/Chat.svelte
+index b7303596917b4f07af3519e5fcc9e72209deedea..3381181d844ba7bd6cbbef8f356c8b10c8f72d27 100644
+--- a/src/lib/components/chat/Chat.svelte
++++ b/src/lib/components/chat/Chat.svelte
+@@ -1,4 +1,7 @@
+ <script lang="ts">
++	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
++	import { isSelectedDirectToolServer } from '$lib/utils/toolServerPolicy.js';
++	import { applyStrataReasoning } from '$lib/utils/strataReasoning';
+ 	import { resolveToolApprovalMode } from '$lib/utils/toolPermissions';
+ 	import type { TerminalContext } from '$lib/types';
+ 	import {
+@@ -3724,7 +3727,8 @@
+ 	const submitPrompt = async (
+ 		inputContent: string,
+ 		inputFiles: any[],
+-		bridgeRequest: { userMessageId: string; modelId: string } | null = null
++		bridgeRequest: { userMessageId: string; modelId: string } | null = null,
++		microphoneMeta: {input_source: string} | undefined = undefined
+ 	) => {
+ 		const _files = structuredClone(inputFiles);
+ 
+@@ -3750,6 +3754,7 @@
+ 			user: { id: $user?.id, name: $user?.name },
+ 			user_id: $user?.id,
+ 			content: inputContent,
++			meta: microphoneMeta,
+ 			files: _files.length > 0 ? _files : undefined,
+ 			timestamp: Math.floor(Date.now() / 1000), // Unix epoch
+ 			models: selectedModels
+@@ -3992,6 +3997,7 @@
+ 			}
+ 		}
+ 		if (processing === 'uploading') return { status: 'deferred' };
++		const microphoneMeta = __assistantMicOrigin.peek(userPrompt);
+ 		emitTyping(false);
+ 		if (bridgeRequest && (selectedModelIds.length !== 1 || !bridgeRequest.modelId))
+ 			return { status: 'rejected' };
+@@ -4169,7 +4175,7 @@
+ 		messageInput?.setText('');
+ 
+ 		return (
+-			(await submitPrompt(userPrompt, _files, bridgeRequest)) ?? {
++			(await submitPrompt(userPrompt, _files, bridgeRequest, microphoneMeta)) ?? {
+ 				status: 'rejected'
+ 			}
+ 		);
+@@ -4522,12 +4528,7 @@
+ 		for (const toolId of selectedToolIds) {
+ 			if (toolId.startsWith('direct_server:')) {
+ 				let serverId = toolId.replace('direct_server:', '');
+-				// Check if serverId is a number
+-				if (!isNaN(parseInt(serverId))) {
+-					toolServerIds.push(parseInt(serverId));
+-				} else {
+-					toolServerIds.push(serverId);
+-				}
++				toolServerIds.push(serverId);
+ 			} else {
+ 				toolIds.push(toolId);
+ 			}
+@@ -4549,12 +4550,12 @@
+ 				stream: stream,
+ 				model: model.id,
+ 				...(messages.length > 0 ? { messages } : {}),
+-				params: {
++				params: applyStrataReasoning({
+ 					...$settings?.params,
+ 					...Object.fromEntries(Object.entries(params).filter(([, value]) => value !== null)),
+ 					model_controls: $settings?.params?.model_controls ?? {},
+ 					stop: getStopTokens()
+-				},
++				}, model, $settings.strataReasoningEfforts),
+ 
+ 				files: embedded
+ 					? [...(files ?? []), ...noteFiles]
+@@ -4580,7 +4581,7 @@
+ 				tool_servers: $config?.features?.enable_tool_servers
+ 					? [
+ 							...($toolServers ?? []).filter(
+-								(server, idx) => toolServerIds.includes(idx) || toolServerIds.includes(server?.id)
++								(server, idx) => isSelectedDirectToolServer(server, idx, toolServerIds)
+ 							),
+ 							// Direct terminal servers — always included when enabled (not routed through selectedToolIds)
+ 							...(terminalEnabled
+@@ -4593,7 +4594,7 @@
+ 								: [])
+ 						]
+ 					: [],
+-				features: getFeatures(),
++				features: {...getFeatures(), dictation: !!(userMessage?.meta?.input_source === "microphone")},
+ 				variables: {
+ 					...getPromptVariables(
+ 						$user?.name,
+diff --git a/src/lib/components/chat/ChatTabs/SideChat.svelte b/src/lib/components/chat/ChatTabs/SideChat.svelte
+index b97ee206e2894efd40d87ae64b0bd41398de1868..920854752f3e472adbef365ef9e9e6ec5f016488 100644
+--- a/src/lib/components/chat/ChatTabs/SideChat.svelte
++++ b/src/lib/components/chat/ChatTabs/SideChat.svelte
+@@ -1,4 +1,6 @@
+ <script lang="ts">
++	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
++	import { isSelectedDirectToolServer } from '$lib/utils/toolServerPolicy.js';
+ 	import { resolveToolApprovalMode } from '$lib/utils/toolPermissions';
+ 	import { getContext, onMount, tick } from 'svelte';
+ 	import { v4 as uuidv4 } from 'uuid';
+@@ -387,6 +389,7 @@
+ 				childrenIds: [] as string[],
+ 				role: 'user',
+ 				content: question,
++				meta: __assistantMicOrigin.peek(draft, inputId),
+ 				files: [...files],
+ 				done: true,
+ 				timestamp: Math.floor(Date.now() / 1000),
+@@ -470,7 +473,7 @@
+ 					? [
+ 							...($toolServers ?? []).filter(
+ 								(server: any, index) =>
+-									directServers.includes(String(index)) || directServers.includes(server.id)
++									isSelectedDirectToolServer(server, index, directServers)
+ 							),
+ 							...($terminalServers ?? []).filter((server) => !server.id)
+ 						]
+@@ -688,4 +691,4 @@
+ 			</ConfirmDialog>
+ 		{/if}
+ 	{/key}
+-{/if}
++{/if}
+\ No newline at end of file
+diff --git a/src/lib/components/chat/MessageInput.svelte b/src/lib/components/chat/MessageInput.svelte
+index 82fea459b34ce1925e0a4538f20cef5a056cf226..f8e9072dec07892781f23603346fd87620c42565 100644
+--- a/src/lib/components/chat/MessageInput.svelte
++++ b/src/lib/components/chat/MessageInput.svelte
+@@ -1,4 +1,5 @@
+ <script lang="ts">
++	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
+ 	import type { TerminalContext } from '$lib/types';
+ 	import {
+ 		estimateTokens,
+@@ -92,6 +93,7 @@
+ 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
+ 	import ModelSelector from './ModelSelector.svelte';
+ 	import ModelControls from './MessageInput/ModelControls.svelte';
++	import StrataReasoning from './MessageInput/StrataReasoning.svelte';
+ 
+ 	import ToolServersModal from './ToolServersModal.svelte';
+ 	import SkillsModal from './SkillsModal.svelte';
+@@ -1059,11 +1061,11 @@
+ 		files = files;
+ 		try {
+ 			const terminal = getFilesystemUploadTerminal(fileItem.terminal_id);
+-			if (!terminal) throw new Error('The attached file’s terminal is unavailable.');
++			if (!terminal) throw new Error($i18n.t('The attached file’s terminal is unavailable.'));
+ 			if (fileItem.session_id && fileItem.session_id !== sessionId)
+-				throw new Error('Attached files must belong to this chat.');
++				throw new Error($i18n.t('Attached files must belong to this chat.'));
+ 			if (terminal.contexts?.chat?.context_id === 'chat_id' && !isSavedChatId(sessionId))
+-				throw new Error('A saved chat is required for this terminal');
++				throw new Error($i18n.t('A saved chat is required for this terminal'));
+ 
+ 			const cwd =
+ 				(terminalContext?.terminalId === fileItem.terminal_id
+@@ -2005,6 +2007,7 @@
+ 
+ 								await tick();
+ 								await insertTextAtCursor(`${text}`);
++								__assistantMicOrigin.mark(prompt, inputId);
+ 								await tick();
+ 								focus({ preventScroll: true });
+ 
+@@ -2320,6 +2323,7 @@
+ 													id={inputId}
+ 													editable={!showInputModal}
+ 													onChange={(content) => {
++														__assistantMicOrigin.change(content.md, inputId);
+ 														prompt = content.md;
+ 														inputContent = content;
+ 														command = getCommand();
+@@ -2877,6 +2881,7 @@
+ 											triggerClassName="items-center gap-1.5 rounded-lg pl-2 pr-1.5 py-1 text-[0.8125rem] font-normal text-gray-600 transition-colors duration-100 hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
+ 										/>
+ 									</div>
++									<StrataReasoning selectedModels={selectedModelIds} disabled={generating} />
+ 									<ModelControls
+ 										selectedModels={selectedModelIds}
+ 										bind:chatFiles
+diff --git a/src/lib/components/workspace/Models/ModelEditor.svelte b/src/lib/components/workspace/Models/ModelEditor.svelte
+index 75e658b3d36bb374e664d353d43e5c3ce1f0f7b3..0631542e594b20f8efb7a1676b883b1302ed47fd 100644
+--- a/src/lib/components/workspace/Models/ModelEditor.svelte
++++ b/src/lib/components/workspace/Models/ModelEditor.svelte
+@@ -58,6 +58,7 @@
+ 	import Photo from '$lib/components/icons/Photo.svelte';
+ 	import {
+ 		avatarAssetIds,
++		resolveModelAvatar,
+ 		type AnimationFiles,
+ 		type VoiceAvatarConfig
+ 	} from '$lib/utils/voice-avatar';
+@@ -662,6 +663,7 @@
+ 	const loadModel = async (value: any) => {
+ 		customPromptDraft = null;
+ 		model = value ? structuredClone(value) : null;
++		voiceAvatar = resolveModelAvatar(model?.meta, edit, defaultMeta.voice_avatar ?? null);
+ 		backgroundFile = null;
+ 		avatarFile = null;
+ 		animationFiles = {};
+@@ -671,7 +673,6 @@
+ 		if (model) {
+ 			model.meta ??= {};
+ 			name = model.name;
+-			voiceAvatar = model.meta?.voice_avatar ? structuredClone(model.meta.voice_avatar) : null;
+ 			await tick();
+ 
+ 			id = model.id;
+diff --git a/src/lib/stores/index.ts b/src/lib/stores/index.ts
+index 7ad229a7df20ae063963c77d3381c0a95bfb5f80..c61118c92bb3531f6ba95306be4a0e8cbbecc520 100644
+--- a/src/lib/stores/index.ts
++++ b/src/lib/stores/index.ts
+@@ -272,6 +272,7 @@ type OllamaModelDetails = {
+ };
+ 
+ type Settings = {
++  strataReasoningEfforts?: Record<string, string>;
+ 	pinnedModels?: string[];
+ 	toolServers?: never[];
+ 	detectArtifacts?: boolean;
+diff --git a/src/lib/utils/assistantCompatibility.js b/src/lib/utils/assistantCompatibility.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..29f683ba56a2519dc34418ac11f5715480523393
+--- /dev/null
++++ b/src/lib/utils/assistantCompatibility.js
+@@ -0,0 +1,69 @@
++// Copyright (c) 2026 aktalascloud. Distributed under the repository license.
++/* assistant microphone input v1 */
++const __assistantMicOrigin = (() => {
++  const drafts = new WeakMap(), bound = new WeakSet();
++  const editor = (inputId = "chat-input") => document.getElementById(inputId);
++  const normal = value => String(value || "").replace(/\s+/g, " ").trim();
++  return {
++    clear(inputId) { const node = editor(inputId); if (node) drafts.delete(node); },
++    mark(text, inputId) {
++      const node = editor(inputId), draft = String(text || "");
++      if (!node || !draft.trim()) return;
++      drafts.set(node, draft);
++      if (bound.has(node)) return;
++      bound.add(node);
++      node.addEventListener("beforeinput", () => {
++        const selection = globalThis.getSelection();
++        const all = normal(node.innerText || node.textContent);
++        if (all && selection && !selection.isCollapsed &&
++            node.contains(selection.anchorNode) && node.contains(selection.focusNode) &&
++            normal(selection.toString()) === all) drafts.delete(node);
++      });
++      node.addEventListener("input", () => {
++        if (!normal(node.textContent)) drafts.delete(node);
++      });
++    },
++    change(text, inputId) {
++      const node = editor(inputId);
++      if (!node || !drafts.has(node)) return;
++      const draft = String(text || "");
++      if (draft.trim()) drafts.set(node, draft); else drafts.delete(node);
++    },
++    peek(text, inputId) {
++      const node = editor(inputId), draft = node && drafts.get(node);
++      const content = String(text || "");
++      if (!draft || (content !== draft && !content.startsWith(
++          draft + "\n\nSelected note text for replace_note_content operations:\n"))) return;
++      return {input_source: "microphone"};
++    }
++  };
++})();
++/* assistant voice budget v1 */
++const __assistantVoiceBudget = (() => {
++  const states = new Map();
++  const cost = text => String(text || "").length + 6 * (String(text || "").match(/\d/g) || []).length;
++  return {
++    start(id, rate=1) { rate=Number(rate); if(!Number.isFinite(rate)||rate<=0)rate=1; states.set(id, {prefix: [], pending: [], used: 0, rate:Math.min(1,rate)}); while (states.size > 8) states.delete(states.keys().next().value); },
++    hold(id, text) {
++      const state = states.get(id); if (!state) return false;
++      const report = /(?:1[сc]:|выручк|прибыл|отч[её]т|дебитор|остатки)/iu.test(text);
++      if (state.pending.length || report || state.used + cost(text) > 240*state.rate) { state.pending.push(text); return true; }
++      state.prefix.push(text); state.used += cost(text); return false;
++    },
++    finish(id, chat) {
++      const state = states.get(id); states.delete(id);
++      if (!state || !state.pending.length) return null;
++      return {text: state.pending.join(" "), options: {speech_message_id: id, speech_chat_id: chat,
++        speech_prefix: state.prefix.join(" "), speech_max_chars: Math.max(80, Math.floor(900*state.rate) - state.used)}};
++    },
++    emoji(text) {
++      const explicit = String(text || "").match(/[😀😃😄😁😆😂🤣😊🙂😉😇🥰😍🤩😔😞😟😥😢😭🥺🥹❤👍🎉]/u);
++      if (explicit) return explicit[0];
++      if (/(?:сожалению|жаль|сочувств|груст)/iu.test(text)) return "😔";
++      if (/(?:ура|отлично|спасибо|поздрав|получилось)/iu.test(text)) return "😊";
++      return /\?/.test(text) ? "🤔" : null;
++    }
++  };
++})();
++
++export { __assistantMicOrigin, __assistantVoiceBudget };

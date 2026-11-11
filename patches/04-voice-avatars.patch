@@ -1,0 +1,506 @@
+diff --git a/.avx1/test_avatar_defaults.mjs b/.avx1/test_avatar_defaults.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..d4ee63283f1cee6ae73e802a7e4b0d499a1f14b4
+--- /dev/null
++++ b/.avx1/test_avatar_defaults.mjs
+@@ -0,0 +1,20 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { resolveModelAvatar } from '../src/lib/utils/voice-avatar.ts';
++
++const fallback = { file_id: 'default', states: {}, gestures: [] };
++test('blank and provider-based new cards inherit the default', () => {
++  assert.deepEqual(resolveModelAvatar(null, false, fallback), fallback);
++  assert.deepEqual(resolveModelAvatar({}, false, fallback), fallback);
++  assert.notEqual(resolveModelAvatar({}, false, fallback), fallback);
++});
++test('editing existing unassigned cards does not change them', () => {
++  assert.equal(resolveModelAvatar({}, true, fallback), null);
++});
++test('explicit sphere and custom choices survive create, clone and edit', () => {
++  const custom = { file_id: 'custom' };
++  for (const editing of [false, true]) {
++    assert.equal(resolveModelAvatar({ voice_avatar: null }, editing, fallback), null);
++    assert.deepEqual(resolveModelAvatar({ voice_avatar: custom }, editing, fallback), custom);
++  }
++});
+diff --git a/.avx1/test_avatar_limits.py b/.avx1/test_avatar_limits.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..00bf5b456b41c1637c05405f193d325a5b07aaf1
+--- /dev/null
++++ b/.avx1/test_avatar_limits.py
+@@ -0,0 +1,52 @@
++"""Upload-size and high-resolution texture limits; no model inference."""
++import importlib.util
++import ast
++import io
++from pathlib import Path
++import unittest
++from PIL import Image
++
++source=Path(__file__).resolve().parents[1]/'backend/open_webui/utils/voice_avatar.py'
++spec=importlib.util.spec_from_file_location('avatar_limits',source)
++module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
++
++
++class Limits(unittest.TestCase):
++    def test_catalog_defaults_do_not_retroactively_assign_avatars(self):
++        path=source.parent/'models.py'
++        tree=ast.parse(path.read_text('utf-8'))
++        assignments=[n for n in ast.walk(tree) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='default_metadata' for t in n.targets)]
++        self.assertEqual(len(assignments),1)
++        defaults={'voice_avatar':{'file_id':'fixture'},'capabilities':{'vision':True}}
++        namespace={'config':{'models.default_metadata':defaults}}
++        exec(compile(ast.Module(body=assignments,type_ignores=[]),str(path),'exec'),namespace)
++        self.assertEqual(namespace['default_metadata'],{'capabilities':{'vision':True}})
++        self.assertIn('voice_avatar',defaults)
++
++    def test_new_card_inherits_avatar_without_overwriting_explicit_choices(self):
++        chosen={'file_id':'fixture','states':{},'gestures':[]}
++        self.assertEqual(module.new_model_avatar_default({}, {'voice_avatar':chosen}), chosen)
++        self.assertIsNone(module.new_model_avatar_default({'voice_avatar':None}, {'voice_avatar':chosen}))
++        self.assertIsNone(module.new_model_avatar_default({'voice_avatar':{'file_id':'custom'}}, {'voice_avatar':chosen}))
++        self.assertIsNone(module.new_model_avatar_default({}, {}))
++
++    def texture(self,size,count=1):
++        output=io.BytesIO();Image.new('L',size).save(output,format='PNG');data=output.getvalue()
++        model={'images':[{'bufferView':0,'mimeType':'image/png'} for _ in range(count)],
++               'bufferViews':[{'buffer':0,'byteOffset':0,'byteLength':len(data)}]}
++        return model,data
++
++    def test_upload_is_twenty_mib(self):
++        self.assertEqual(module.AVATAR_MAX_BYTES,20*1024*1024)
++        with self.assertRaisesRegex(ValueError,'20 MiB'):
++            module.validate_voice_avatar(bytes(20*1024*1024+1))
++
++    def test_4k_and_8k_are_allowed_with_a_total_budget(self):
++        for size,count in [((4096,4096),4),((8192,8192),1)]:
++            model,data=self.texture(size,count);module._validate_textures(model,data,0,len(data))
++        model,data=self.texture((8192,8192),3)
++        with self.assertRaisesRegex(ValueError,'128 megapixel'):
++            module._validate_textures(model,data,0,len(data))
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/backend/open_webui/utils/voice_avatar.py b/backend/open_webui/utils/voice_avatar.py
+index 41444b30d3802afdc1472df573bc94960cd5f9f0..4d7ec404d34aa0da8eda351cd8e309db384e22b1 100644
+--- a/backend/open_webui/utils/voice_avatar.py
++++ b/backend/open_webui/utils/voice_avatar.py
+@@ -6,7 +6,12 @@ import struct
+ 
+ from PIL import Image
+ 
+-AVATAR_MAX_BYTES = 25 * 1024 * 1024
++AVATAR_MAX_BYTES = 20 * 1024 * 1024
++
++
++def new_model_avatar_default(meta: dict, defaults: dict):
++    """Only an omitted choice inherits; explicit sphere/custom choices win."""
++    return defaults.get('voice_avatar') if 'voice_avatar' not in meta else None
+ 
+ 
+ def avatar_animation_tools(gestures):
+@@ -55,7 +60,7 @@ def validate_voice_avatar(data: bytes) -> None:
+ 
+ def _validate(data: bytes) -> None:
+     if len(data) > AVATAR_MAX_BYTES:
+-        raise ValueError('Avatar must be at most 25 MiB.')
++        raise ValueError('Avatar must be at most 20 MiB.')
+     magic, version, size, json_size, chunk = struct.unpack_from('<5I', data)
+     if magic != 0x46546C67 or version != 2 or size != len(data) or chunk != 0x4E4F534A:
+         raise ValueError('Upload a binary VRM file.')
+@@ -96,8 +101,10 @@ def _validate_textures(model: dict, data: bytes, start: int, binary_size: int) -
+             raise ValueError('Invalid embedded avatar texture.')
+         with Image.open(io.BytesIO(data[start + offset : start + offset + length])) as texture:
+             pixels += texture.width * texture.height
+-            if max(texture.size) > 4096 or pixels > 32 * 1024 * 1024:
+-                raise ValueError('Avatar textures are too large. Export at 2048px or below.')
++            if max(texture.size) > 8192:
++                raise ValueError('Avatar textures must be at most 8192 px per side.')
++            if pixels > 128 * 1024 * 1024:
++                raise ValueError('Avatar textures exceed the 128 megapixel total budget.')
+             texture.verify()
+ 
+ 
+diff --git a/src/lib/apis/audio/index.ts b/src/lib/apis/audio/index.ts
+index d7376b9aaff255f8a91bdc9153aebf05ebf661b8..c5a84b4e0d24909637c2f8b216e3c3da24fc12c4 100644
+--- a/src/lib/apis/audio/index.ts
++++ b/src/lib/apis/audio/index.ts
+@@ -113,7 +113,8 @@ export const synthesizeOpenAISpeech = async (
+ 	token: string = '',
+ 	speaker: string = 'alloy',
+ 	text: string = '',
+-	model?: string
++	model?: string,
++	speechOptions: Record<string, unknown> = {}
+ ) => {
+ 	let error = null;
+ 
+@@ -126,7 +127,8 @@ export const synthesizeOpenAISpeech = async (
+ 		body: JSON.stringify({
+ 			input: text,
+ 			voice: speaker,
+-			...(model && { model })
++			...(model && { model }),
++			...speechOptions
+ 		})
+ 	})
+ 		.then(async (res) => {
+diff --git a/src/lib/components/chat/MessageInput/CallOverlay.svelte b/src/lib/components/chat/MessageInput/CallOverlay.svelte
+index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504eed1f02e 100644
+--- a/src/lib/components/chat/MessageInput/CallOverlay.svelte
++++ b/src/lib/components/chat/MessageInput/CallOverlay.svelte
+@@ -1,4 +1,5 @@
+ <script lang="ts">
++	import { __assistantVoiceBudget } from '$lib/utils/assistantCompatibility.js';
+ 	import { config, models, settings, showCallOverlay, TTSWorker } from '$lib/stores';
+ 	import { onMount, tick, getContext, onDestroy, createEventDispatcher } from 'svelte';
+ 
+@@ -611,19 +612,14 @@
+ 	const audioCache = new Map();
+ 	const emojiCache = new Map();
+ 
+-	const fetchAudio = async (content) => {
++	const fetchAudio = async (content, speechOptions = {}) => {
+ 		const id = currentMessageId;
+ 
+ 		if (!audioCache.has(content) && !failedMessages[id]) {
+ 			try {
+ 				// Set the emoji for the content if needed
+ 				if ($settings?.showEmojiInCall ?? false) {
+-					const emoji = await generateEmoji(localStorage.token, modelId, content, chatId).catch(
+-						(error) => {
+-							console.error(error);
+-							return null;
+-						}
+-					);
++					const emoji = __assistantVoiceBudget.emoji(content);
+ 					if (emoji) {
+ 						emojiCache.set(content, emoji);
+ 					}
+@@ -644,7 +640,7 @@
+ 						audioCache.set(content, new Audio(url));
+ 					}
+ 				} else if ($config.audio.tts.engine !== '') {
+-					const res = await synthesizeOpenAISpeech(localStorage.token, getVoiceId(), content).catch(
++					const res = await synthesizeOpenAISpeech(localStorage.token, getVoiceId(), content, undefined, speechOptions).catch(
+ 						(error) => {
+ 							console.error(error);
+ 							if (!failedMessages[id]) {
+@@ -739,6 +735,7 @@
+ 
+ 			void stopAllAudio(false);
+ 			currentMessageId = id;
++			__assistantVoiceBudget.start(id, $settings?.audio?.tts?.playbackRate ?? 1);
+ 			interrupted = false;
+ 			audioAbortController = new AbortController();
+ 
+@@ -753,6 +750,7 @@
+ 		// Collect assistant sentences only for the active message ID.
+ 
+ 		if (currentMessageId === id) {
++			if ($config.audio.tts.engine === "openai" && $settings?.audio?.tts?.engine !== "browser-kokoro" && __assistantVoiceBudget.hold(id, content)) return;
+ 			console.log(`Received chat event for message ID ${id}: ${content}`);
+ 
+ 			try {
+@@ -774,6 +772,11 @@
+ 	const chatFinishHandler = async (e) => {
+ 		const { id, content } = e.detail;
+ 		// "content" here is the entire message from the assistant
++		const speech = __assistantVoiceBudget.finish(id, chatId);
++		if (speech && currentMessageId === id && !interrupted) {
++			(messages[id] ??= []).push(speech.text);
++			fetchAudio(speech.text, speech.options);
++		}
+ 		finishedMessages[id] = true;
+ 
+ 		chatStreaming = false;
+@@ -994,14 +997,14 @@
+ 
+ 		<div class="flex justify-center items-center flex-1 h-full w-full max-h-full">
+ 			{#if !camera}
+-				<button
+-					type="button"
++				<svelte:element this={showAvatar ? 'div' : 'button'}
++					type={showAvatar ? undefined : 'button'} role={showAvatar ? 'group' : undefined}
+ 					class={showAvatar
+ 						? 'relative w-full h-full min-h-64 flex items-center justify-center'
+ 						: ''}
+-					aria-label={assistantSpeaking ? $i18n.t('Stop speaking') : $i18n.t('Voice call')}
++					aria-label={showAvatar ? $i18n.t('Voice avatar') : assistantSpeaking ? $i18n.t('Stop speaking') : $i18n.t('Voice call')}
+ 					on:click={() => {
+-						if (assistantSpeaking) {
++						if (!showAvatar && assistantSpeaking) {
+ 							stopAllAudio();
+ 						}
+ 					}}
+@@ -1014,6 +1017,9 @@
+ 								class:invisible={readyAvatar !== selectedAvatar.file_id}
+ 							>
+ 								<VoiceAvatar
++                                    showControls={true}
++                                    canInterrupt={assistantSpeaking}
++                                    onInterrupt={stopAllAudio}
+ 									bind:this={avatarView}
+ 									config={selectedAvatar}
+ 									speaking={avatarSpeaking}
+@@ -1099,7 +1105,7 @@
+ 							/>
+ 						{/if}
+ 					{/if}
+-				</button>
++				</svelte:element>
+ 			{:else}
+ 				<div class="relative flex video-container w-full max-h-full pt-2 pb-4 md:py-6 px-2 h-full">
+ 					<!-- svelte-ignore a11y-media-has-caption -->
+diff --git a/src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte b/src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte
+index ab31ea9f6a15ab842932ca32995945086359d691..d1102632696f2edb8b3e4d579400637138d0db07 100644
+--- a/src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte
++++ b/src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte
+@@ -61,13 +61,13 @@
+ 
+ <section class="bridge-call" class:avatar-call={showAvatar} aria-label={$i18n.t('Voice call')}>
+ 	<div class="call-stage">
+-		<button
+-			type="button"
++		<svelte:element this={showAvatar ? 'div' : 'button'}
++			type={showAvatar ? undefined : 'button'} role={showAvatar ? 'group' : undefined}
+ 			class="orb-button"
+ 			class:avatar-button={showAvatar}
+-			disabled={!bridge.speaking}
+-			aria-label={$i18n.t('Stop speaking')}
+-			on:click={() => bridge.stopSpeaking()}
++			disabled={showAvatar ? undefined : !bridge.speaking}
++			aria-label={showAvatar ? $i18n.t('Voice avatar') : $i18n.t('Stop speaking')}
++			on:click={() => { if (!showAvatar) bridge.stopSpeaking(); }}
+ 		>
+ 			{#if showAvatar && avatar}
+ 				{@const selectedAvatar = avatar}
+@@ -78,6 +78,9 @@
+ 						class:loading-avatar={readyAvatar !== selectedAvatar.file_id}
+ 					>
+ 						<VoiceAvatar
++                            showControls={true}
++                            canInterrupt={bridge.speaking}
++                            onInterrupt={() => bridge.stopSpeaking()}
+ 							bind:this={avatarView}
+ 							interruption={bridge.animationInterruption}
+ 							config={selectedAvatar}
+@@ -113,7 +116,7 @@
+ 					muted={unavailable || (bridge.muted && !bridge.speaking)}
+ 				/>
+ 			{/if}
+-		</button>
++		</svelte:element>
+ 
+ 		<div class="call-status" role="status" aria-live="polite" aria-atomic="true">
+ 			<p class="status-label">
+@@ -122,7 +125,7 @@
+ 			</p>
+ 			<p class="status-hint">
+ 				{#if bridge.speaking}
+-					{bridge.muted ? $i18n.t('Microphone off') : $i18n.t('Tap to interrupt')}
++					{showAvatar ? $i18n.t('Drag to rotate; pinch or scroll to zoom. Double-tap to reset.') : bridge.muted ? $i18n.t('Microphone off') : $i18n.t('Tap to interrupt')}
+ 				{:else if bridge.muted && bridge.connected}
+ 					{$i18n.t('Unmute to continue')}
+ 				{/if}
+diff --git a/src/lib/components/chat/MessageInput/CallOverlay/VoiceAvatar.svelte b/src/lib/components/chat/MessageInput/CallOverlay/VoiceAvatar.svelte
+index 1818a4d2535fc3c34ad46b45f76d70adddc27558..e75216366413ebff93e1fab446b35a63ae37f6b2 100644
+--- a/src/lib/components/chat/MessageInput/CallOverlay/VoiceAvatar.svelte
++++ b/src/lib/components/chat/MessageInput/CallOverlay/VoiceAvatar.svelte
+@@ -1,5 +1,5 @@
+ <script lang="ts">
+-	import { createEventDispatcher, onMount } from 'svelte';
++	import { createEventDispatcher, getContext, onMount } from 'svelte';
+ 	import { WEBUI_API_BASE_URL } from '$lib/constants';
+ 	import {
+ 		avatarAssetIds,
+@@ -16,6 +16,10 @@
+ 	export let active = true;
+ 	export let animationFiles: AnimationFiles = {};
+ 	export let interruption = 0;
++	export let showControls = false;
++	export let canInterrupt = false;
++	export let onInterrupt: (() => void) | undefined = undefined;
++	const i18n = getContext<any>('i18n');
+ 	let lastInterruption = interruption;
+ 	let renderer: Awaited<ReturnType<typeof createAvatarRenderer>> | undefined;
+ 	let syncAnimations: ((config: VoiceAvatarConfig, files: AnimationFiles) => void) | undefined;
+@@ -208,6 +212,7 @@
+ 	});
+ </script>
+ 
++<div class="avatar-viewport">
+ <canvas
+ 	bind:this={canvas}
+ 	aria-hidden="true"
+@@ -223,7 +228,18 @@
+ 	on:wheel|nonpassive={wheel}
+ ></canvas>
+ 
++{#if showControls}
++  <div class="absolute top-2 right-2 z-10 flex gap-1 rounded-xl bg-gray-900/90 p-1 text-white" role="group" aria-label={$i18n.t('Voice avatar')}>
++    <button type="button" class="size-11 rounded-lg hover:bg-white/10 disabled:opacity-50" disabled={!renderer} aria-label={$i18n.t('Reset view')} title={$i18n.t('Reset view')} on:click|stopPropagation={() => renderer?.resetView()}>↺</button>
++    {#if onInterrupt}
++      <button type="button" class="size-11 rounded-lg text-red-300 hover:bg-white/10 disabled:opacity-50" disabled={!canInterrupt} aria-label={$i18n.t('Stop speaking')} title={$i18n.t('Stop speaking')} on:click|stopPropagation={() => onInterrupt?.()}>■</button>
++    {/if}
++  </div>
++{/if}
++</div>
++
+ <style>
++	.avatar-viewport { position: relative; width: 100%; height: 100%; }
+ 	.avatar-canvas {
+ 		display: block;
+ 		width: 100%;
+diff --git a/src/lib/components/workspace/Models/VoiceAvatarEditor.svelte b/src/lib/components/workspace/Models/VoiceAvatarEditor.svelte
+index 081c3668426707f95f3d434cfca344fdfabffd7f..5adc5021f95bd24bc158b655a7ebed95199e79ee 100644
+--- a/src/lib/components/workspace/Models/VoiceAvatarEditor.svelte
++++ b/src/lib/components/workspace/Models/VoiceAvatarEditor.svelte
+@@ -110,7 +110,7 @@
+ 		input.value = '';
+ 		if (!selected) return;
+ 		if (selected.size > AVATAR_MAX_BYTES || !/\.(vrm|glb)$/i.test(selected.name)) {
+-			error = $i18n.t('Choose a VRM file, up to 25 MiB.');
++			error = $i18n.t('Choose a VRM file, up to 20 MiB.');
+ 			return;
+ 		}
+ 		stopPreview();
+@@ -172,7 +172,7 @@
+ 						error = '';
+ 					}}
+ 					on:error={(event) => {
+-						error = event.detail?.message ?? $i18n.t('Could not load avatar.');
++						error = $i18n.t(event.detail?.message ?? 'Could not load avatar.');
+ 						ready = false;
+ 						avatarValid = !file;
+ 						stopPreview();
+@@ -376,7 +376,7 @@
+ 	</div>
+ 	<p class="text-xs text-gray-500 mt-2">
+ 		{$i18n.t(
+-			'VRM 0.x or 1.0 · 25 MiB max · Embedded textures. Upload a character you have permission to use.'
++			'VRM 0.x or 1.0 · 20 MiB max · Embedded textures up to 8192 px. Upload a character you have permission to use.'
+ 		)}
+ 	</p>
+ </fieldset>
+diff --git a/src/lib/utils/avatar-texture-loader.js b/src/lib/utils/avatar-texture-loader.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..8d242ef212c65ac9606f41037cc2187901127655
+--- /dev/null
++++ b/src/lib/utils/avatar-texture-loader.js
+@@ -0,0 +1,20 @@
++// Preserve original VRM files; bound decoded GPU textures on each device.
++export function textureResizePlan(images,budget=32*1024*1024,maxEdge=4096) {
++  if(images.some(i=>!Number.isFinite(i.width)||!Number.isFinite(i.height)||i.width<1||i.height<1))throw Error('Invalid texture dimensions');
++  const total=images.reduce((sum,i)=>sum+i.width*i.height,0);
++  const scale=Math.min(1,Math.sqrt(budget/Math.max(1,total)));
++  return images.map(i=>{const s=Math.min(scale,maxEdge/Math.max(i.width,i.height));return {width:Math.max(1,Math.floor(i.width*s)),height:Math.max(1,Math.floor(i.height*s))};});
++}
++
++export function boundedBitmapLoader(images) {
++  const plans=textureResizePlan(images),bySize=new Map();
++  images.forEach((image,index)=>{const list=bySize.get(image.data.byteLength)||[];list.push({image,plan:plans[index]});bySize.set(image.data.byteLength,list);});
++  async function decode(url) {
++    if(!url.startsWith('blob:'))throw Error('External textures are blocked');
++    const response=await fetch(url),data=new Uint8Array(await response.arrayBuffer());
++    const item=(bySize.get(data.byteLength)||[]).find(({image})=>data.every((byte,index)=>byte===image.data[index]));
++    if(!item)throw Error('Texture was not validated');
++    return createImageBitmap(new Blob([data]),{resizeWidth:item.plan.width,resizeHeight:item.plan.height,resizeQuality:'high',premultiplyAlpha:'none',colorSpaceConversion:'none'});
++  }
++  return {isImageBitmapLoader:true,load(url,onLoad,_progress,onError){decode(url).then(onLoad,onError);}};
++}
+diff --git a/src/lib/utils/voice-avatar-renderer.ts b/src/lib/utils/voice-avatar-renderer.ts
+index 2adb8c60eb1f555e73d4abe4591d984046a8b336..036e7f7ae05cead05e9729038d0e34fd58a82a89 100644
+--- a/src/lib/utils/voice-avatar-renderer.ts
++++ b/src/lib/utils/voice-avatar-renderer.ts
+@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+ import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
+ import { loadBodyAnimation } from './voice-avatar-animation';
+ import { validateAvatar, type VoiceAvatarConfig } from './voice-avatar';
++import {boundedBitmapLoader} from './avatar-texture-loader.js';
+ 
+ export type AvatarSignals = {
+ 	speaking: boolean;
+@@ -16,7 +17,7 @@ export async function createAvatarRenderer(
+ 	data: ArrayBuffer,
+ 	signal: AbortSignal
+ ) {
+-	await validateAvatar(data);
++	const textures = await validateAvatar(data);
+ 	signal.throwIfAborted();
+ 	const manager = new THREE.LoadingManager();
+ 	manager.setURLModifier((url) => {
+@@ -24,7 +25,10 @@ export async function createAvatarRenderer(
+ 		return url;
+ 	});
+ 	const loader = new GLTFLoader(manager);
+-	loader.register((parser) => new VRMLoaderPlugin(parser));
++	loader.register((parser) => {
++		Object.assign(parser,{textureLoader:boundedBitmapLoader(textures)});
++		return new VRMLoaderPlugin(parser);
++	});
+ 	const gltf = await loader.parseAsync(data, '');
+ 	const vrm: VRM | undefined = gltf.userData.vrm;
+ 	if (!vrm || signal.aborted) {
+diff --git a/src/lib/utils/voice-avatar.ts b/src/lib/utils/voice-avatar.ts
+index 47445bfdd07257dc5e03121d6719fdd0a1e18ff0..f376236ab25870fb1427c86ada5d448f462cdb0c 100644
+--- a/src/lib/utils/voice-avatar.ts
++++ b/src/lib/utils/voice-avatar.ts
+@@ -1,4 +1,5 @@
+-export const AVATAR_MAX_BYTES = 25 * 1024 * 1024;
++export const AVATAR_MAX_BYTES = 20 * 1024 * 1024;
++const AVATAR_RENDER_MAX_BYTES = 25 * 1024 * 1024; // Existing installed avatars remain readable.
+ 
+ export type AvatarState = 'idle' | 'listening' | 'speaking';
+ export type AvatarAnimation = { file_id: string };
+@@ -20,6 +21,16 @@ export type VoiceAvatarConfig = {
+ 	gestures?: AvatarGesture[];
+ };
+ 
++export function resolveModelAvatar(
++	meta: { voice_avatar?: VoiceAvatarConfig | null } | null | undefined,
++	editing: boolean,
++	defaultAvatar: VoiceAvatarConfig | null
++): VoiceAvatarConfig | null {
++	if (meta && Object.prototype.hasOwnProperty.call(meta, 'voice_avatar'))
++		return structuredClone(meta.voice_avatar ?? null);
++	return editing ? null : structuredClone(defaultAvatar);
++}
++
+ export type AvatarAnimationResult = { status: 'started' | 'cancelled' | 'unavailable' };
+ export type AvatarAnimationCommand = {
+ 	name: string;
+@@ -68,7 +79,7 @@ export function routeAvatarAnimation(
+ 
+ // Validate before GLTFLoader can fetch resources or allocate GPU buffers.
+ export function readAvatar(data: ArrayBuffer) {
+-	if (data.byteLength > AVATAR_MAX_BYTES) throw new Error('Avatar must be at most 25 MiB.');
++	if (data.byteLength > AVATAR_RENDER_MAX_BYTES) throw new Error('Avatar must be at most 25 MiB.');
+ 	if (data.byteLength < 20) throw new Error('Upload a VRM 0.x or VRM 1.0 file.');
+ 	const view = new DataView(data);
+ 	if (
+@@ -134,6 +145,7 @@ export function readAvatar(data: ArrayBuffer) {
+ export async function validateAvatar(data: ArrayBuffer) {
+ 	const { json, binaryStart } = readAvatar(data);
+ 	let pixels = 0;
++	const textures: {data: Uint8Array; width: number; height: number}[] = [];
+ 	for (const image of json.images ?? []) {
+ 		const buffer = json.bufferViews?.[image.bufferView];
+ 		const start = binaryStart + (buffer?.byteOffset ?? 0);
+@@ -149,10 +161,12 @@ export async function validateAvatar(data: ArrayBuffer) {
+ 		const bitmap = await createImageBitmap(
+ 			new Blob([data.slice(start, start + buffer.byteLength)], { type: image.mimeType })
+ 		);
+-		const tooLarge = bitmap.width > 4096 || bitmap.height > 4096;
++		const tooLarge = bitmap.width > 8192 || bitmap.height > 8192;
+ 		pixels += bitmap.width * bitmap.height;
++		textures.push({data:new Uint8Array(data,start,buffer.byteLength),width:bitmap.width,height:bitmap.height});
+ 		bitmap.close();
+-		if (tooLarge || pixels > 32 * 1024 * 1024)
+-			throw new Error('Avatar textures are too large. Export at 2048px or below.');
++		if (tooLarge) throw new Error('Avatar textures must be at most 8192 px per side.');
++		if (pixels > 128 * 1024 * 1024) throw new Error('Avatar textures exceed the 128 megapixel total budget.');
+ 	}
++	return textures;
+ }

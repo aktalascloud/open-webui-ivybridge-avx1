@@ -1,0 +1,1091 @@
+diff --git a/.avx1/test_mainstream_policy.py b/.avx1/test_mainstream_policy.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..eae02c123a0879b661850db8f04b4340e16c2155
+--- /dev/null
++++ b/.avx1/test_mainstream_policy.py
+@@ -0,0 +1,277 @@
++"""Offline regressions for mainstream browser and subagent trust boundaries."""
++import ast
++import copy
++import asyncio
++from contextlib import suppress
++from datetime import datetime, timedelta, timezone
++import json
++from pathlib import Path
++import re
++import sys
++from types import ModuleType, SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, Mock, patch
++import uuid
++from urllib.parse import quote
++
++from cryptography.fernet import Fernet, InvalidToken
++from fastapi import HTTPException, Request
++from fastapi.security import HTTPAuthorizationCredentials
++from fastapi.security.utils import get_authorization_scheme_param
++import jwt
++from starlette.middleware.cors import CORSMiddleware
++
++ROOT = Path(__file__).resolve().parents[1] / 'backend/open_webui'
++
++
++def load(path, names, scope):
++    tree = ast.parse((ROOT / path).read_text('utf-8'))
++    nodes = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.name in names]
++    assert len(nodes) == len(names)
++    for node in nodes:
++        node.decorator_list = []
++    future = ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[])), path, 'exec'), scope)
++    return scope
++
++
++class SubagentPolicy(unittest.IsolatedAsyncioTestCase):
++    def policy(self, configured):
++        models = [{'id': 'a', 'name': 'A'}, {'id': 'b', 'name': 'B'}, {'id': 'private'}]
++        return load('utils/subagents.py', {'get_subagent_models', 'subagent_request_params'}, {
++            'Config': NS(get=AsyncMock(return_value=configured)),
++            'get_all_models': AsyncMock(return_value=models),
++            'get_filtered_models': AsyncMock(return_value=models[:2]),
++        })
++
++    async def test_old_call_keeps_admin_policy_and_user_acl(self):
++        scope = self.policy([{'id': 'a'}, {'id': 'private'}, {'id': 'missing'}])
++        result = await scope['get_subagent_models'](None, NS(id='user'))
++        self.assertEqual([m['id'] for m in result], ['a'])
++
++    async def test_card_can_only_narrow_admin_list(self):
++        scope = self.policy([{'id': 'a'}, {'id': 'b'}])
++        card = {'info': {'meta': {'subagents': {'model_ids': ['b', 'private']}}}}
++        before = copy.deepcopy(card)
++        result = await scope['get_subagent_models'](None, NS(id='user'), card)
++        self.assertEqual([m['id'] for m in result], ['b'])
++        self.assertEqual(card, before)
++
++    async def test_card_cannot_expand_or_enable_an_empty_admin_list(self):
++        for configured in ([], [{'id': 'a'}]):
++            scope = self.policy(configured)
++            card = {'info': {'meta': {'subagents': {'model_ids': ['b']}}}}
++            self.assertEqual(await scope['get_subagent_models'](None, NS(id='user'), card), [])
++
++    async def test_explicit_empty_card_disables_other_models(self):
++        scope = self.policy([{'id': 'a'}])
++        self.assertEqual(await scope['get_subagent_models'](None, NS(id='user'), {'info': {'meta': {'subagents': {'model_ids': []}}}}), [])
++
++    def test_different_model_does_not_inherit_author_modes(self):
++        scope = self.policy([])
++        params = {'reasoning_effort': 'ultra', 'temperature': 0.7}
++        self.assertEqual(scope['subagent_request_params']('parent', 'child', params), {})
++        same = scope['subagent_request_params']('parent', 'parent', params)
++        self.assertEqual(same, params)
++        self.assertIsNot(same, params)
++
++
++class BrowserOwner(unittest.IsolatedAsyncioTestCase):
++    def setUp(self):
++        self.user = NS(id='owner', role='user')
++        self.users = {'owner': self.user, 'other': NS(id='other', role='user')}
++        self.revoked = set()
++        self.api_keys = {'sk-synthetic-owner': self.user}
++        self.redis = object()
++        self.path = '/api/v1/terminals/server/browser/view/session/ticket/page'
++        self.allowed_api_paths = {self.path}
++        self.last_api_path = None
++        self.last_api_method = None
++        async def valid(decoded, redis):
++            self.assertIs(redis, self.redis)
++            return decoded.get('jti') not in self.revoked
++        async def by_key(request, key):
++            self.last_api_path = request.url.path
++            self.last_api_method = request.method
++            if key not in self.api_keys or request.url.path not in self.allowed_api_paths:
++                raise HTTPException(401)
++            return self.api_keys[key]
++        self.scope = {'jwt': jwt, 'uuid': uuid, 'datetime': datetime, 'UTC': timezone.utc,
++                      'SESSION_SECRET': 'synthetic-browser-signing-key-' * 3, 'ALGORITHM': 'HS256',
++                      'log': Mock(), 'HTTPException': HTTPException, 'Request': Request,
++                      'HTTPAuthorizationCredentials': HTTPAuthorizationCredentials,
++                      'get_authorization_scheme_param': get_authorization_scheme_param,
++                      'is_valid_token': valid, 'get_current_user_by_api_key': by_key,
++                      'Users': NS(get_user_by_id=AsyncMock(side_effect=lambda identity: self.users.get(identity))),
++                      'VERIFIED_USER_ROLES': {'user', 'admin'}, 'InvalidToken': InvalidToken}
++        load('utils/auth.py', {'create_token', 'decode_token', 'get_http_authorization_cred', 'get_verified_user_by_token', 'get_optional_verified_user_from_request'}, self.scope)
++        load('utils/browser.py', {'browser_ticket', 'browser_access'}, self.scope)
++        fernet = Fernet(Fernet.generate_key())
++        oauth = ModuleType('open_webui.utils.oauth')
++        oauth.encrypt_data = lambda data: fernet.encrypt(json.dumps(data).encode()).decode()
++        oauth.decrypt_data = lambda data: json.loads(fernet.decrypt(data.encode()))
++        self.modules = patch.dict(sys.modules, {'open_webui.utils.oauth': oauth})
++        self.modules.start()
++        self.addCleanup(self.modules.stop)
++
++    def parent(self, identity='owner', expired=False):
++        return self.scope['create_token']({'id': identity}, expires_delta=timedelta(seconds=-1 if expired else 3600))
++
++    def ticket(self, parent, identity='owner'):
++        return self.scope['browser_ticket']('server', identity, 'chat', {'id': 'session', 'token': 'synthetic-capability'},
++                                            {'Authorization': 'Bearer synthetic-terminal-key'}, {'cookie': 'synthetic-cookie'}, owner_token=parent)
++
++    def context(self, websocket=False):
++        return NS(scope={'type': 'websocket' if websocket else 'http', 'method': 'GET', 'scheme': 'http',
++                         'server': ('127.0.0.1', 8080), 'path': self.path, 'query_string': b'', 'headers': [],
++                         'app': NS(state=NS(redis=self.redis)), 'state': {}})
++
++    async def access(self, ticket, websocket=False):
++        return await self.scope['browser_access']('server', 'session', ticket, self.context(websocket))
++
++    async def test_parent_secret_is_encrypted_and_not_forwarded(self):
++        parent = self.parent()
++        ticket = self.ticket(parent)
++        decoded = self.scope['decode_token'](ticket)
++        self.assertNotIn(parent, json.dumps(decoded))
++        self.assertNotIn('synthetic-terminal-key', json.dumps(decoded))
++        self.assertNotIn('synthetic-capability', json.dumps(decoded))
++        user, data = await self.access(ticket)
++        self.assertEqual(user.id, 'owner')
++        self.assertNotIn('owner_token', data['relay'])
++        self.assertNotIn('capability', data['relay'])
++        self.assertEqual(data['capability'], 'synthetic-capability')
++        self.assertEqual(data['relay']['authorization'], 'Bearer synthetic-terminal-key')
++
++    async def test_expired_parent_is_rejected_even_when_ticket_is_signed(self):
++        with self.assertRaises(HTTPException) as error:
++            await self.access(self.ticket(self.parent(expired=True)))
++        self.assertEqual(error.exception.status_code, 401)
++
++    async def test_revocation_is_rechecked_on_http_and_websocket(self):
++        parent = self.parent()
++        ticket = self.ticket(parent)
++        await self.access(ticket)
++        self.revoked.add(self.scope['decode_token'](parent)['jti'])
++        for websocket in (False, True):
++            with self.assertRaises(HTTPException):
++                await self.access(ticket, websocket)
++
++    async def test_api_key_rotation_and_endpoint_policy_are_rechecked(self):
++        ticket = self.ticket('sk-synthetic-owner')
++        await self.access(ticket, True)
++        self.assertEqual(self.last_api_path, self.path)
++        self.assertEqual(self.last_api_method, 'GET')
++        self.allowed_api_paths.clear()
++        with self.assertRaises(HTTPException):
++            await self.access(ticket)
++        self.allowed_api_paths.add(self.path)
++        self.api_keys.clear()
++        with self.assertRaises(HTTPException):
++            await self.access(ticket)
++
++    async def test_http_method_is_preserved_for_central_key_policy(self):
++        request = self.context()
++        request.scope['method'] = 'POST'
++        await self.scope['browser_access']('server', 'session', self.ticket('sk-synthetic-owner'), request)
++        self.assertEqual(self.last_api_method, 'POST')
++
++    async def test_wrong_owner_and_unverified_role_are_rejected(self):
++        with self.assertRaises(HTTPException):
++            await self.access(self.ticket(self.parent('other')))
++        self.users['owner'] = NS(id='owner', role='pending')
++        with self.assertRaises(HTTPException):
++            await self.access(self.ticket(self.parent()))
++
++    async def test_purpose_server_session_cipher_and_old_tickets_fail_closed(self):
++        ticket = self.ticket(self.parent())
++        base = self.scope['decode_token'](ticket)
++        for field, value in [('purpose', 'wrong'), ('server', 'other'), ('session', 'other'), ('relay', 'invalid'), ('mode', 'invalid')]:
++            payload = {**base, field: value}
++            with self.subTest(field=field), self.assertRaises(HTTPException):
++                await self.access(self.scope['create_token'](payload))
++        from open_webui.utils.oauth import encrypt_data
++        with self.assertRaises(HTTPException):
++            await self.access(self.scope['create_token']({**base, 'relay': encrypt_data({'cookies': {}})}))
++
++
++class BrowserMode(unittest.IsolatedAsyncioTestCase):
++    def route_scope(self, mode):
++        self.connection = Mock()
++        class Context:
++            def __init__(self, value): self.value = value
++            async def __aenter__(self): return self.value
++            async def __aexit__(self, *args): return False
++        def connect(*args, **kwargs):
++            self.connection(*args, **kwargs)
++            return Context(object())
++        client = NS(ws_connect=connect)
++        data = {'mode': mode, 'relay': {'authorization': 'Bearer synthetic-terminal-key'},
++                'capability': 'synthetic-capability', 'chat': 'chat'}
++        self.proxy = AsyncMock(return_value='response')
++        return load('routers/terminals.py', {'browser_http', 'browser_ws'}, {
++            'HTTPException': HTTPException, 'browser_access': AsyncMock(return_value=(NS(id='owner'), data)),
++            'proxy_terminal': self.proxy, 'Config': NS(get=AsyncMock(return_value=[{'id': 'server'}])),
++            'get_terminal_connections': AsyncMock(return_value=[{'id':'server'}]),
++            'get_terminal_client':lambda *a,**k:Context(client),
++            'ENABLE_TOOL_SERVERS': True, 'has_connection_access': AsyncMock(return_value=True),
++            'terminal_context_available': lambda *a: True, 'terminal_context_id': lambda *a: None,
++            'terminal_context_config': lambda *a: {}, 'get_terminal_server_url': lambda *a: 'http://127.0.0.1:1',
++            'quote': quote, 'AIOHTTP_CLIENT_SESSION_SSL': True, 'TERMINAL_CONTEXT_HEADER': 'context',
++            'aiohttp': NS(ClientSession=lambda **k: Context(client), WSServerHandshakeError=type('HandshakeError', (Exception,), {})),
++            'asyncio': asyncio, 'suppress': suppress, 'log': Mock(),
++            'relay_from_browser': AsyncMock(), 'relay_to_browser': AsyncMock(), 'watch_access': AsyncMock(),
++        })
++
++    async def test_proxy_ticket_cannot_upgrade_to_chrome_and_reverse(self):
++        for mode, kind in [('proxy', 'stream'), ('proxy', 'vnc'), ('chrome', 'ws')]:
++            with self.subTest(mode=mode, kind=kind):
++                scope = self.route_scope(mode)
++                ws = NS(close=AsyncMock(), accept=AsyncMock())
++                await scope['browser_ws'](ws, 'server', 'session', 'ticket', kind)
++                ws.accept.assert_not_awaited()
++                ws.close.assert_awaited_once_with(code=4001)
++                self.connection.assert_not_called()
++
++    async def test_each_authorized_websocket_mode_still_connects(self):
++        for mode, kind in [('proxy', 'ws'), ('chrome', 'stream'), ('chrome', 'vnc')]:
++            with self.subTest(mode=mode, kind=kind):
++                scope = self.route_scope(mode)
++                ws = NS(close=AsyncMock(), accept=AsyncMock())
++                await scope['browser_ws'](ws, 'server', 'session', 'ticket', kind)
++                ws.accept.assert_awaited_once()
++                self.connection.assert_called_once()
++                self.assertEqual(self.connection.call_args.kwargs['headers']['Authorization'], 'Bearer synthetic-terminal-key')
++
++    async def test_http_view_is_proxy_only(self):
++        for mode in ('proxy', 'chrome'):
++            scope = self.route_scope(mode)
++            request = NS(state=NS(), scope={'path_params': {}})
++            if mode == 'chrome':
++                with self.assertRaises(HTTPException):
++                    await scope['browser_http'](request, 'server', 'session', 'ticket', 'frame/page')
++                self.proxy.assert_not_awaited()
++            else:
++                self.assertEqual(await scope['browser_http'](request, 'server', 'session', 'ticket', 'frame/page'), 'response')
++                self.proxy.assert_awaited_once()
++
++
++class BrowserCors(unittest.IsolatedAsyncioTestCase):
++    async def test_opaque_view_origin_does_not_relax_normal_api_cors(self):
++        scope = load('utils/asgi_middleware.py', {'BrowserCORSMiddleware'}, {'CORSMiddleware': CORSMiddleware, 're': re})
++        seen = []
++        async def app(request, receive, send):
++            seen.append(request['path'])
++            await send({'type': 'http.response.start', 'status': 200, 'headers': []})
++            await send({'type': 'http.response.body', 'body': b''})
++        middleware = scope['BrowserCORSMiddleware'](app, allow_origins=['https://approved.example'])
++        for path, expected in [('/api/v1/terminals/server/browser/view/session/ticket/page', 200), ('/api/v1/users', 400)]:
++            sent = []
++            request = {'type': 'http', 'method': 'OPTIONS', 'path': path, 'headers': [(b'origin', b'null'), (b'access-control-request-method', b'GET')]}
++            await middleware(request, AsyncMock(), AsyncMock(side_effect=sent.append))
++            self.assertEqual(sent[0]['status'], expected)
++        self.assertEqual(seen, ['/api/v1/terminals/server/browser/view/session/ticket/page'])
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/test_terminal.py b/.avx1/test_terminal.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ec126684bc9f321e9e9b492c742cdb32b933d4a
+--- /dev/null
++++ b/.avx1/test_terminal.py
+@@ -0,0 +1,34 @@
++"""Behavior tests for the fork's child-environment and MCP fixes."""
++import os
++import subprocess
++import sys
++import types
++import unittest
++from unittest.mock import patch
++
++
++class TerminalTests(unittest.TestCase):
++    def test_child_cannot_read_inherited_terminal_credentials(self):
++        from open_terminal.env import sanitized_environ
++        environment = {**os.environ, "OPEN_TERMINAL_API_KEY": "synthetic-secret",
++                       "open_terminal_private": "synthetic-secret", "KEEP_APPLICATION_SETTING": "kept"}
++        with patch.dict(os.environ, environment, clear=True):
++            child_env = sanitized_environ({"EXTRA_SETTING": "extra"})
++        result = subprocess.run([sys.executable, "-c", "import os; assert not any(k.upper().startswith('OPEN_TERMINAL_') for k in os.environ); assert os.environ['KEEP_APPLICATION_SETTING']=='kept'; assert os.environ['EXTRA_SETTING']=='extra'"],
++                                env=child_env, capture_output=True)
++        self.assertEqual(result.returncode, 0)
++
++    def test_stdio_passes_no_network_arguments(self):
++        from click.testing import CliRunner
++        from open_terminal.cli import main
++        received = []
++        fake = types.ModuleType("open_terminal.mcp_server")
++        fake.mcp = types.SimpleNamespace(run=lambda **kwargs: received.append(kwargs))
++        with patch.dict(sys.modules, {"open_terminal.mcp_server": fake}), patch("open_terminal.config.init", return_value={}):
++            result = CliRunner().invoke(main, ["mcp", "--transport", "stdio"])
++        self.assertEqual(result.exit_code, 0, repr(result.exception))
++        self.assertEqual(received, [{"transport": "stdio"}])
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/LICENSE-NOVNC.txt b/LICENSE-NOVNC.txt
+new file mode 100644
+index 0000000000000000000000000000000000000000..fcee49980febac5dc96994b1ab6e52af6c233b73
+--- /dev/null
++++ b/LICENSE-NOVNC.txt
+@@ -0,0 +1,629 @@
++noVNC1.7.0 third-party notices and upstream license texts
++Source: https://github.com/novnc/noVNC/tree/v1.7.0
++Package integrity: sha512-ucEJOx4T2avIRCleodk7YobZj5O2Ga2AeLfQ69A/yjG9HHba2+PDgwSkN3FttrmG+70ZGx21sElNFouK13RzyA==
++
++===== package/LICENSE.txt =====
++noVNC is Copyright (C) 2022 The noVNC authors
++(./AUTHORS)
++
++The noVNC core library files are licensed under the MPL 2.0 (Mozilla
++Public License 2.0). The noVNC core library is composed of the
++Javascript code necessary for full noVNC operation. This includes (but
++is not limited to):
++
++    core/**/*.js
++    app/*.js
++    test/playback.js
++
++The HTML, CSS, font and images files that included with the noVNC
++source distibution (or repository) are not considered part of the
++noVNC core library and are licensed under more permissive licenses.
++The intent is to allow easy integration of noVNC into existing web
++sites and web applications.
++
++The HTML, CSS, font and image files are licensed as follows:
++
++    *.html                     : 2-Clause BSD license
++
++    app/styles/*.css           : 2-Clause BSD license
++
++    app/styles/Orbitron*       : SIL Open Font License 1.1
++                                 (Copyright 2009 Matt McInerney)
++
++    app/images/                : Creative Commons Attribution-ShareAlike
++                                 http://creativecommons.org/licenses/by-sa/3.0/
++
++Some portions of noVNC are copyright to their individual authors.
++Please refer to the individual source files and/or to the noVNC commit
++history: https://github.com/novnc/noVNC/commits/master
++
++The are several files and projects that have been incorporated into
++the noVNC core library. Here is a list of those files and the original
++licenses (all MPL 2.0 compatible):
++
++    core/base64.js          : MPL 2.0
++
++    core/des.js             : Various BSD style licenses
++
++    vendor/pako/            : MIT
++
++Any other files not mentioned above are typically marked with
++a copyright/license header at the top of the file. The default noVNC
++license is MPL-2.0.
++
++The following license texts are included:
++
++    docs/LICENSE.MPL-2.0
++    docs/LICENSE.OFL-1.1
++    docs/LICENSE.BSD-3-Clause (New BSD)
++    docs/LICENSE.BSD-2-Clause (Simplified BSD / FreeBSD)
++    vendor/pako/LICENSE (MIT)
++
++Or alternatively the license texts may be found here:
++
++    http://www.mozilla.org/MPL/2.0/
++    http://scripts.sil.org/OFL
++    http://en.wikipedia.org/wiki/BSD_licenses
++    https://opensource.org/licenses/MIT
++
++
++===== package/AUTHORS =====
++maintainers:
++- Samuel Mannehed for Cendio AB (@samhed)
++- Pierre Ossman for Cendio AB (@CendioOssman)
++maintainersEmeritus:
++- Joel Martin (@kanaka)
++- Solly Ross (@directxman12)
++- @astrand
++contributors:
++# There are a bunch of people that should be here.
++# If you want to be on this list, feel free send a PR
++# to add yourself.
++- jalf <git@jalf.dk>
++- NTT corp.
++
++
++===== package/docs/LICENSE.MPL-2.0 =====
++Mozilla Public License Version 2.0
++==================================
++
++1. Definitions
++--------------
++
++1.1. "Contributor"
++    means each individual or legal entity that creates, contributes to
++    the creation of, or owns Covered Software.
++
++1.2. "Contributor Version"
++    means the combination of the Contributions of others (if any) used
++    by a Contributor and that particular Contributor's Contribution.
++
++1.3. "Contribution"
++    means Covered Software of a particular Contributor.
++
++1.4. "Covered Software"
++    means Source Code Form to which the initial Contributor has attached
++    the notice in Exhibit A, the Executable Form of such Source Code
++    Form, and Modifications of such Source Code Form, in each case
++    including portions thereof.
++
++1.5. "Incompatible With Secondary Licenses"
++    means
++
++    (a) that the initial Contributor has attached the notice described
++        in Exhibit B to the Covered Software; or
++
++    (b) that the Covered Software was made available under the terms of
++        version 1.1 or earlier of the License, but not also under the
++        terms of a Secondary License.
++
++1.6. "Executable Form"
++    means any form of the work other than Source Code Form.
++
++1.7. "Larger Work"
++    means a work that combines Covered Software with other material, in
++    a separate file or files, that is not Covered Software.
++
++1.8. "License"
++    means this document.
++
++1.9. "Licensable"
++    means having the right to grant, to the maximum extent possible,
++    whether at the time of the initial grant or subsequently, any and
++    all of the rights conveyed by this License.
++
++1.10. "Modifications"
++    means any of the following:
++
++    (a) any file in Source Code Form that results from an addition to,
++        deletion from, or modification of the contents of Covered
++        Software; or
++
++    (b) any new file in Source Code Form that contains any Covered
++        Software.
++
++1.11. "Patent Claims" of a Contributor
++    means any patent claim(s), including without limitation, method,
++    process, and apparatus claims, in any patent Licensable by such
++    Contributor that would be infringed, but for the grant of the
++    License, by the making, using, selling, offering for sale, having
++    made, import, or transfer of either its Contributions or its
++    Contributor Version.
++
++1.12. "Secondary License"
++    means either the GNU General Public License, Version 2.0, the GNU
++    Lesser General Public License, Version 2.1, the GNU Affero General
++    Public License, Version 3.0, or any later versions of those
++    licenses.
++
++1.13. "Source Code Form"
++    means the form of the work preferred for making modifications.
++
++1.14. "You" (or "Your")
++    means an individual or a legal entity exercising rights under this
++    License. For legal entities, "You" includes any entity that
++    controls, is controlled by, or is under common control with You. For
++    purposes of this definition, "control" means (a) the power, direct
++    or indirect, to cause the direction or management of such entity,
++    whether by contract or otherwise, or (b) ownership of more than
++    fifty percent (50%) of the outstanding shares or beneficial
++    ownership of such entity.
++
++2. License Grants and Conditions
++--------------------------------
++
++2.1. Grants
++
++Each Contributor hereby grants You a world-wide, royalty-free,
++non-exclusive license:
++
++(a) under intellectual property rights (other than patent or trademark)
++    Licensable by such Contributor to use, reproduce, make available,
++    modify, display, perform, distribute, and otherwise exploit its
++    Contributions, either on an unmodified basis, with Modifications, or
++    as part of a Larger Work; and
++
++(b) under Patent Claims of such Contributor to make, use, sell, offer
++    for sale, have made, import, and otherwise transfer either its
++    Contributions or its Contributor Version.
++
++2.2. Effective Date
++
++The licenses granted in Section 2.1 with respect to any Contribution
++become effective for each Contribution on the date the Contributor first
++distributes such Contribution.
++
++2.3. Limitations on Grant Scope
++
++The licenses granted in this Section 2 are the only rights granted under
++this License. No additional rights or licenses will be implied from the
++distribution or licensing of Covered Software under this License.
++Notwithstanding Section 2.1(b) above, no patent license is granted by a
++Contributor:
++
++(a) for any code that a Contributor has removed from Covered Software;
++    or
++
++(b) for infringements caused by: (i) Your and any other third party's
++    modifications of Covered Software, or (ii) the combination of its
++    Contributions with other software (except as part of its Contributor
++    Version); or
++
++(c) under Patent Claims infringed by Covered Software in the absence of
++    its Contributions.
++
++This License does not grant any rights in the trademarks, service marks,
++or logos of any Contributor (except as may be necessary to comply with
++the notice requirements in Section 3.4).
++
++2.4. Subsequent Licenses
++
++No Contributor makes additional grants as a result of Your choice to
++distribute the Covered Software under a subsequent version of this
++License (see Section 10.2) or under the terms of a Secondary License (if
++permitted under the terms of Section 3.3).
++
++2.5. Representation
++
++Each Contributor represents that the Contributor believes its
++Contributions are its original creation(s) or it has sufficient rights
++to grant the rights to its Contributions conveyed by this License.
++
++2.6. Fair Use
++
++This License is not intended to limit any rights You have under
++applicable copyright doctrines of fair use, fair dealing, or other
++equivalents.
++
++2.7. Conditions
++
++Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted
++in Section 2.1.
++
++3. Responsibilities
++-------------------
++
++3.1. Distribution of Source Form
++
++All distribution of Covered Software in Source Code Form, including any
++Modifications that You create or to which You contribute, must be under
++the terms of this License. You must inform recipients that the Source
++Code Form of the Covered Software is governed by the terms of this
++License, and how they can obtain a copy of this License. You may not
++attempt to alter or restrict the recipients' rights in the Source Code
++Form.
++
++3.2. Distribution of Executable Form
++
++If You distribute Covered Software in Executable Form then:
++
++(a) such Covered Software must also be made available in Source Code
++    Form, as described in Section 3.1, and You must inform recipients of
++    the Executable Form how they can obtain a copy of such Source Code
++    Form by reasonable means in a timely manner, at a charge no more
++    than the cost of distribution to the recipient; and
++
++(b) You may distribute such Executable Form under the terms of this
++    License, or sublicense it under different terms, provided that the
++    license for the Executable Form does not attempt to limit or alter
++    the recipients' rights in the Source Code Form under this License.
++
++3.3. Distribution of a Larger Work
++
++You may create and distribute a Larger Work under terms of Your choice,
++provided that You also comply with the requirements of this License for
++the Covered Software. If the Larger Work is a combination of Covered
++Software with a work governed by one or more Secondary Licenses, and the
++Covered Software is not Incompatible With Secondary Licenses, this
++License permits You to additionally distribute such Covered Software
++under the terms of such Secondary License(s), so that the recipient of
++the Larger Work may, at their option, further distribute the Covered
++Software under the terms of either this License or such Secondary
++License(s).
++
++3.4. Notices
++
++You may not remove or alter the substance of any license notices
++(including copyright notices, patent notices, disclaimers of warranty,
++or limitations of liability) contained within the Source Code Form of
++the Covered Software, except that You may alter any license notices to
++the extent required to remedy known factual inaccuracies.
++
++3.5. Application of Additional Terms
++
++You may choose to offer, and to charge a fee for, warranty, support,
++indemnity or liability obligations to one or more recipients of Covered
++Software. However, You may do so only on Your own behalf, and not on
++behalf of any Contributor. You must make it absolutely clear that any
++such warranty, support, indemnity, or liability obligation is offered by
++You alone, and You hereby agree to indemnify every Contributor for any
++liability incurred by such Contributor as a result of warranty, support,
++indemnity or liability terms You offer. You may include additional
++disclaimers of warranty and limitations of liability specific to any
++jurisdiction.
++
++4. Inability to Comply Due to Statute or Regulation
++---------------------------------------------------
++
++If it is impossible for You to comply with any of the terms of this
++License with respect to some or all of the Covered Software due to
++statute, judicial order, or regulation then You must: (a) comply with
++the terms of this License to the maximum extent possible; and (b)
++describe the limitations and the code they affect. Such description must
++be placed in a text file included with all distributions of the Covered
++Software under this License. Except to the extent prohibited by statute
++or regulation, such description must be sufficiently detailed for a
++recipient of ordinary skill to be able to understand it.
++
++5. Termination
++--------------
++
++5.1. The rights granted under this License will terminate automatically
++if You fail to comply with any of its terms. However, if You become
++compliant, then the rights granted under this License from a particular
++Contributor are reinstated (a) provisionally, unless and until such
++Contributor explicitly and finally terminates Your grants, and (b) on an
++ongoing basis, if such Contributor fails to notify You of the
++non-compliance by some reasonable means prior to 60 days after You have
++come back into compliance. Moreover, Your grants from a particular
++Contributor are reinstated on an ongoing basis if such Contributor
++notifies You of the non-compliance by some reasonable means, this is the
++first time You have received notice of non-compliance with this License
++from such Contributor, and You become compliant prior to 30 days after
++Your receipt of the notice.
++
++5.2. If You initiate litigation against any entity by asserting a patent
++infringement claim (excluding declaratory judgment actions,
++counter-claims, and cross-claims) alleging that a Contributor Version
++directly or indirectly infringes any patent, then the rights granted to
++You by any and all Contributors for the Covered Software under Section
++2.1 of this License shall terminate.
++
++5.3. In the event of termination under Sections 5.1 or 5.2 above, all
++end user license agreements (excluding distributors and resellers) which
++have been validly granted by You or Your distributors under this License
++prior to termination shall survive termination.
++
++************************************************************************
++*                                                                      *
++*  6. Disclaimer of Warranty                                           *
++*  -------------------------                                           *
++*                                                                      *
++*  Covered Software is provided under this License on an "as is"       *
++*  basis, without warranty of any kind, either expressed, implied, or  *
++*  statutory, including, without limitation, warranties that the       *
++*  Covered Software is free of defects, merchantable, fit for a        *
++*  particular purpose or non-infringing. The entire risk as to the     *
++*  quality and performance of the Covered Software is with You.        *
++*  Should any Covered Software prove defective in any respect, You     *
++*  (not any Contributor) assume the cost of any necessary servicing,   *
++*  repair, or correction. This disclaimer of warranty constitutes an   *
++*  essential part of this License. No use of any Covered Software is   *
++*  authorized under this License except under this disclaimer.         *
++*                                                                      *
++************************************************************************
++
++************************************************************************
++*                                                                      *
++*  7. Limitation of Liability                                          *
++*  --------------------------                                          *
++*                                                                      *
++*  Under no circumstances and under no legal theory, whether tort      *
++*  (including negligence), contract, or otherwise, shall any           *
++*  Contributor, or anyone who distributes Covered Software as          *
++*  permitted above, be liable to You for any direct, indirect,         *
++*  special, incidental, or consequential damages of any character      *
++*  including, without limitation, damages for lost profits, loss of    *
++*  goodwill, work stoppage, computer failure or malfunction, or any    *
++*  and all other commercial damages or losses, even if such party      *
++*  shall have been informed of the possibility of such damages. This   *
++*  limitation of liability shall not apply to liability for death or   *
++*  personal injury resulting from such party's negligence to the       *
++*  extent applicable law prohibits such limitation. Some               *
++*  jurisdictions do not allow the exclusion or limitation of           *
++*  incidental or consequential damages, so this exclusion and          *
++*  limitation may not apply to You.                                    *
++*                                                                      *
++************************************************************************
++
++8. Litigation
++-------------
++
++Any litigation relating to this License may be brought only in the
++courts of a jurisdiction where the defendant maintains its principal
++place of business and such litigation shall be governed by laws of that
++jurisdiction, without reference to its conflict-of-law provisions.
++Nothing in this Section shall prevent a party's ability to bring
++cross-claims or counter-claims.
++
++9. Miscellaneous
++----------------
++
++This License represents the complete agreement concerning the subject
++matter hereof. If any provision of this License is held to be
++unenforceable, such provision shall be reformed only to the extent
++necessary to make it enforceable. Any law or regulation which provides
++that the language of a contract shall be construed against the drafter
++shall not be used to construe this License against a Contributor.
++
++10. Versions of the License
++---------------------------
++
++10.1. New Versions
++
++Mozilla Foundation is the license steward. Except as provided in Section
++10.3, no one other than the license steward has the right to modify or
++publish new versions of this License. Each version will be given a
++distinguishing version number.
++
++10.2. Effect of New Versions
++
++You may distribute the Covered Software under the terms of the version
++of the License under which You originally received the Covered Software,
++or under the terms of any subsequent version published by the license
++steward.
++
++10.3. Modified Versions
++
++If you create software not governed by this License, and you want to
++create a new license for such software, you may create and use a
++modified version of this License if you rename the license and remove
++any references to the name of the license steward (except to note that
++such modified license differs from this License).
++
++10.4. Distributing Source Code Form that is Incompatible With Secondary
++Licenses
++
++If You choose to distribute Source Code Form that is Incompatible With
++Secondary Licenses under the terms of this version of the License, the
++notice described in Exhibit B of this License must be attached.
++
++Exhibit A - Source Code Form License Notice
++-------------------------------------------
++
++  This Source Code Form is subject to the terms of the Mozilla Public
++  License, v. 2.0. If a copy of the MPL was not distributed with this
++  file, You can obtain one at http://mozilla.org/MPL/2.0/.
++
++If it is not possible or desirable to put the notice in a particular
++file, then You may include the notice in a location (such as a LICENSE
++file in a relevant directory) where a recipient would be likely to look
++for such a notice.
++
++You may add additional accurate notices of copyright ownership.
++
++Exhibit B - "Incompatible With Secondary Licenses" Notice
++---------------------------------------------------------
++
++  This Source Code Form is "Incompatible With Secondary Licenses", as
++  defined by the Mozilla Public License, v. 2.0.
++
++
++===== package/docs/LICENSE.BSD-2-Clause =====
++Copyright (c) <year>, <copyright holder>
++All rights reserved.
++
++Redistribution and use in source and binary forms, with or without
++modification, are permitted provided that the following conditions are met:
++
++    * Redistributions of source code must retain the above copyright
++      notice, this list of conditions and the following disclaimer.
++    * Redistributions in binary form must reproduce the above copyright
++      notice, this list of conditions and the following disclaimer in the
++      documentation and/or other materials provided with the distribution.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
++DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++
++===== package/docs/LICENSE.BSD-3-Clause =====
++Copyright (c) <year>, <copyright holder>
++All rights reserved.
++
++Redistribution and use in source and binary forms, with or without
++modification, are permitted provided that the following conditions are met:
++    * Redistributions of source code must retain the above copyright
++      notice, this list of conditions and the following disclaimer.
++    * Redistributions in binary form must reproduce the above copyright
++      notice, this list of conditions and the following disclaimer in the
++      documentation and/or other materials provided with the distribution.
++    * Neither the name of the <organization> nor the
++      names of its contributors may be used to endorse or promote products
++      derived from this software without specific prior written permission.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
++DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++
++===== package/vendor/pako/LICENSE =====
++(The MIT License)
++
++Copyright (C) 2014-2016 by Vitaly Puzrin
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in
++all copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++THE SOFTWARE.
++
++
++===== package/docs/LICENSE.OFL-1.1 =====
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
+diff --git a/backend/open_webui/routers/terminals.py b/backend/open_webui/routers/terminals.py
+index 73182f70cb9f161ac2488652a310c1945f4efb95..a787ec531062a96ef132eb37afeaf1b9e5c48e9f 100644
+--- a/backend/open_webui/routers/terminals.py
++++ b/backend/open_webui/routers/terminals.py
+@@ -164,7 +164,9 @@ def _sanitize_proxy_path(path: str) -> str | None:
+     methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
+ )
+ async def browser_http(request: Request, server_id: str, sid: str, ticket: str, path: str):
+-    user, data = await browser_access(server_id, sid, ticket)
++    user, data = await browser_access(server_id, sid, ticket, request)
++    if data['mode'] != 'proxy':
++        raise HTTPException(403, 'Browser mode unavailable')
+     request.state.browser_auth = data['relay']
+     request.scope['path_params']['chat_id'] = data.get('chat', '')
+     return await proxy_terminal(server_id, f'browser/view/{sid}/{data["capability"]}/{path}', request, user)
+@@ -191,10 +193,10 @@ async def relay_to_browser(ws, upstream):
+             return
+ 
+ 
+-async def watch_access(server_id, sid, ticket):
++async def watch_access(server_id, sid, ticket, request):
+     while True:
+         await asyncio.sleep(10)
+-        current_user, _ = await browser_access(server_id, sid, ticket)
++        current_user, _ = await browser_access(server_id, sid, ticket, request)
+         latest = await get_terminal_connections(current_user)
+         current = next((c for c in latest if c.get('id') == server_id), None)
+         if (
+@@ -210,11 +212,12 @@ async def watch_access(server_id, sid, ticket):
+ @router.websocket('/{server_id}/browser/view/{sid}/{ticket}/{kind}')
+ async def browser_ws(ws: WebSocket, server_id: str, sid: str, ticket: str, kind: str):
+     try:
+-        user, data = await browser_access(server_id, sid, ticket)
++        user, data = await browser_access(server_id, sid, ticket, ws)
+         connections = await get_terminal_connections(user)
+         connection = next((c for c in connections if c.get('id') == server_id), None)
+         if (
+             kind not in ('ws', 'stream', 'vnc')
++            or data['mode'] != ('proxy' if kind == 'ws' else 'chrome')
+             or not ENABLE_TOOL_SERVERS
+             or not connection
+             or not connection.get('enabled', True)
+@@ -249,7 +252,7 @@ async def browser_ws(ws: WebSocket, server_id: str, sid: str, ticket: str, kind:
+                 tasks = [
+                     asyncio.create_task(relay_from_browser(ws, upstream)),
+                     asyncio.create_task(relay_to_browser(ws, upstream)),
+-                    asyncio.create_task(watch_access(server_id, sid, ticket)),
++                    asyncio.create_task(watch_access(server_id, sid, ticket, ws)),
+                 ]
+                 await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+     except aiohttp.WSServerHandshakeError as exc:
+@@ -462,7 +465,8 @@ async def proxy_terminal(
+             browser_session = json.loads(response_body)
+             if isinstance(browser_session, dict) and browser_session.get('id') and browser_session.get('token'):
+                 browser_session['token'] = browser_ticket(
+-                    server_id, user.id, session_id or '', browser_session, headers, cookies
++                    server_id, user.id, session_id or '', browser_session, headers, cookies,
++                    owner_token=request.state.token.credentials,
+                 )
+                 response_body = json.dumps(browser_session).encode()
+         if port_prefix and 'text/html' in upstream_content_type:
+diff --git a/backend/open_webui/utils/browser.py b/backend/open_webui/utils/browser.py
+index 2bc3ebf3d7e3bdd032c9c615918501c0701c2802..9eae3f696854901f2ecadb5e2f005f50837f795c 100644
+--- a/backend/open_webui/utils/browser.py
++++ b/backend/open_webui/utils/browser.py
+@@ -1,14 +1,17 @@
+-from fastapi import HTTPException
+-from open_webui.utils.auth import create_token, decode_token, get_verified_user_by_id
++from fastapi import HTTPException, Request
++from cryptography.fernet import InvalidToken
++from open_webui.utils.auth import create_token, decode_token, get_optional_verified_user_from_request
+ 
+ 
+-def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None):
++def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None, *, owner_token):
+     from open_webui.utils.oauth import encrypt_data
+ 
+     relay = encrypt_data(
+         {
+             'authorization': (headers or {}).get('Authorization'),
+             'cookies': cookies or {},
++            'owner_token': owner_token,
++            'capability': session['token'],
+         }
+     )
+     return create_token(
+@@ -18,25 +21,40 @@ def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=N
+             'user': user_id,
+             'chat': chat_id,
+             'session': session['id'],
+-            'capability': session['token'],
++            'mode': session.get('mode', 'proxy'),
+             'relay': relay,
+         },
+     )
+ 
+ 
+-async def browser_access(server_id, sid, ticket):
++async def browser_access(server_id, sid, ticket, request):
+     data = decode_token(ticket)
+     if (
+         not data
+         or data.get('purpose') != 'terminal-browser'
+         or data.get('server') != server_id
+         or data.get('session') != sid
++        or data.get('mode') not in ('proxy', 'chrome')
+     ):
+         raise HTTPException(401, 'Browser session expired')
+-    user = await get_verified_user_by_id(data.get('user'))
+-    if user is None:
+-        raise HTTPException(401, 'Browser session expired')
+     from open_webui.utils.oauth import decrypt_data
+ 
+-    data['relay'] = decrypt_data(data['relay'])
++    try:
++        relay = decrypt_data(data['relay'])
++        owner_token = relay.pop('owner_token')
++        capability = relay.pop('capability')
++        if not isinstance(capability, str) or not capability:
++            raise ValueError('Missing browser capability')
++        if not isinstance(owner_token, str) or not owner_token:
++            raise ValueError('Missing browser owner credential')
++        # Reuse revocation and endpoint policy; never relay the owner credential upstream.
++        auth_scope = {**request.scope, 'type': 'http', 'method': request.scope.get('method', 'GET'),
++                      'headers': [(b'authorization', f'Bearer {owner_token}'.encode('latin-1'))], 'state': {}}
++        user = await get_optional_verified_user_from_request(Request(auth_scope))
++    except (InvalidToken, ValueError, TypeError, KeyError, AttributeError):
++        raise HTTPException(401, 'Browser session expired') from None
++    if user is None or user.id != data.get('user'):
++        raise HTTPException(401, 'Browser session expired')
++    data['relay'] = relay
++    data['capability'] = capability
+     return user, data

@@ -1,182 +1,278 @@
 {
   "schema": 1,
-  "grouping_version": 2,
+  "grouping_version": 3,
   "ownership": "applied-downstream-only",
   "project": "webui",
   "upstream": "055bd98f3a223cadd8be381422238ca9410cc9db",
-  "snapshot_source": "950aff1a53382a5831a304040c34681d04b93f86",
+  "snapshot_source": "cbbed36c2ec9cf667ed0b338350c5770ca93a3ff",
   "downstream_tree_without_patches": "132eec3f594ad15f822e99af21dfa7e3cdd27554",
   "groups": [
     {
-      "patch": "01-runtime.patch",
-      "description": "Local runtime, integration, security, dependency and platform adaptations / Наши изменения работы, интеграций, безопасности и платформ.",
+      "patch": "01-dependencies.patch",
+      "description": "Pin compatible Python and frontend dependencies, including OAuthlib 4.0.1 / Закрепляет совместимые зависимости и исправленный OAuthlib 4.0.1.",
       "paths": [
-        "backend/open_webui/config.py",
-        "backend/open_webui/routers/configs.py",
-        "backend/open_webui/routers/models.py",
-        "backend/open_webui/routers/openai.py",
-        "backend/open_webui/routers/terminals.py",
-        "backend/open_webui/tools/builtin.py",
-        "backend/open_webui/utils/access_control/__init__.py",
-        "backend/open_webui/utils/audit.py",
-        "backend/open_webui/utils/browser.py",
-        "backend/open_webui/utils/free_llm.py",
-        "backend/open_webui/utils/free_llm_catalog.json",
-        "backend/open_webui/utils/headers.py",
-        "backend/open_webui/utils/middleware.py",
-        "backend/open_webui/utils/mnemosyne_reasoning.py",
-        "backend/open_webui/utils/models.py",
-        "backend/open_webui/utils/response.py",
-        "backend/open_webui/utils/strata_reasoning.py",
-        "backend/open_webui/utils/subagents.py",
-        "backend/open_webui/utils/tools.py",
-        "backend/open_webui/utils/voice_avatar.py",
-        "hatch_build.py",
+        ".avx1/audit_requirements.py",
+        ".avx1/security_scope.py",
+        ".avx1/test_audit_requirements.py",
+        ".avx1/test_authlib_security.py",
+        ".avx1/test_brotli.py",
+        ".avx1/test_mcp_compat.py",
+        ".avx1/test_mcp_protocol.py",
+        ".avx1/test_oauthlib_security.py",
+        ".avx1/test_security_scope.py",
+        "backend/requirements.txt",
+        "package-lock.json",
         "package.json",
         "pyproject.toml",
-        "src/lib/apis/audio/index.ts",
-        "src/lib/apis/index.ts",
+        "uv.lock"
+      ],
+      "sha256": "021dd1e4b348710a4437380e8b1be4504ac9029a036ce6783ccf7f15142b7483"
+    },
+    {
+      "patch": "02-free-llm.patch",
+      "description": "Add the FreeLLM provider catalog, request policy and connection preset / Добавляет каталог FreeLLM, правила запросов и шаблон подключения.",
+      "paths": [
+        ".avx1/test_free_llm.mjs",
+        ".avx1/test_free_llm.py",
+        "backend/open_webui/utils/free_llm.py",
+        "backend/open_webui/utils/free_llm_catalog.json",
+        "docs/provider-eligibility.md",
         "src/lib/components/AddConnectionModal.svelte",
         "src/lib/components/admin/Settings/Connections.svelte",
-        "src/lib/components/admin/Settings/Subagents.svelte",
-        "src/lib/components/chat/Chat.svelte",
-        "src/lib/components/chat/ChatTabs/SideChat.svelte",
-        "src/lib/components/chat/MessageInput.svelte",
+        "src/lib/utils/freeLlm.js"
+      ],
+      "sha256": "34a315385a9d8b37cdd09e4aaedf39378086186317aee41d3a60c1ea11fff179"
+    },
+    {
+      "patch": "03-strata-reasoning.patch",
+      "description": "Add Strata reasoning controls and adaptive Mnemosyne profile selection / Добавляет настройки рассуждений Strata и адаптивный выбор профиля Mnemosyne.",
+      "paths": [
+        ".avx1/mnemosyne-source.json",
+        ".avx1/strata_reasoning_browser.py",
+        ".avx1/test_strata_reasoning.mjs",
+        ".avx1/test_strata_reasoning.py",
+        "NOTICE-MNEMOSYNE.txt",
+        "backend/open_webui/utils/mnemosyne_reasoning.py",
+        "backend/open_webui/utils/strata_reasoning.py",
+        "src/lib/components/chat/MessageInput/StrataReasoning.svelte",
+        "src/lib/utils/strataReasoning.js"
+      ],
+      "sha256": "0a18b93a488faabd2b41ab4827aa4468d5793c5e59a928784ba7030e07d92492"
+    },
+    {
+      "patch": "04-voice-avatars.patch",
+      "description": "Render model VRMs with bounded textures and wire voice call and avatar controls / Отображает VRM моделей с лимитами текстур и подключает настройки звонков и аватаров.",
+      "paths": [
+        ".avx1/test_avatar_defaults.mjs",
+        ".avx1/test_avatar_limits.py",
+        "backend/open_webui/utils/voice_avatar.py",
+        "src/lib/apis/audio/index.ts",
         "src/lib/components/chat/MessageInput/CallOverlay.svelte",
         "src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte",
         "src/lib/components/chat/MessageInput/CallOverlay/VoiceAvatar.svelte",
-        "src/lib/components/chat/MessageInput/IntegrationsMenu.svelte",
-        "src/lib/components/chat/MessageInput/StrataReasoning.svelte",
+        "src/lib/components/workspace/Models/VoiceAvatarEditor.svelte",
+        "src/lib/utils/avatar-texture-loader.js",
+        "src/lib/utils/voice-avatar-renderer.ts",
+        "src/lib/utils/voice-avatar.ts"
+      ],
+      "sha256": "176deca91ce8a90ca2e291dadcc42c91562d9d63a15e9524fb0411ba1d2357a5"
+    },
+    {
+      "patch": "05-protected-media.patch",
+      "description": "Load and download protected audio, video and files through authenticated requests / Загружает защищённые аудио, видео и файлы с авторизацией.",
+      "paths": [
         "src/lib/components/chat/Messages/Markdown.svelte",
         "src/lib/components/chat/Messages/Markdown/HTMLToken.svelte",
         "src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte",
         "src/lib/components/chat/Messages/ResponseMessage.svelte",
         "src/lib/components/common/ProtectedMedia.svelte",
-        "src/lib/components/workspace/Models/ModelEditor.svelte",
-        "src/lib/components/workspace/Models/VoiceAvatarEditor.svelte",
-        "src/lib/i18n/locales/en-US/translation.json",
-        "src/lib/i18n/locales/ru-RU/translation.json",
-        "src/lib/stores/index.ts",
-        "src/lib/utils/assistantCompatibility.js",
-        "src/lib/utils/avatar-texture-loader.js",
-        "src/lib/utils/freeLlm.js",
-        "src/lib/utils/localizedContent.ts",
         "src/lib/utils/marked/media-extension.ts",
-        "src/lib/utils/protectedFiles.ts",
-        "src/lib/utils/strataReasoning.js",
-        "src/lib/utils/toolServerPolicy.js",
-        "src/lib/utils/voice-avatar-renderer.ts",
-        "src/lib/utils/voice-avatar.ts",
-        "static/opensearch.xml",
-        "static/static/site.webmanifest",
-        "static/static/user-import.csv",
-        "uv.lock",
-        "vite.config.ts"
+        "src/lib/utils/protectedFiles.test.ts",
+        "src/lib/utils/protectedFiles.ts"
       ],
-      "sha256": "984c9b1e41337141014b9ae9fda8257e41306992959da043e4bfc7b4ef7c2afe"
+      "sha256": "f500896a3ddeae0f111d7575201307df7145fe1b3a68859bc72f69d09b5cd7e9"
     },
     {
-      "patch": "02-build.patch",
-      "description": "Our reproducible build, toolchain and CI recipes / Наши сборочные рецепты, toolchain и CI.",
+      "patch": "06-terminal-browser-access.patch",
+      "description": "Bind browser and watch tickets to the terminal owner, token and chat scope / Привязывает браузерные и файловые билеты к владельцу терминала, токену и чату.",
       "paths": [
-        ".avx1/Install.cmd",
-        ".avx1/Install.ps1",
-        ".avx1/PATCHES.json",
-        ".avx1/android_sdk.py",
-        ".avx1/audit_requirements.py",
-        ".avx1/bench_json.py",
-        ".avx1/bench_json_profiles.py",
-        ".avx1/build.py",
-        ".avx1/common.py",
-        ".avx1/experiment_json.py",
+        ".avx1/test_mainstream_policy.py",
+        ".avx1/test_terminal.py",
+        "LICENSE-NOVNC.txt",
+        "backend/open_webui/routers/terminals.py",
+        "backend/open_webui/utils/browser.py"
+      ],
+      "sha256": "627759cab2608531f72b48df139dc2348759e70e8c624a53f30cc71317e46407"
+    },
+    {
+      "patch": "07-tools-and-subagents.patch",
+      "description": "Scope tool discovery to selected IDs and resolve subagents under the caller’s access rights / Ограничивает инструменты выбранными ID и проверяет права вызывающего для субагентов.",
+      "paths": [
+        ".avx1/test_agent_prs.py",
+        ".avx1/test_tool_server_policy.mjs",
+        "backend/open_webui/tools/builtin.py",
+        "backend/open_webui/utils/access_control/__init__.py",
+        "backend/open_webui/utils/subagents.py",
+        "backend/open_webui/utils/tools.py",
+        "src/lib/components/admin/Settings/Subagents.svelte",
+        "src/lib/components/chat/MessageInput/IntegrationsMenu.svelte",
+        "src/lib/utils/toolServerPolicy.js"
+      ],
+      "sha256": "bc36d3d3009e84df9dd288400fe7aa8255f11886875672ba502127860b8834b1"
+    },
+    {
+      "patch": "08-chat-integration.patch",
+      "description": "Wire mic origin, voice budget, tool selection and model routing into shared chat and request handlers / Подключает источник микрофона, бюджет голоса, выбор инструментов и маршрутизацию моделей в общих обработчиках.",
+      "paths": [
         ".avx1/frontend-contract.json",
         ".avx1/frontend_contract.py",
-        ".avx1/hardware-profile.json",
+        ".avx1/frontend_contract.test.mjs",
+        ".avx1/test_chat_model_preservation.mjs",
+        ".avx1/test_frontend_browser.py",
+        ".avx1/test_responses_clients.py",
+        ".avx1/test_suggestions.mjs",
+        "backend/open_webui/config.py",
+        "backend/open_webui/routers/configs.py",
+        "backend/open_webui/routers/models.py",
+        "backend/open_webui/routers/openai.py",
+        "backend/open_webui/utils/audit.py",
+        "backend/open_webui/utils/headers.py",
+        "backend/open_webui/utils/middleware.py",
+        "backend/open_webui/utils/models.py",
+        "backend/open_webui/utils/response.py",
+        "src/lib/apis/index.ts",
+        "src/lib/components/chat/Chat.svelte",
+        "src/lib/components/chat/ChatTabs/SideChat.svelte",
+        "src/lib/components/chat/MessageInput.svelte",
+        "src/lib/components/workspace/Models/ModelEditor.svelte",
+        "src/lib/stores/index.ts",
+        "src/lib/utils/assistantCompatibility.js"
+      ],
+      "sha256": "f9ff1ab5d12a46c5fca26ea5de7598453519bee629e08d415c295ebd2bddd86f"
+    },
+    {
+      "patch": "09-localization.patch",
+      "description": "Translate fork controls and localize generated UI content / Переводит настройки форка и локализует содержимое интерфейса.",
+      "paths": [
         ".avx1/locale-allowlist.json",
-        ".avx1/mnemosyne-source.json",
+        ".avx1/test_locales.py",
+        "src/lib/i18n/locales/en-US/translation.json",
+        "src/lib/i18n/locales/ru-RU/translation.json",
+        "src/lib/utils/localizedContent.ts"
+      ],
+      "sha256": "bd8678245e311aaff9524aca727e808c49cdf29ca2251a0a8b08492969ac721a"
+    },
+    {
+      "patch": "10-native-json.patch",
+      "description": "Qualify AVX1 orjson builds and native cache reuse, with stock JSON as default / Проверяет AVX1-сборки orjson и переиспользование кэша, оставляя штатный JSON по умолчанию.",
+      "paths": [
+        ".avx1/bench_json.py",
+        ".avx1/bench_json_profiles.py",
+        ".avx1/experiment_json.py",
+        ".avx1/hardware-profile.json",
         ".avx1/native-policy.json",
         ".avx1/native_cache.py",
         ".avx1/native_json.py",
         ".avx1/native_json_compat.py",
+        ".avx1/test_native_cache.py",
+        ".github/workflows/avx1-json-experiments.yml",
+        ".github/workflows/native-compare.yml"
+      ],
+      "sha256": "25910fe5c82c97e3b77a0092295e61f4192c3ddafc665730548f6591adf4bd57"
+    },
+    {
+      "patch": "11-package-assets.patch",
+      "description": "Adjust WebUI package hooks, Vite build and bundled browser assets / Адаптирует упаковку WebUI, сборку Vite и ресурсы браузера.",
+      "paths": [
+        "hatch_build.py",
+        "static/opensearch.xml",
+        "static/static/site.webmanifest",
+        "static/static/user-import.csv",
+        "vite.config.ts"
+      ],
+      "sha256": "12ebf1526f10eafd379f1a3519727f1deaae7a91e2b6a699065cda624dd407bd"
+    },
+    {
+      "patch": "12-portable-install.patch",
+      "description": "Provide portable build commands and the fork installer / Добавляет команды переносимой сборки и установщик.",
+      "paths": [
+        ".avx1/Install.cmd",
+        ".avx1/Install.ps1",
         ".avx1/portable_build.py",
+        "Build.cmd"
+      ],
+      "sha256": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9"
+    },
+    {
+      "patch": "13-ci-build.patch",
+      "description": "Pin toolchains and package inputs, and run the fork build and publication checks / Закрепляет инструменты и входы сборки, запускает проверки пакетов и публикации.",
+      "paths": [
+        ".avx1/android_sdk.py",
+        ".avx1/build.py",
+        ".avx1/common.py",
         ".avx1/project.json",
-        ".avx1/review-20261025.json",
-        ".avx1/review-20261029.json",
-        ".avx1/review-20261030.json",
-        ".avx1/security_scope.py",
-        ".avx1/strata_reasoning_browser.py",
+        ".avx1/test_build_inputs.py",
+        ".avx1/test_public_gate.py",
         ".avx1/toolchains.json",
         ".gitattributes",
         ".github/workflows/avx1-build.yml",
-        ".github/workflows/avx1-json-experiments.yml",
-        ".github/workflows/native-compare.yml",
-        ".gitignore",
-        "Build.cmd",
-        "backend/requirements.txt",
-        "package-lock.json"
+        ".gitignore"
       ],
-      "sha256": "05537a5052e131fcf193c89313cb5b6a5e5d674cc57170b1f2755457c5919b93"
+      "sha256": "aade7618b2bff03ecf231b3d038e00812ab93603e63dba3933337428fada7538"
     },
     {
-      "patch": "03-tests.patch",
-      "description": "Our regressions and adaptations of upstream fixtures / Наши регрессии и адаптации тестов.",
+      "patch": "14-upstream-regressions.patch",
+      "description": "Exercise adapted upstream contracts and regression fixtures / Проверяет адаптированные контракты upstream и сценарии регрессий.",
       "paths": [
-        ".avx1/frontend_contract.test.mjs",
-        ".avx1/test_agent_prs.py",
-        ".avx1/test_audit_requirements.py",
-        ".avx1/test_authlib_security.py",
-        ".avx1/test_avatar_defaults.mjs",
-        ".avx1/test_avatar_limits.py",
-        ".avx1/test_brotli.py",
-        ".avx1/test_build_inputs.py",
-        ".avx1/test_chat_model_preservation.mjs",
         ".avx1/test_daily_20261029.py",
         ".avx1/test_daily_20261030.py",
-        ".avx1/test_free_llm.mjs",
-        ".avx1/test_free_llm.py",
-        ".avx1/test_frontend_browser.py",
-        ".avx1/test_locales.py",
-        ".avx1/test_mainstream_policy.py",
-        ".avx1/test_mcp_compat.py",
-        ".avx1/test_mcp_protocol.py",
-        ".avx1/test_native_cache.py",
-        ".avx1/test_oauthlib_security.py",
-        ".avx1/test_public_gate.py",
-        ".avx1/test_responses_clients.py",
-        ".avx1/test_security_scope.py",
-        ".avx1/test_strata_reasoning.mjs",
-        ".avx1/test_strata_reasoning.py",
-        ".avx1/test_suggestions.mjs",
-        ".avx1/test_terminal.py",
-        ".avx1/test_tool_server_policy.mjs",
         ".avx1/test_upstream_20261104.py",
         ".avx1/test_upstream_20261107.py",
-        ".avx1/test_upstream_daily.py",
-        "src/lib/utils/protectedFiles.test.ts"
+        ".avx1/test_upstream_daily.py"
       ],
-      "sha256": "388a6ed81cdcdd722fbff015d173e6345410ba606e22a3714be97f992f89aaa4"
+      "sha256": "68a8a7f545cc3f994b49569e5cca80a15557a350acecbd6acc3a7f94c9b32f75"
     },
     {
-      "patch": "04-documentation.patch",
-      "description": "Our fork documentation, notices and qualification evidence / Наши описания форка, уведомления и доказательства квалификации.",
+      "patch": "15-project-docs.patch",
+      "description": "Document fork setup, support and license terms / Описывает установку, поддержку и условия лицензирования форка.",
       "paths": [
-        ".avx1/measurements/latest.json",
-        "LICENSE-NOVNC.txt",
-        "NOTICE-MNEMOSYNE.txt",
         "README.md",
-        "README.ru.md",
-        "docs/provider-eligibility.md"
+        "README.ru.md"
       ],
-      "sha256": "94fdd2f70ded4c2e04fd06f9658813c77baca46a8263db8cbe1d6e72ca9d7e9c"
+      "sha256": "c25c22758154576587dd5ed61a51921b2ffc580729f9a7971c6f7427a5d2a501"
+    },
+    {
+      "patch": "16-fork-records.patch",
+      "description": "Record fork changes, upstream reviews and qualification measurements / Хранит журнал изменений, разбор upstream и результаты проверок.",
+      "paths": [
+        ".avx1/PATCHES.json",
+        ".avx1/measurements/latest.json",
+        ".avx1/review-20261025.json",
+        ".avx1/review-20261029.json",
+        ".avx1/review-20261030.json"
+      ],
+      "sha256": "83885d10769e75d26c0c118975c20f10f70a66d35a26d342af58bf1b7cccee7d"
     }
   ],
   "files": {
-    "01-runtime.patch": "984c9b1e41337141014b9ae9fda8257e41306992959da043e4bfc7b4ef7c2afe",
-    "02-build.patch": "05537a5052e131fcf193c89313cb5b6a5e5d674cc57170b1f2755457c5919b93",
-    "03-tests.patch": "388a6ed81cdcdd722fbff015d173e6345410ba606e22a3714be97f992f89aaa4",
-    "04-documentation.patch": "94fdd2f70ded4c2e04fd06f9658813c77baca46a8263db8cbe1d6e72ca9d7e9c",
+    "01-dependencies.patch": "021dd1e4b348710a4437380e8b1be4504ac9029a036ce6783ccf7f15142b7483",
+    "02-free-llm.patch": "34a315385a9d8b37cdd09e4aaedf39378086186317aee41d3a60c1ea11fff179",
+    "03-strata-reasoning.patch": "0a18b93a488faabd2b41ab4827aa4468d5793c5e59a928784ba7030e07d92492",
+    "04-voice-avatars.patch": "176deca91ce8a90ca2e291dadcc42c91562d9d63a15e9524fb0411ba1d2357a5",
+    "05-protected-media.patch": "f500896a3ddeae0f111d7575201307df7145fe1b3a68859bc72f69d09b5cd7e9",
+    "06-terminal-browser-access.patch": "627759cab2608531f72b48df139dc2348759e70e8c624a53f30cc71317e46407",
+    "07-tools-and-subagents.patch": "bc36d3d3009e84df9dd288400fe7aa8255f11886875672ba502127860b8834b1",
+    "08-chat-integration.patch": "f9ff1ab5d12a46c5fca26ea5de7598453519bee629e08d415c295ebd2bddd86f",
+    "09-localization.patch": "bd8678245e311aaff9524aca727e808c49cdf29ca2251a0a8b08492969ac721a",
+    "10-native-json.patch": "25910fe5c82c97e3b77a0092295e61f4192c3ddafc665730548f6591adf4bd57",
+    "11-package-assets.patch": "12ebf1526f10eafd379f1a3519727f1deaae7a91e2b6a699065cda624dd407bd",
+    "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
+    "13-ci-build.patch": "aade7618b2bff03ecf231b3d038e00812ab93603e63dba3933337428fada7538",
+    "14-upstream-regressions.patch": "68a8a7f545cc3f994b49569e5cca80a15557a350acecbd6acc3a7f94c9b32f75",
+    "15-project-docs.patch": "c25c22758154576587dd5ed61a51921b2ffc580729f9a7971c6f7427a5d2a501",
+    "16-fork-records.patch": "83885d10769e75d26c0c118975c20f10f70a66d35a26d342af58bf1b7cccee7d",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
-    "series": "0de3cc8bf7284c341fd9a7217a5cc598d813b5a95bdebb6584f9a9c790128ada",
-    "README.md": "82f1dae077aaa6230bbe2775283d817204d4dae31043bfc66217d0ec90bb6114"
+    "series": "d75c171ec990d68d24aebae9f7cd6aaf9d21c97a3b3dbc2da7d393f6c24fec76",
+    "README.md": "21e356c0bfbf97a73c487e793ca4fef016b394a265ff15e1cda1bccf7e216852"
   }
 }

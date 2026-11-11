@@ -1,0 +1,121 @@
+diff --git a/.avx1/Install.cmd b/.avx1/Install.cmd
+new file mode 100644
+index 0000000000000000000000000000000000000000..fb74de66958002bd7a4b5cdc928213536435b175
+--- /dev/null
++++ b/.avx1/Install.cmd
+@@ -0,0 +1,4 @@
++@echo off
++setlocal
++powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install.ps1" %*
++exit /b %errorlevel%
+diff --git a/.avx1/Install.ps1 b/.avx1/Install.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b2c16b51ad96e0b21d45bf7c9db8c59438cabdd
+--- /dev/null
++++ b/.avx1/Install.ps1
+@@ -0,0 +1,46 @@
++param([string]$Destination = '', [switch]$CheckOnly, [switch]$ExperimentalNativeJson)
++$ErrorActionPreference = 'Stop'
++Add-Type -AssemblyName System.IO.Compression.FileSystem
++$manifest = Get-Content -Raw -LiteralPath "$PSScriptRoot\manifest.json" | ConvertFrom-Json
++if (-not $Destination) { $Destination = Join-Path $env:LOCALAPPDATA ($manifest.project + '-avx1-' + $manifest.channel) }
++foreach ($item in $manifest.files) {
++    $file = Join-Path $PSScriptRoot $item.path
++    if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $item.sha256) { throw "Checksum mismatch: $($item.path)" }
++}
++if ($CheckOnly) { Write-Output 'Package checksums OK'; exit 0 }
++if ($manifest.project -eq 'conduit') {
++    Write-Output 'Install the APK on an Android ARM64 device. The fork uses its own application ID and signing key.'
++    exit 0
++}
++if ($manifest.project -eq 'desktop') {
++    $application = Join-Path $PSScriptRoot 'desktop'
++    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
++    Copy-Item -LiteralPath $application -Destination $Destination -Recurse -Force
++    Write-Output "Launch: $Destination\desktop\open-webui.exe"
++    exit 0
++}
++if (Test-Path -LiteralPath (Join-Path $Destination 'python')) { throw 'Choose a new empty destination to preserve existing data.' }
++New-Item -ItemType Directory -Path $Destination -Force | Out-Null
++$runtimeZip = Join-Path $Destination 'python-runtime.tar.gz'
++Invoke-WebRequest -UseBasicParsing -Uri $manifest.python.url -OutFile $runtimeZip
++if ((Get-FileHash -LiteralPath $runtimeZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $manifest.python.sha256) { throw 'Python checksum mismatch' }
++$runtime = Join-Path $Destination 'python'
++& tar.exe -xzf $runtimeZip -C $Destination
++if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $runtime 'python.exe'))) { throw 'Python extraction failed' }
++Remove-Item -LiteralPath $runtimeZip
++$site = Join-Path $runtime 'Lib\site-packages'
++New-Item -ItemType Directory -Path $site -Force | Out-Null
++$pip = Get-ChildItem -LiteralPath "$PSScriptRoot\bootstrap" -Filter 'pip-*.whl' | Select-Object -First 1
++if (-not (Test-Path -LiteralPath (Join-Path $site 'pip'))) { [IO.Compression.ZipFile]::ExtractToDirectory($pip.FullName, $site) }
++$python = Join-Path $runtime 'python.exe'
++$wheels = @(Get-ChildItem -LiteralPath "$PSScriptRoot\wheels" -Filter '*.whl' | ForEach-Object FullName)
++if ($manifest.native_json.default -eq 'stock' -and -not $ExperimentalNativeJson) {
++    $wheels = @($wheels | Where-Object { [IO.Path]::GetFileName($_) -notlike 'orjson-*.whl' })
++}
++& $python -m pip install --no-cache-dir --disable-pip-version-check --no-input @wheels
++if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
++Copy-Item -LiteralPath "$PSScriptRoot\manifest.json" -Destination $Destination
++$entry = if ($manifest.project -eq 'webui') { 'from open_webui import app; app()' } else { 'from open_terminal.cli import main; main()' }
++$launch = @('@echo off', 'setlocal', 'cd /d "%~dp0"', 'if not exist data mkdir data', 'set "DATA_DIR=%~dp0data"', 'set "HF_HOME=%~dp0models"', ('"%~dp0python\python.exe" -c "' + $entry + '" ' + $(if ($manifest.project -eq 'webui') { 'serve --host 127.0.0.1 --port 8080' } else { 'run --host 127.0.0.1 --port 8000' })), 'exit /b %errorlevel%')
++[IO.File]::WriteAllLines((Join-Path $Destination 'Start.cmd'), $launch, [Text.Encoding]::ASCII)
++Write-Output "Installed. Launch $Destination\Start.cmd. Models download on demand from Hugging Face."
+diff --git a/.avx1/portable_build.py b/.avx1/portable_build.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2892e3648ceb500c63c258fd1c5fe22f4fb04a3d
+--- /dev/null
++++ b/.avx1/portable_build.py
+@@ -0,0 +1,41 @@
++"""Model-independent entry point for the repository's pinned build recipe."""
++import argparse
++import datetime as dt
++import json
++import os
++from pathlib import Path
++import shutil
++import subprocess
++import sys
++
++ROOT=Path(__file__).resolve().parents[1]
++def run(*args,capture=False):
++    result=subprocess.run([str(a) for a in args],cwd=ROOT,check=True,text=True,
++        stdout=subprocess.PIPE if capture else None,encoding='utf-8')
++    return result.stdout.strip() if capture else None
++
++def main():
++    parser=argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('command',choices=['status','build','local'],nargs='?',default='status')
++    args=parser.parse_args()
++    project=json.loads((ROOT/'.avx1/project.json').read_text('utf-8'))
++    git=shutil.which('git')
++    if not git:raise RuntimeError('Install Git and retry; no LLM is required')
++    source=run(git,'rev-parse','HEAD',capture=True)
++    dirty=bool(run(git,'status','--porcelain',capture=True))
++    if args.command=='status':
++        print(json.dumps({'project':project['id'],'source':source,'clean':not dirty,
++            'model_required':False,'recipe':'.avx1/build.py','pins':'.avx1/toolchains.json'}));return
++    if dirty:raise RuntimeError('Commit/review source changes before building')
++    day=dt.datetime.now(dt.timezone(dt.timedelta(hours=6))).strftime('%Y%m%d')
++    if args.command=='local':
++        os.environ.update(BUILD_CHANNEL='latest',BUILD_DAY=day)
++        run(sys.executable,ROOT/'.avx1/build.py');return
++    gh=shutil.which('gh')
++    if not gh:raise RuntimeError('Install GitHub CLI and run gh auth login once; do not put a token in this project')
++    remote=run(gh,'api','repos/'+project['repository']+'/git/ref/heads/avx1','--jq','.object.sha',capture=True)
++    if remote!=source:raise RuntimeError('Published avx1 differs from this source; review and push the exact commit first')
++    run(gh,'workflow','run','avx1-build.yml','--repo',project['repository'],'--ref','avx1','-f','day='+day)
++    print('Build dispatched for '+source+'. The workflow performs checks and produces one verified candidate.')
++
++if __name__=='__main__':main()
+diff --git a/Build.cmd b/Build.cmd
+new file mode 100644
+index 0000000000000000000000000000000000000000..311098f171a4267a97eb5bac33deae4d1301a287
+--- /dev/null
++++ b/Build.cmd
+@@ -0,0 +1,6 @@
++@echo off
++setlocal
++cd /d "%~dp0"
++where py >nul 2>&1
++if errorlevel 1 (python .avx1\portable_build.py %*) else (py -3 .avx1\portable_build.py %*)
++exit /b %errorlevel%

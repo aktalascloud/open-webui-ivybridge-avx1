@@ -1,0 +1,305 @@
+diff --git a/.avx1/test_free_llm.mjs b/.avx1/test_free_llm.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..899cc8b746eaff7119b3f3438bff83098df0b225
+--- /dev/null
++++ b/.avx1/test_free_llm.mjs
+@@ -0,0 +1,14 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import {freeLlmPreset,FREE_LLM_CATALOG} from '../src/lib/utils/freeLlm.js';
++
++test('one anonymous preset exposes two fixed models without changing the catalog',()=>{
++ const preset=freeLlmPreset();
++ assert.equal(preset.key,'');assert.equal(preset.auth_type,'none');
++ assert.equal(preset.forward_cookies,false);assert.deepEqual(preset.headers,{});
++ assert.equal(preset.provider,'freellm');assert.equal(preset.prefix_id,'FreeLLM');
++ assert.equal(preset.model_ids.length,2);assert.equal(FREE_LLM_CATALOG.hourly_requests_per_ip,200);
++ assert.equal(new Set(FREE_LLM_CATALOG.models.map(m=>m.vendor)).size,2);
++ preset.model_ids.length=0;assert.equal(freeLlmPreset().model_ids.length,2);
++ assert.equal(FREE_LLM_CATALOG.research_sources.length,3);
++});
+diff --git a/.avx1/test_free_llm.py b/.avx1/test_free_llm.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2bf22d93f95cb9614c65eee2bd42d1c9ac897b13
+--- /dev/null
++++ b/.avx1/test_free_llm.py
+@@ -0,0 +1,59 @@
++"""Free-model allowlist and actual outbound identity isolation; offline only."""
++import copy
++import importlib.util
++from pathlib import Path
++import sys
++import unittest
++from unittest.mock import AsyncMock, patch
++from types import SimpleNamespace as NS
++from fastapi import HTTPException
++from test_daily_20261030 import load
++
++ROOT = Path(__file__).resolve().parents[1]
++spec = importlib.util.spec_from_file_location('free_llm_policy', ROOT/'backend/open_webui/utils/free_llm.py')
++policy = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(policy)
++
++
++class FreeLLM(unittest.IsolatedAsyncioTestCase):
++    def test_only_two_reviewed_models_and_no_paid_or_credential_fallback(self):
++        cfg={'provider':'freellm','auth_type':'none'}
++        models=[m['id'] for m in policy.CATALOG['models']]
++        self.assertEqual(len(set(models)),2)
++        self.assertEqual(len({m['vendor'] for m in policy.CATALOG['models']}),2)
++        for model in models:policy.check_free_llm_request(cfg,policy.CATALOG['base_url'],'',model)
++        for override in ({'auth_type':'session'},{'headers':{'Authorization':'secret'}},
++                         {'forward_cookies':True},{'azure':True},{'api_type':'responses'}):
++            with self.assertRaises(HTTPException):policy.check_free_llm_request({**cfg,**override},policy.CATALOG['base_url'])
++        for url,key,model in [('http://127.0.0.1/v1','',models[0]),
++                              (policy.CATALOG['base_url'],'secret',models[0]),
++                              (policy.CATALOG['base_url'],'','paid/model')]:
++            with self.assertRaises(HTTPException):policy.check_free_llm_request(cfg,url,key,model)
++        policy.check_free_llm_request({'provider':'other'},'http://local','unchanged','other-model')
++
++    def test_private_routing_identity_is_not_part_of_the_cloud_payload(self):
++        body={'model':policy.CATALOG['models'][0]['id'],'messages':[{'role':'user','content':'fixture'}],
++              'user':'private-user','metadata':{'chat_id':'private-chat'},'temperature':.6}
++        before=copy.deepcopy(body)
++        clean=policy.prepare_free_llm_payload({'provider':'freellm','auth_type':'none'},policy.CATALOG['base_url'],'',body)
++        self.assertNotIn('user',clean);self.assertNotIn('metadata',clean)
++        self.assertEqual(clean['messages'],body['messages']);self.assertEqual(clean['temperature'],.6)
++        self.assertEqual(body,before)
++        self.assertIs(policy.prepare_free_llm_payload({'provider':'other'},'local','key',body),body)
++
++    async def test_actual_header_builder_never_reads_or_forwards_private_identity(self):
++        scope={'ENABLE_FORWARD_USER_INFO_HEADERS':True,
++               'get_custom_headers':AsyncMock(side_effect=AssertionError('Private headers evaluated')),
++               'get_system_oauth_token':AsyncMock(side_effect=AssertionError('OAuth evaluated'))}
++        load('utils/headers.py',['get_headers_and_cookies'],scope)
++        request=NS(cookies={'private':'cookie'},state=NS(token=NS(credentials='private-session')))
++        user=NS(id='private-user',email='private@example.invalid',name='Private',role='admin')
++        config={'provider':'freellm','auth_type':'none'};before=copy.deepcopy(config)
++        with patch.dict(sys.modules,{'open_webui.utils.free_llm':policy}):
++            headers,cookies=await scope['get_headers_and_cookies'](request,policy.CATALOG['base_url'],'',config,{'chat_id':'private-chat'},user=user)
++        self.assertEqual(headers,{'Content-Type':'application/json'});self.assertEqual(cookies,{})
++        self.assertEqual(config,before)
++        scope['get_custom_headers'].assert_not_awaited();scope['get_system_oauth_token'].assert_not_awaited()
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/backend/open_webui/utils/free_llm.py b/backend/open_webui/utils/free_llm.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..22346c10cc13700656b530301d14f7e7369a3b9f
+--- /dev/null
++++ b/backend/open_webui/utils/free_llm.py
+@@ -0,0 +1,25 @@
++"""Anonymous, fixed free catalog. No credentials, account or paid fallback."""
++import json
++from pathlib import Path
++from fastapi import HTTPException
++
++CATALOG = json.loads(Path(__file__).with_name('free_llm_catalog.json').read_text('utf-8'))
++
++
++def check_free_llm_request(config, url, key=None, model=None):
++    if config.get('provider') != 'freellm':
++        return
++    if (url.rstrip('/') != CATALOG['base_url'] or key
++            or config.get('auth_type') != 'none' or config.get('headers')
++            or config.get('forward_cookies') or config.get('azure')
++            or config.get('api_type')):
++        raise HTTPException(400, 'FreeLLM requires its anonymous gateway profile without credentials or custom headers')
++    if model is not None and model not in {row['id'] for row in CATALOG['models']}:
++        raise HTTPException(400, 'This model is not in the reviewed FreeLLM catalog')
++
++
++def prepare_free_llm_payload(config, url, key, payload):
++    check_free_llm_request(config, url, key, payload.get('model'))
++    if config.get('provider') != 'freellm':
++        return payload
++    return {name: value for name, value in payload.items() if name not in {'user', 'metadata'}}
+diff --git a/backend/open_webui/utils/free_llm_catalog.json b/backend/open_webui/utils/free_llm_catalog.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..d4c23f53a7c1825e4f76afab48c98b5a119ba662
+--- /dev/null
++++ b/backend/open_webui/utils/free_llm_catalog.json
+@@ -0,0 +1,35 @@
++{
++  "base_url": "https://ai-gateway.kilo.ai/api/v1",
++  "prefix_id": "FreeLLM",
++  "hourly_requests_per_ip": 200,
++  "quota_scope": "shared across all models and clients on the same public IP",
++  "reviewed": "2026-11-01",
++  "models": [
++    {
++      "id": "reflection/beam-free",
++      "name": "Reflection Beam 1.0 · 501B",
++      "context_length": 1048576,
++      "vision": false,
++      "source": "https://reflection.ai/beam-model-card",
++      "vendor": "reflection",
++      "parameters_b": 501.3
++    },
++    {
++      "id": "nvidia/nemotron-3.5-super-vl:free",
++      "name": "NVIDIA Nemotron 3.5 Super VL · 120B",
++      "context_length": 1000000,
++      "vision": true,
++      "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4",
++      "vendor": "nvidia",
++      "parameters_b": 120
++    }
++  ],
++  "research_sources": [
++    "dataelement/dsh-desktop",
++    "nejib1/Free-LLM",
++    "tashfeenahmed/freellmapi"
++  ],
++  "terms": "https://kilo.ai/docs/gateway/models-and-providers",
++  "privacy": "Providers may retain prompts and outputs for training. Do not submit personal or confidential data.",
++  "selection_count": 2
++}
+diff --git a/docs/provider-eligibility.md b/docs/provider-eligibility.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..eeedd80cffe80307478f85efd476133d83da8f84
+--- /dev/null
++++ b/docs/provider-eligibility.md
+@@ -0,0 +1,21 @@
++# FreeLLM
++
++One provider in OWUI → Connections. No account, personal API key, Cline, DSH Desktop or extra router. The current anonymous Kilo gateway has a **shared limit of 200 requests/hour/public IP**, across all three models and clients. Hourly limits were explicitly accepted by the user on 30 October 2026.
++
++Один провайдер в OWUI → Подключения. Без аккаунта, личного API-ключа, Cline, DSH Desktop и лишнего роутера. Общий лимит анонимного Kilo — **200 запросов/час на публичный IP**, суммарно для трёх моделей и клиентов. Почасовой лимит согласован пользователем 30.10.2026.
++
++| Model / Модель | Selection evidence / Основание выбора |
++| --- | --- |
++| Reflection Beam1.0 | [Official model card](https://reflection.ai/beam-model-card): coding, reasoning, MCP/tool use. |
++| Poolside Laguna S2.1 | [Official report](https://poolside.ai/blog/introducing-laguna-s-2-1): long-horizon coding/tool workflows. |
++| NVIDIA Nemotron3.5 Super VL | [Official model card](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4): reasoning, vision, long context. |
++
++These are three distinct vendors, not three Nemotron variants. Selection is workload-based, not a universal intelligence ranking. All three passed one anonymous streaming tool-call probe; no private data was sent. Gateway-served precision and availability can change. No paid model or hidden retry/fallback is selected.
++
++Три разных вендора, без повторов Nemotron. Выбор ориентирован на задачи пользователя и не объявляется универсальным рейтингом интеллекта. Каждая модель прошла анонимную потоковую проверку tool calling на искусственном запросе. Личные данные не отправлялись. Платный fallback и скрытый повтор запросов не включены.
++
++**Privacy / Приватность:** providers may retain prompts/outputs for training; avoid personal/confidential data. Поставщики могут сохранять запросы и ответы для обучения; не передавайте конфиденциальные данные. [Gateway terms](https://kilo.ai/docs/gateway/models-and-providers) · [Quota](https://kilo.ai/docs/gateway/usage-and-billing).
++
++Daily review checks the live free catalog and the sources [DSH Desktop](https://github.com/dataelement/dsh-desktop), [Free-LLM](https://github.com/nejib1/Free-LLM), [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi), including relevant PR/issues/forks. Maintain one strongest qualified option per vendor, three vendors total; preserve the list when unchanged. Unverified, paid or account/key-required channels are not added. DSW2API/browser integration stays removed; existing local services/history/ACLs are preserved.
++
++Ежедневно проверяются каталог и указанные источники, PR/issues/форки. По одному сильному проверенному варианту от каждого из трёх вендоров; неизменный список не требует пересборки. Платные каналы, обязательные аккаунты/ключи и неподтверждённые модели исключаются. DSW2API и браузерная интеграция не возвращаются; локальные сервисы, история и ACL сохранены.
+diff --git a/src/lib/components/AddConnectionModal.svelte b/src/lib/components/AddConnectionModal.svelte
+index 6ce4058589af35562cb9a078469f7ca2ae180301..c095d40c69d09bbee8e3efb1d5fba15a45a80fc0 100644
+--- a/src/lib/components/AddConnectionModal.svelte
++++ b/src/lib/components/AddConnectionModal.svelte
+@@ -1,5 +1,6 @@
+ <script lang="ts">
+ 	import { toast } from 'svelte-sonner';
++	import { freeLlmPreset } from '$lib/utils/freeLlm';
+ 	import { getContext, onMount } from 'svelte';
+ 	const i18n = getContext<any>('i18n');
+ 
+@@ -53,6 +54,14 @@
+ 	let availableModelIds: string[] = [];
+ 
+ 	let loading = false;
++	const providerChanged = () => {
++		if (provider !== 'freellm') return;
++		const preset = freeLlmPreset();
++		url = preset.url; key = ''; auth_type = preset.auth_type;
++		prefixId = preset.prefix_id; modelIds = preset.model_ids;
++		availableModelIds = [...preset.model_ids]; connectionType = 'external';
++		headers = ''; forwardCookies = false; apiType = ''; apiVersion = '';
++	};
+ 	let showDeleteConfirmDialog = false;
+ 	let showAdvanced = false;
+ 
+@@ -356,6 +365,35 @@
+ 					}}
+ 				>
+ 					<div class="px-1">
++							{#if !ollama && !direct}
++								<div class="flex flex-row justify-between items-center w-full mt-2">
++									<label
++										for="provider-select"
++										class={`mb-0.5 text-xs text-gray-500
++								`}>{$i18n.t('Provider')}</label
++									>
++
++									<div>
++										<select
++											id="provider-select"
++											bind:value={provider}
++											on:change={providerChanged}
++											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
++										>
++											<option value="">{$i18n.t('Default')}</option>
++											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
++											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
++											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
++											<option value="freellm">FreeLLM</option>
++											<option value="litellm">{$i18n.t('LiteLLM')}</option>
++										</select>
++									</div>
++								</div>
++							{/if}
++                            {#if provider === 'freellm'}
++                                <p data-freellm-connection class="mb-3 rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-600 dark:bg-gray-850 dark:text-gray-300">{$i18n.t('FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.')}</p>
++                            {/if}
++
+ 						{#if !direct}
+ 							<div class="flex gap-2">
+ 								<div class="flex w-full justify-between items-center">
+@@ -656,29 +694,7 @@
+ 								</div>
+ 							</div>
+ 
+-							{#if !ollama && !direct}
+-								<div class="flex flex-row justify-between items-center w-full mt-2">
+-									<label
+-										for="provider-select"
+-										class={`mb-0.5 text-xs text-gray-500
+-								`}>{$i18n.t('Provider')}</label
+-									>
+ 
+-									<div>
+-										<select
+-											id="provider-select"
+-											bind:value={provider}
+-											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
+-										>
+-											<option value="">{$i18n.t('Default')}</option>
+-											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
+-											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
+-											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
+-											<option value="litellm">{$i18n.t('LiteLLM')}</option>
+-										</select>
+-									</div>
+-								</div>
+-							{/if}
+ 
+ 							{#if azure}
+ 								<div class="flex gap-2 mt-2">
+diff --git a/src/lib/components/admin/Settings/Connections.svelte b/src/lib/components/admin/Settings/Connections.svelte
+index bd8fbaeb9ef59f11d4937321443baa9a71b0c4f6..7c6f6ebf10c09cbfcfc3b995176a8f4ec7f9114c 100644
+--- a/src/lib/components/admin/Settings/Connections.svelte
++++ b/src/lib/components/admin/Settings/Connections.svelte
+@@ -264,6 +264,7 @@
+ 									on:click={() => {
+ 										showAddOpenAIConnectionModal = true;
+ 									}}
++									data-add-openai-connection
+ 									type="button"
+ 								>
+ 									<Plus />
+diff --git a/src/lib/utils/freeLlm.js b/src/lib/utils/freeLlm.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..7d094a5dcaa6b108222bdc588acd6d2dd276eb7a
+--- /dev/null
++++ b/src/lib/utils/freeLlm.js
+@@ -0,0 +1,11 @@
++import catalog from '../../../backend/open_webui/utils/free_llm_catalog.json' with { type: 'json' };
++
++export const FREE_LLM_CATALOG = catalog;
++export function freeLlmPreset() {
++  return {
++    url: catalog.base_url, key: '', provider: 'freellm',
++    auth_type: 'none', prefix_id: catalog.prefix_id,
++    model_ids: catalog.models.map(model => model.id),
++    forward_cookies: false, headers: {}, api_type: '', connection_type: 'external'
++  };
++}

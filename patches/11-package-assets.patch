@@ -1,0 +1,114 @@
+diff --git a/hatch_build.py b/hatch_build.py
+index 623b368b781d4cc4735afefd8295271470bfaf2b..1b0492a8501cffb93bcec4f9a88649c4417fe630 100644
+--- a/hatch_build.py
++++ b/hatch_build.py
+@@ -1,5 +1,6 @@
+ # noqa: INP001
+ import os
++import sys
+ import shutil
+ import subprocess
+ from sys import stderr
+@@ -15,9 +16,10 @@ class CustomBuildHook(BuildHookInterface):
+         if npm is None:
+             raise RuntimeError('NodeJS `npm` is required for building Open Webui but it was not found')
+         stderr.write('### npm install\n')
+-        subprocess.run([npm, 'install', '--force'], check=True)  # noqa: S603
++        subprocess.run([npm, 'ci', '--no-audit', '--no-fund'], check=True)  # noqa: S603
+         stderr.write('\n### npm run build\n')
+         node_options = os.environ.get('NODE_OPTIONS', '')
+         if '--max-old-space-size' not in node_options:
+             os.environ['NODE_OPTIONS'] = f'{node_options} --max-old-space-size=8192'.strip()
+-        subprocess.run([npm, 'run', 'build'], check=True)  # noqa: S603
++        subprocess.run([npm, 'run', 'build'], check=True)
++        subprocess.run([sys.executable, '.avx1/frontend_contract.py'], check=True)  # noqa: S603
+diff --git a/static/opensearch.xml b/static/opensearch.xml
+index d57634488046bdaf2c29c9547a5a09dc1a929ae0..50e64cf16f84474d98c9ae367d22c8e8971e6c46 100644
+--- a/static/opensearch.xml
++++ b/static/opensearch.xml
+@@ -1,9 +1,9 @@
+-<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/" xmlns:moz="http://www.mozilla.org/2006/browser/search/">
+-<!-- LICENSE covers this Open WebUI search identifier. Do not alter, remove, obscure, or replace it except as LICENSE permits: https://docs.openwebui.com/license. -->
+-<ShortName>Open WebUI</ShortName>
+-<Description>Search Open WebUI</Description>
+-<InputEncoding>UTF-8</InputEncoding>
+-<Image width="16" height="16" type="image/x-icon">http://localhost:5137/favicon.png</Image>
+-<Url type="text/html" method="get" template="http://localhost:5137/?q={searchTerms}"/>
+-<moz:SearchForm>http://localhost:5137</moz:SearchForm>
+-</OpenSearchDescription>
++<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/" xmlns:moz="http://www.mozilla.org/2006/browser/search/">
++<!-- LICENSE covers this Open WebUI search identifier. Do not alter, remove, obscure, or replace it except as LICENSE permits: https://docs.openwebui.com/license. -->
++<ShortName>Open WebUI</ShortName>
++<Description>Search Open WebUI</Description>
++<InputEncoding>UTF-8</InputEncoding>
++<Image width="16" height="16" type="image/x-icon">http://localhost:5137/favicon.png</Image>
++<Url type="text/html" method="get" template="http://localhost:5137/?q={searchTerms}"/>
++<moz:SearchForm>http://localhost:5137</moz:SearchForm>
++</OpenSearchDescription>
+diff --git a/static/static/site.webmanifest b/static/static/site.webmanifest
+index 95915ae2bcadc0d10ab44f48efd412a5eac69bc3..9b66b63739f515f60bc9952777bf4a96da4e6c22 100644
+--- a/static/static/site.webmanifest
++++ b/static/static/site.webmanifest
+@@ -1,21 +1,21 @@
+-{
+-  "name": "Open WebUI",
+-  "short_name": "WebUI",
+-  "icons": [
+-    {
+-      "src": "/static/web-app-manifest-192x192.png",
+-      "sizes": "192x192",
+-      "type": "image/png",
+-      "purpose": "maskable"
+-    },
+-    {
+-      "src": "/static/web-app-manifest-512x512.png",
+-      "sizes": "512x512",
+-      "type": "image/png",
+-      "purpose": "maskable"
+-    }
+-  ],
+-  "theme_color": "#ffffff",
+-  "background_color": "#ffffff",
+-  "display": "standalone"
++{
++  "name": "Open WebUI",
++  "short_name": "WebUI",
++  "icons": [
++    {
++      "src": "/static/web-app-manifest-192x192.png",
++      "sizes": "192x192",
++      "type": "image/png",
++      "purpose": "maskable"
++    },
++    {
++      "src": "/static/web-app-manifest-512x512.png",
++      "sizes": "512x512",
++      "type": "image/png",
++      "purpose": "maskable"
++    }
++  ],
++  "theme_color": "#ffffff",
++  "background_color": "#ffffff",
++  "display": "standalone"
+ }
+\ No newline at end of file
+diff --git a/static/static/user-import.csv b/static/static/user-import.csv
+index 918a92aad71d708ae13fedb8b91f79c29a5b3e9d..984483979f0f6f4fc4f01ba87a2ed1bb0d156b97 100644
+--- a/static/static/user-import.csv
++++ b/static/static/user-import.csv
+@@ -1 +1 @@
+-Name,Email,Password,Role
++Name,Email,Password,Role
+diff --git a/vite.config.ts b/vite.config.ts
+index a2cbcd8d7bc579892b003236c670b2c22739de37..cfc4c375e1a9c1016e54880a4d50bdd16376f33f 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -9,7 +9,7 @@ const buildInfo = resolveBuildInfo();
+ 
+ export default defineConfig({
+ 	resolve: {
+-		conditions: ['onnxruntime-web-use-extern-wasm']
++		conditions: ['module', 'browser', 'development|production', 'onnxruntime-web-use-extern-wasm']
+ 	},
+ 	plugins: [
+ 		sveltekit(),

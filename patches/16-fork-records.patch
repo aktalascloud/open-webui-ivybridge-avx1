@@ -1,0 +1,579 @@
+diff --git a/.avx1/PATCHES.json b/.avx1/PATCHES.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..2e6224cf011062390701a26ba1acb3b4cbb0ee70
+--- /dev/null
++++ b/.avx1/PATCHES.json
+@@ -0,0 +1,285 @@
++[
++  {
++    "id": "WEB-001",
++    "description": "Build the frontend from its lockfile with npm ci; remove forced dependency resolution.",
++    "source": "local"
++  },
++  {
++    "id": "WEB-002",
++    "description": "Build orjson for Ivy Bridge with Rust O3 and LTO/ThinLTO, without PGO; compare on the actual CPU.",
++    "source": "local recipe"
++  },
++  {
++    "id": "WEB-003",
++    "description": "Source-level microphone provenance, bounded report speech, same-message speech identity and local call emoji; replaces chunk-name-dependent private overlays.",
++    "source": "Generic compatibility hooks authored for this fork; no private filter/settings included."
++  },
++  {
++    "id": "WEB-004",
++    "description": "Patched browser dependency lock, current SheetJS tarball, sharp override and PDF.js 6; compatible Vite 7/Svelte plugin 6 toolchain.",
++    "source": "Official package releases and npm advisories; runtime high/critical gate."
++  },
++  {
++    "id": "WEB-005",
++    "description": "Backport official Windows file URL normalization for encryption artifact verification without changing cryptographic code.",
++    "source": "Official open-webui/dev encryption artifact verifier and matching manifest."
++  },
++  {
++    "id": "WEB-006",
++    "description": "Upgrade twelve vulnerable runtime dependency pins; explicitly assess only four standalone Chroma HTTP-server advisories against the embedded/client boundary. New advisories remain blocking. MCP 2.3.0 is qualified against the actual client constructor signatures, wire aliases and both discovery/legacy HTTP protocols.",
++    "source": "PyPI advisories and exact package releases; .avx1/security_scope.py and tests."
++  },
++  {
++    "id": "WEB-007",
++    "description": "Preserve Vite browser export conditions alongside ONNX WASM; prevent Svelte server context in client chunks. Gate packages with a real Chromium login render against an isolated backend.",
++    "source": "Diagnosed from the shipped sourcemap and browser lifecycle_outside_component; official Vite resolve.conditions defaults."
++  },
++  {
++    "id": "WEB-008",
++    "description": "Complete missing Russian UI strings and plural forms; localize exact legacy stock suggestions without changing custom prompts or persisted settings.",
++    "source": "Reviewed Russian translation in this fork; source key/placeholder gate."
++  },
++  {
++    "id": "WEB-009",
++    "description": "Pin Brotli 1.2.1 and BrotliCFFI 1.2.1.0 to remediate CVE-2026-111497; verify valid round trips and rejection of trailing bytes.",
++    "url": "https://pypi.org/project/brotlicffi/1.2.1.0/"
++  },
++  {
++    "id": "WEB-010",
++    "description": "Preserve MCP arguments for anyOf/oneOf input schemas in native and legacy tool calling; ordinary function argument filtering remains intact.",
++    "source": "Now included upstream; retained regression coverage for native/legacy arguments and readable MCP errors.",
++    "url": "https://github.com/open-webui/open-webui/pull/32903",
++    "upstream_head": "1e42eb28f2ed0c75d699454b2c1cf50405a8b151"
++  },
++  {
++    "id": "WEB-011",
++    "description": "Return readable MCP error text instead of a raw content-object dump.",
++    "source": "Now included upstream; retained regression coverage for native/legacy arguments and readable MCP errors.",
++    "url": "https://github.com/open-webui/open-webui/pull/32942",
++    "upstream_head": "9cc638b5945bfec89f13d7c0726c30e7f2009392"
++  },
++  {
++    "id": "WEB-012",
++    "description": "Use upstream resource-specific sharing policy and strict update validation, preserving the fork legacy positional database API; regression-check audience restrictions, admin behavior and unauthorized updates.",
++    "source": "Upstream 0.12.4 ACL redesign; local compatibility adapter retained after semantic conflict resolution.",
++    "url": "https://github.com/open-webui/open-webui/pull/32991",
++    "upstream_head": "ace8830529a88ba02d5a91e2b83e400df5e409cd"
++  },
++  {
++    "id": "WEB-013",
++    "description": "Integrate MCP protocol 2026-07-28 discovery with legacy fallback, snake_case SDK models and httpx2; preserve unlimited tool-call timeout semantics.",
++    "source": "Merged official upstream #33087; fork adds real SDK ASGI protocol regression checks.",
++    "url": "https://github.com/open-webui/open-webui/pull/33087"
++  },
++  {
++    "id": "WEB-014",
++    "description": "Keep tool required-argument ordering deterministic for prompt caching; batch chat-owner access checks and restrict client-supplied message authors.",
++    "source": "Official upstream merges #33000, #32888 and #32872.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33000",
++      "https://github.com/open-webui/open-webui/pull/32888",
++      "https://github.com/open-webui/open-webui/pull/32872"
++    ]
++  },
++  {
++    "id": "WEB-015",
++    "description": "Fix file viewing end-line ranges and line-numbered paging so agents do not miss requested text.",
++    "source": "Official upstream merges #33154 and #33155.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33154",
++      "https://github.com/open-webui/open-webui/pull/33155"
++    ]
++  },
++  {
++    "id": "WEB-016",
++    "description": "Adapt real native/MCP regression tests to the upstream saved function_call item shape and retain explicit approval checks; translate new session analytics and controls into Russian.",
++    "source": "Upstream 0.12.4 development plus local compatibility/translation maintenance; no unmeasured speed claim."
++  },
++  {
++    "id": "WEB-017",
++    "description": "Keep empty chat searches compatible with lightweight chat-list projections instead of dereferencing an absent full chat blob. Preserve nonempty content snippets and owner-scoped queries without fetching extra histories.",
++    "source": "Local regression found by the real Conduit SDK canary against WebUI 0.12.4; actual route tests cover lightweight and full-history rows."
++  },
++  {
++    "id": "WEB-018",
++    "description": "Keep per-call prompt/completion aliases separate from cumulative usage so tool loops do not compact context prematurely; retain local filter/bridge contract. Update generated-image terminal transfer and Russian provider information.",
++    "source": "Official upstream #33218 plus reviewed upstream development snapshot; local actual-function regression tests cover cumulative, latest-call and zero/missing counters.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33218"
++    ]
++  },
++  {
++    "id": "WEB-019",
++    "description": "Compact per-model Strata reasoning picker: standard levels, separate author Ultra, and Mnemosyne-based adaptive reasoning with Russian task vocabulary. Provider-boundary copy preserves original chat text, system/tool records, sampling and other models. High/XHigh do not silently activate author Ultra.",
++    "source": "Local user-requested UI/API integration; Mnemosyne selector ported from MIT source pinned in .avx1/mnemosyne-source.json. Existing author template is not redistributed; no Strata/model restart or shared memory store.",
++    "verification": [
++      "Node request/scoping tests",
++      "real OWUI converters and pinned Strata parser/template references, offline",
++      "packaged Chromium save/reload, mock-provider HTTP request, light/dark and mobile checks"
++    ]
++  },
++  {
++    "id": "WEB-020",
++    "description": "Upstream agent partial output and photo delegation, compressed remote-response rejection, ComfyUI error propagation, IME composition and accessible messages; note pages with attachment permissions and revision/generation guards. Preserve existing Strata controls and Russian UI.",
++    "source": "Official upstream development b34885efc639c10cbf06c35cd2d4ff6055e36b45; seven targeted actual-function note/ACL/fetch regressions added locally. Browser theme fixtures now assert actual light/dark state and use a fresh isolated database.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33269",
++      "https://github.com/open-webui/open-webui/pull/33244",
++      "https://github.com/open-webui/open-webui/pull/33271",
++      "https://github.com/open-webui/open-webui/pull/33237",
++      "https://github.com/open-webui/open-webui/pull/33245",
++      "https://github.com/open-webui/open-webui/pull/33261",
++      "https://github.com/open-webui/open-webui/pull/33255"
++    ]
++  },
++  {
++    "id": "WEB-021",
++    "description": "Upgrade Authlib1.7.2 to fixed1.9.1; retain OAuth client behavior and reject bad signatures, wrong audiences and disallowed signing algorithms. Five offline signature/claims/OAuth request gates supplement the actual packaged login and authenticated API canary.",
++    "source": "Official Authlib1.9.1 package and maintainer advisories; no security allowlist exemption.",
++    "advisories": [
++      "CVE-2026-96760",
++      "CVE-2026-114618",
++      "CVE-2026-114615",
++      "CVE-2026-114617",
++      "CVE-2026-114620",
++      "CVE-2026-114614",
++      "CVE-2026-114616"
++    ],
++    "urls": [
++      "https://github.com/authlib/authlib/security/advisories/GHSA-6v38-4h7w-rj9h",
++      "https://github.com/authlib/authlib/security/advisories/GHSA-8m4g-j4wp-wgcg"
++    ]
++  },
++  {
++    "id": "WEB-022",
++    "description": "Upstream #33272: isolate MCP session lifetime from chat tasks; transport EOF cannot cancel the owning chat. Preserve real user cancellation and same-task cleanup; no uncertain tool replay.",
++    "source": "Official PR33272 head7aec718abe6d08cbbbc53a72b372014745e1bba7; seven actual SDK/lifecycle regression tests.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33272",
++      "https://github.com/open-webui/open-webui/pull/33275"
++    ]
++  },
++  {
++    "id": "WEB-023",
++    "description": "Restrict author Ultra/Adaptive to explicitly enrolled DavidAU Qwen3.8-Next alias/base identity; reject Swift even with copied metadata. Preserve standard model controls and sampling.",
++    "source": "User-requested family/alias guard, Node and actual Python boundary regressions."
++  },
++  {
++    "id": "WEB-026",
++    "description": "Do not capture request/response bodies of user API-key rotation/revocation in audit logs; retain status and audit metadata. Complements the new upstream admin key routes.",
++    "source": "Local security adaptation; targeted audit and first-owner/permission/revocation regressions."
++  },
++  {
++    "id": "WEB-027",
++    "description": "PR33345: keep tool images away from vision-disabled models across saved/history/native/Responses paths; preserve UI outputs and tolerate valid string/null tool outputs. PR33311: preserve the saved chat model during provider outages; explicit selections still save.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33345",
++      "https://github.com/open-webui/open-webui/pull/33311"
++    ],
++    "verification": [
++      "Tool-image immutability and string/null outputs",
++      "Actual saveControls callback: outages, file changes, explicit selection and shared-chat guards"
++    ]
++  },
++  {
++    "id": "WEB-028",
++    "description": "Native orjson compilation cache validates exact source, hosted linker/SDK image, Rust/Python/packaging toolchain, flags, recipes and wheel hashes; unknown/custom toolchains or corrupt cache rebuild. Stock orjson remains default.",
++    "source": "Local build optimization; no new LLM throughput claim."
++  },
++  {
++    "id": "WEB-029",
++    "description": "Shared existing-browser session handoff for Cline + OWUI with separate nonce/role consent; one managed per-user cross-process DeepSeek request lease. Typed expired-session401, vendor-restriction403, transient request recovery without replay, same-credential explicit reconnect, cancellation before vendor POST and SSE-close-before-release. Session saved is distinct from inference readiness; no automatic browser reconnect loops. OWUI Native Messaging authenticates its loopback peer with a DPAPI CurrentUser challenge/proof and encrypts callback credentials end-to-end with a bound acknowledgment; spoofed listeners see no plaintext secrets.",
++    "source": "Independent Apache-2.0 shared bridge additions and Cline neutral lease92526d83; original vendored gateway notices preserved. No vendor restriction bypass.",
++    "verification": [
++      "28 embedded provider fixtures",
++      "10 shared-extension cases",
++      "Real independent-process lease/cancel/process-death/unsafe-ACL test",
++      "Native Messaging origin/framing/port HTTP fixture",
++      "No real vendor inference/auth probes while user-reported account restriction applies"
++    ]
++  },
++  {
++    "id": "WEB-030",
++    "description": "Upstream0.12.5/dev: MCP Apps with sandboxed iframe, current-user server grants, app-only tool visibility and explicit tool confirmation; lazy SQL chat search/snippets; round-local tool-call normalization; chat-load cancellation and explicit model persistence. Preserve our null/string tool-image guards and shared-browser security. Complete18 new Russian UI strings.",
++    "source": "Official09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c; Apache/BSD dependencies retained with upstream project license.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33377",
++      "https://github.com/open-webui/open-webui/pull/33384",
++      "https://github.com/open-webui/open-webui/pull/33335",
++      "https://github.com/open-webui/open-webui/pull/33205"
++    ],
++    "verification": [
++      "Targeted MCP app binding/visibility/current-user/no-replay/CSP tests",
++      "Knowledge pending-count/size guards and tool-round identity",
++      "Real SDK transport and existing auth/DSW regressions in CI",
++      "No private CODE tests or real DeepSeek vendor requests"
++    ]
++  },
++  {
++    "id": "WEB-031",
++    "description": "PR33334: admin model allowlist for sub-agents, intersected with each user model ACL. Parent model/session stays unchanged; different-model children use their own parameters, so DavidAU-only author modes cannot leak. Legacy config clients preserve the allowlist when the field is omitted.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33334"
++    ],
++    "source": "Reviewed head59f62fb86692afddd31524de3eaae879029362d6; local parameter/legacy-config adaptation; CLA/project license retained."
++  },
++  {
++    "id": "WEB-034",
++    "description": "Remove DSW2API provider, account/browser endpoints, native-host build and bundled extension at the user request. Preserve Cline, existing chats, stock audio and all other connections. No unverified anonymous/unlimited model catalog is advertised."
++  },
++  {
++    "id": "WEB-035",
++    "description": "FreeLLM: one anonymous cloud profile with three fixed zero-price models from different vendors: Reflection Beam, Poolside Laguna S2.1 and NVIDIA Nemotron3.5 Super VL. Shared200 requests/hour/IP; explicit privacy disclosure. No personal API key/account/paid fallback, OWUI identity or cookies forwarded; exact model/endpoint guards. DSH/Free-LLM/FreeLLMAPI are monitored research sources, not installed desktop/router dependencies.",
++    "verification": [
++      "Actual anonymous SSE tool call passed once for each model; synthetic prompt only, no retries or private data",
++      "Shared catalog preset and real outbound header-builder isolation regressions",
++      "Packaged Chromium provider selector and existing Strata compatibility"
++    ]
++  },
++  {
++    "id": "WEB-036",
++    "description": "VRM uploads 20 MiB, source textures 8K/128MP, GPU textures bounded 32MP/4096px without rewriting user files; installed legacy avatars remain readable.",
++    "verification": [
++      "Upload limit/8K fixtures",
++      "Packaged Chromium smoke and public microphone contracts",
++      "Existing models/audio/settings preserved"
++    ]
++  },
++  {
++    "id": "WEB-037",
++    "description": "Official dev refresh plus PR33394 Responses/API-client stream and usage compatibility, PR33459 new-chat initialization; existing direct-tool selection/filter fix already covers PR27145. Security pins:joserfc1.7.7/pypdf6.21.4. Two qualified FreeLLM vendors with parameter-count labels.",
++    "urls": [
++      "https://github.com/open-webui/open-webui/pull/33394",
++      "https://github.com/open-webui/open-webui/pull/33459"
++    ],
++    "verification": "Targeted regressions plus exact-source package/privacy/security/startup gates; final CI receipt records actual scope."
++  },
++  {
++    "id": "WEB-NEW-MODEL-VRM-DEFAULT",
++    "description": "New model cards inherit the configured default VRM; preserve explicit sphere/custom choices and all existing cards. Editor reflects the server default. No personal VRM or prompt is bundled.",
++    "verification": "Pure default-inheritance regressions, rig/texture validation and isolated model API canary; packaged Chromium smoke."
++  },
++  {
++    "id": "WEB-LIVE-AVATAR-CONTROLS",
++    "description": "Live voice avatars reuse preview rotation/pan/pinch/wheel/reset controls; interactive stages are not disabled while listening, and camera input does not interrupt audio.",
++    "verification": "Pinned Svelte compilation and packaged Chromium smoke; renderer interaction functions reused unchanged."
++  },
++  {
++    "id": "WEB-MAINSTREAM-013",
++    "description": "Merge official dev2840f0e: temporary-chat ownership/resume, pending approval state, Terminal browser/desktop/event relays and per-card subagent model selection. Preserve legacy DB helpers, Responses conversion, model-specific Strata controls, native tool behavior and private avatar defaults.",
++    "source": "https://github.com/open-webui/open-webui/commit/2840f0e07b398b76db04978334e3232fe8b89c31",
++    "adaptation": "Per-card target list may only narrow the existing administrator allowlist plus user model ACL; cross-model child requests keep their own parameters. Browser tickets encrypt the issuing credential and revalidate it through central session/API-key auth, retaining revocation, owner binding and endpoint policy. Internal Terminal capabilities are encrypted inside the relay envelope, not readable in JWT payloads. Viewer tickets are mode-bound: proxy tickets cannot upgrade to Chrome/VNC and reverse.",
++    "verification": "16 new offline policy boundaries,13 daily regressions,8 earlier daily regressions,7 upstream regressions,3 Responses and3 FreeLLM tests;304 Python files compile;96 changed Svelte components compile with exact lockfile compiler5.57.2;4461 WebUI locale keys/placeholders recorded separately. This is not a packaged browser/DB/runtime qualification.",
++    "license": "noVNC1.7.0 source package verified against lockfile SHA512; vendor notices, authors and license texts retained in LICENSE-NOVNC.txt and copied by the existing package license gate."
++  },
++  {
++    "id": "WEB-COMPOSER-IDENTITY",
++    "description": "Bind existing microphone provenance to each actual composer inputId/DOM node after upstream introduced side chats. Preserve main default behavior, keep side transcripts from marking the main draft, and forward the same user_message.meta wire shape from SideChat. Reuse stable selected-tool-server identity checks in SideChat so an explicit ID cannot alias an array index. Refresh source-hook attestation only after reviewing the mainline showTabs/temporary-resume/model-control diffs.",
++    "verification": "8 helper/actual discovery/actual side-send contracts pass;2 changed components compile with exact lock Svelte5.57.2. Source-only frontend contract passes. Prior98-component compilation and backend policy checks retained; packaged browser proof remains mandatory."
++  },
++  {
++    "id": "AVX1-RESOLVED-AUDIT",
++    "description": "Audit every resolved third-party distribution with strict pinned requirements, including transitive dependencies. Identify the source-built local application separately and verify its source version, rather than requiring an unpublished upstream development version on PyPI. Unknown/skipped libraries and inventory differences still block publication.",
++    "verification": "Two metadata-inventory cases and three applicability-policy cases pass. Full resolved audit and packaged browser proof remain mandatory CI gates."
++  }
++]
+diff --git a/.avx1/measurements/latest.json b/.avx1/measurements/latest.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..9050215273058f02f6b8e55e4f321ae5933649c6
+--- /dev/null
++++ b/.avx1/measurements/latest.json
+@@ -0,0 +1,90 @@
++{
++  "scope": "Actual get_files_with_directory_ids and actual FileModel; synthetic in-memory SQLite/SQLAlchemy tables on local CPU; NOT LLM inference or phone speed",
++  "python": "3.12.16 (main, Oct 26 2026, 14:10:56) [MSC v.1944 64 bit (AMD64)]",
++  "fixture_files": 160,
++  "extracted_chars_per_file": 131072,
++  "warmup_pairs": 1,
++  "alternating_measured_pairs": 5,
++  "before_ref": "7f03b6e778374aca1eca4f8c6f29cbf8a8b1aeda",
++  "candidate_source": "873bd0660beacf36572758eb3484b2c292d30329",
++  "method_sha256": {
++    "before": "41838b8a717ba98dcdede56d93358bc321f890fd86c25ef7c6a588b03e61b8c4",
++    "after": "5f2e30ba8d45ac4c97da958d09c7ca286a595c381a50fdcfbcd55d17a7177d77"
++  },
++  "samples": {
++    "before": [
++      {
++        "cpu_seconds": 0.09375,
++        "wall_seconds": 0.08552900000358932,
++        "process_cycles": 230013080
++      },
++      {
++        "cpu_seconds": 0.09375,
++        "wall_seconds": 0.09135560000140686,
++        "process_cycles": 245683632
++      },
++      {
++        "cpu_seconds": 0.109375,
++        "wall_seconds": 0.10598759999265894,
++        "process_cycles": 285055004
++      },
++      {
++        "cpu_seconds": 0.09375,
++        "wall_seconds": 0.09783890000835527,
++        "process_cycles": 263082660
++      },
++      {
++        "cpu_seconds": 0.09375,
++        "wall_seconds": 0.09207719999540132,
++        "process_cycles": 247474536
++      }
++    ],
++    "after": [
++      {
++        "cpu_seconds": 0.015625,
++        "wall_seconds": 0.00546790000225883,
++        "process_cycles": 14602968
++      },
++      {
++        "cpu_seconds": 0.0,
++        "wall_seconds": 0.004982400001608767,
++        "process_cycles": 13289604
++      },
++      {
++        "cpu_seconds": 0.0,
++        "wall_seconds": 0.0048790000000735745,
++        "process_cycles": 13022240
++      },
++      {
++        "cpu_seconds": 0.015625,
++        "wall_seconds": 0.005006000006687827,
++        "process_cycles": 13357664
++      },
++      {
++        "cpu_seconds": 0.015625,
++        "wall_seconds": 0.004816400003619492,
++        "process_cycles": 12875648
++      }
++    ]
++  },
++  "median_cpu_seconds": {
++    "before": 0.09375,
++    "after": 0.015625
++  },
++  "process_time_caveat": "Windows process-time ticks can round short queries to zero; no percentage is inferred from those ticks",
++  "median_process_cycles": {
++    "before": 247474536,
++    "after": 13289604
++  },
++  "median_wall_seconds": {
++    "before": 0.09207719999540132,
++    "after": 0.004982400001608767
++  },
++  "extracted_text_chars_materialized": {
++    "before": 20971520,
++    "after": 0
++  },
++  "compiler_flags": "Standard CPython3.12 runtime and installed SQLite/SQLAlchemy; no new native compilation, affinity or power changes",
++  "cpu_cycle_reduction_percent": 94.63,
++  "wall_time_reduction_percent": 94.59
++}
+diff --git a/.avx1/review-20261025.json b/.avx1/review-20261025.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..21070d4b4633e8de18364bda0290dab07e46ecdd
+--- /dev/null
++++ b/.avx1/review-20261025.json
+@@ -0,0 +1,78 @@
++{
++  "day": "2026-10-25",
++  "fork_inventory": {
++    "active_forks": 1118,
++    "repositories": 1122,
++    "open_prs": 897,
++    "categorized_full_diffs": 814,
++    "missing_diffs": 0,
++    "all_semantically_reviewed": false,
++    "all_open_pr_diffs_saved": 897
++  },
++  "integrated_upstream": {
++    "webui": {
++      "commit": "f21eadbc1abcc1196c61cab4aaf6979a0c3a7635",
++      "priority_prs": [
++        33087,
++        33000,
++        32888,
++        32872,
++        33028,
++        32982,
++        33084,
++        33103
++      ]
++    },
++    "conduit": {
++      "commit": "2550086b17976230b67ead9820152f716bdf36e2",
++      "prs": [
++        869,
++        870
++      ]
++    }
++  },
++  "reviewed_open_patch": {
++    "url": "https://github.com/cogwheel0/conduit/pull/873",
++    "head": "831301e86ac86e695af2c666559092e1204b92d6",
++    "decision": "Integrate the server-transcription Stop race fix and all three upstream regression cases; preserve bound speech backend and bundled VAD path."
++  },
++  "deferred": [
++    {
++      "url": "https://github.com/cogwheel0/conduit/pull/871",
++      "reason": "Reasoning opt-in changes need explicit provider/filter compatibility qualification; not silently applied."
++    },
++    {
++      "url": "https://github.com/cogwheel0/conduit/pull/872",
++      "reason": "Android assistant reboot/entry lifecycle needs device-specific checks."
++    },
++    {
++      "url": "https://github.com/cogwheel0/conduit/pull/874",
++      "reason": "Unread-state feature is outside the targeted speech/MCP fixes and needs server-state qualification."
++    },
++    {
++      "url": "https://github.com/cogwheel0/conduit/pull/875",
++      "reason": "iOS-only share fixes do not apply to this ARM64 Android package."
++    },
++    {
++      "url": "https://github.com/open-webui/open-terminal/pull/192",
++      "reason": "Linux pseudo-filesystem guard changes traversal across filesystem boundaries; Windows/junction behavior requires separate regression qualification."
++    },
++    {
++      "url": "https://github.com/Gradient-DS/open-webui/pull/525",
++      "reason": "Custom v2 deletion/offboarding policy changes are not compatible generic upstream fixes."
++    }
++  ],
++  "already_satisfied": {
++    "pypdf": "6.21.2",
++    "brotlicffi": "1.2.1.0",
++    "setuptools": "84.2.1"
++  },
++  "scope": "Inventory and immutable diff coverage are distinct from semantic approval. Only reviewed applicable changes enter binaries.",
++  "upstream_inventory": {
++    "issues_delta_scanned": 235,
++    "pulls_delta_scanned": 131,
++    "changed_immutable_pr_diffs": 43,
++    "fork_comparisons_unavailable_after_retry": 58,
++    "unavailable_candidates_applied": false
++  }
++}
+diff --git a/.avx1/review-20261029.json b/.avx1/review-20261029.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..54156fc0db760bd3a36166b8a13efba57b8c6e08
+--- /dev/null
++++ b/.avx1/review-20261029.json
+@@ -0,0 +1,77 @@
++{
++  "day": "20261029",
++  "scope": "Selected semantic review, not all863 indexed open PRs",
++  "official_upstream": "3b8205505b871b92dd23e010b61f51a02d515a92",
++  "official_changes": [
++    "KB metadata-only projection #33332",
++    "Embedding batch default #33288 and bounded buffers/rollback",
++    "Playground params forwarding #33286",
++    "RU-ready UI labels #33308",
++    "Shared folder pins/rename #33342/#33339",
++    "Note attachment permission #33281",
++    "Removed webhook migration #33295",
++    "Notification default #33284"
++  ],
++  "ported": [
++    {
++      "pr": 33345,
++      "head": "1a02165c134bec9e6d7ff18ca27e506b98b9154f",
++      "base": "3b8205505b871b92dd23e010b61f51a02d515a92",
++      "adaptation": "String/null outputs and nullable metadata guarded; original stored images unchanged"
++    },
++    {
++      "pr": 33311,
++      "head": "9924cbb82224866ab556c970a5826f8a43e3a36c",
++      "base": "7f03b6e778374aca1eca4f8c6f29cbf8a8b1aeda",
++      "adaptation": "Actual autosave callback regressions"
++    }
++  ],
++  "deferred": [
++    {
++      "pr": 33335,
++      "reason": "Mutation response files contract intentionally changes to affected-only; needs complete consuming-client coverage; author timing numbers are not our measurements"
++    },
++    {
++      "pr": 33334,
++      "reason": "Admin-selected multi-model agent delegation expands ACL/model-routing contract; not qualified"
++    },
++    {
++      "pr": 33299,
++      "reason": "Search UI refactor overlaps current upstream changes; requires separate lazy-preview regressions"
++    },
++    {
++      "repository": "LiveSparks/open-webui",
++      "prs": [
++        36,
++        37
++      ],
++      "reason": "New pi agent integration/tool routing/key handoff broadens architecture; not qualified"
++    },
++    {
++      "repository": "cogwheel0/conduit",
++      "prs": [
++        897,
++        742
++      ],
++      "reason": "Whole-app navigation/AICore backend outside current Cline-only UI and model scope"
++    },
++    {
++      "repository": "dto-btn/canchat-v2",
++      "prs": [
++        617,
++        620,
++        607
++      ],
++      "reason": "Full diffs indexed, broad fork-specific observability/dependency changes still need semantic review"
++    },
++    {
++      "repository": "SushantGautam/open-webui",
++      "prs": [
++        4
++      ],
++      "reason": "Trace propagation candidate indexed; no demonstrated need in this installation"
++    }
++  ],
++  "code_contract_readonly": "Existing knowledge attachment helper consumes listing names/IDs and ignores mutation responses; private source/valves untouched; no private filter test run",
++  "benchmarks": "No new phone/LLM/CPU speed percentage claimed; SQL column selection and bounded embedding behavior tested on synthetic fixtures"
++}
+diff --git a/.avx1/review-20261030.json b/.avx1/review-20261030.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..9da8b9f355a4c60b5d13c3c47510011e8cc92662
+--- /dev/null
++++ b/.avx1/review-20261030.json
+@@ -0,0 +1,19 @@
++{
++  "day": "20261030",
++  "official_source": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
++  "upstream_release": "v0.12.5",
++  "scope": "39 official commits; MCP/agent/search/KB/runtime changes reviewed; daily fork/discussion index continues separately, not all PRs semantically approved",
++  "merge_resolutions": {
++    "chat_search": "use upstream SQL DTO and lazy user-scoped snippet endpoint",
++    "tool_images": "retain local null metadata and non-list output guards",
++    "session_records": "upstream round-local deduplication; preserve call approval status",
++    "model_selection": "explicit upstream onModelSelect callback; provider fallback never autosaves",
++    "locales": "retain completed translations, add18 Russian keys"
++  },
++  "checks": "CI authoritative packaged/auth/security/SDK/browser gates; harness migration preflight19+9+5 cases passed; private filter tests skipped by user; DeepSeek requests0",
++  "deferred": [
++    "Broad unreviewed fork patches",
++    "Vendor-restricted DeepSeek authentication and inference",
++    "Physical phone performance claims"
++  ]
++}

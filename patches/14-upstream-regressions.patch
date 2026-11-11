@@ -1,0 +1,605 @@
+diff --git a/.avx1/test_daily_20261029.py b/.avx1/test_daily_20261029.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ef93ec56afe196a781d65b8bf8fa8dbe5e34656
+--- /dev/null
++++ b/.avx1/test_daily_20261029.py
+@@ -0,0 +1,130 @@
++"""Targeted gates for reviewed KB, tool-image, auth and embedding changes."""
++import ast
++import asyncio
++import copy
++import logging
++from pathlib import Path
++import threading
++import time
++from types import SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock
++import uuid
++from contextlib import asynccontextmanager
++from typing import Optional
++from fastapi import HTTPException,status,Response
++from pydantic import BaseModel,ConfigDict
++from sqlalchemy import create_engine,Column,Text,Integer,JSON,select
++from sqlalchemy.orm import declarative_base,Session
++
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++def functions(path,names,scope,owner=None):
++    tree=ast.parse((ROOT/path).read_text('utf-8'))
++    nodes=tree.body if owner is None else next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name==owner).body
++    chosen=[copy.deepcopy(n) for n in nodes if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
++    assert {n.name for n in chosen}==set(names)
++    for n in chosen:n.decorator_list=[]
++    future=ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future,*chosen],type_ignores=[])),str(path),'exec'),scope)
++    return scope
++
++class ToolImages(unittest.TestCase):
++    def test_disabled_vision_strips_only_tool_images_without_mutating_saved_output(self):
++        f=functions('utils/middleware.py',['strip_tool_images'],{})['strip_tool_images']
++        original=[{'type':'function_call_output','call_id':'call1','output':[{'type':'input_image','image_url':'data:image/png;base64,fixture'},{'type':'input_text','text':'keep'}]}]
++        before=copy.deepcopy(original);result=f(original,{'info':{'meta':{'capabilities':{'vision':False}}}})
++        self.assertEqual(original,before);self.assertEqual(result[0]['call_id'],'call1')
++        self.assertEqual(result[0]['output'],[{'type':'input_text','text':'\n[image]'},{'type':'input_text','text':'keep'}])
++        self.assertIs(f(original,{}),original)
++    def test_text_null_outputs_and_null_metadata_remain_valid(self):
++        f=functions('utils/middleware.py',['strip_tool_images'],{})['strip_tool_images']
++        rows=[{'type':'function_call_output','output':'plain text'},{'type':'function_call_output','output':None},{'type':'message','content':'keep'}]
++        self.assertEqual(f(rows,{'info':{'meta':{'capabilities':{'vision':False}}}}),rows)
++        self.assertIs(f(rows,{'info':None}),rows)
++
++class KnowledgeProjection(unittest.IsolatedAsyncioTestCase):
++    async def test_metadata_query_does_not_select_extracted_text(self):
++        Base=declarative_base()
++        class File(Base):
++            __tablename__='file';id=Column(Text,primary_key=True);user_id=Column(Text);hash=Column(Text);filename=Column(Text);path=Column(Text);meta=Column(JSON);created_at=Column(Integer);updated_at=Column(Integer);data=Column(JSON)
++        class KnowledgeFile(Base):
++            __tablename__='knowledge_file';id=Column(Integer,primary_key=True);file_id=Column(Text);knowledge_id=Column(Text);directory_id=Column(Text)
++        class DTO(BaseModel):
++            model_config=ConfigDict(from_attributes=True)
++            id:str;user_id:str;hash:str;filename:str;path:str;meta:dict;created_at:int;updated_at:int;data:dict|None=None
++        engine=create_engine('sqlite://');Base.metadata.create_all(engine);queries=[]
++        with Session(engine) as database:
++            database.add(File(id='f',user_id='u',hash='h',filename='document.txt',path='/fixture',meta={'size':4},created_at=1,updated_at=2,data={'content':'x'*1000000}))
++            database.add(KnowledgeFile(file_id='f',knowledge_id='kb',directory_id='dir'));database.commit()
++            class AsyncDB:
++                async def execute(self,query):queries.append(str(query));return database.execute(query)
++            @asynccontextmanager
++            async def context(_):yield AsyncDB()
++            scope={'get_async_db_context':context,'select':select,'File':File,'KnowledgeFile':KnowledgeFile,'FileModel':DTO}
++            f=functions('models/knowledge.py',['get_files_with_directory_ids'],scope,'KnowledgeTable')['get_files_with_directory_ids']
++            rows=await f(None,'kb')
++            self.assertEqual(len(rows),1);self.assertEqual(rows[0][0].filename,'document.txt');self.assertEqual(rows[0][1],'dir')
++            self.assertIsNone(rows[0][0].data);self.assertNotIn('file.data',queries[0])
++        engine.dispose()
++
++class AdminKeyRoutes(unittest.IsolatedAsyncioTestCase):
++    def fixture(self,enabled=True,permission=True,target='owner'):
++        users=NS(get_user_by_id=AsyncMock(return_value=NS(id=target,role='user')),get_first_user=AsyncMock(return_value=NS(id='owner')),
++                 update_user_api_key_by_id=AsyncMock(),delete_user_api_key_by_id=AsyncMock())
++        scope={'Depends':lambda _:None,'get_admin_user':object(),'get_async_session':object(),'HTTPException':HTTPException,'status':status,
++               'Users':users,'Config':NS(get=AsyncMock(side_effect=lambda key:enabled if key=='auth.enable_api_keys' else {})),
++               'has_permission':AsyncMock(return_value=permission),'create_api_key':lambda:'fixture-new-key','publish_event':AsyncMock(),
++               'EVENTS':NS(AUTH_API_KEY_CREATED='created',AUTH_API_KEY_DELETED='deleted'),
++               'ERROR_MESSAGES':NS(USER_NOT_FOUND='missing',ACTION_PROHIBITED='denied',API_KEY_CREATION_NOT_ALLOWED='disabled')}
++        functions('routers/users.py',['rotate_user_api_key_by_id','delete_user_api_key_by_id'],scope)
++        tree=ast.parse((ROOT/'routers/users.py').read_text('utf-8'))
++        for node in tree.body:
++            if isinstance(node,ast.AsyncFunctionDef) and node.name in ('rotate_user_api_key_by_id','delete_user_api_key_by_id'):
++                self.assertTrue(any(isinstance(x,ast.Call) and isinstance(x.func,ast.Name) and x.func.id=='Depends' and isinstance(x.args[0],ast.Name) and x.args[0].id=='get_admin_user' for x in node.args.defaults))
++        return scope,users
++    async def test_another_admin_cannot_rotate_first_owner(self):
++        s,u=self.fixture()
++        with self.assertRaises(HTTPException) as error:await s['rotate_user_api_key_by_id'](None,Response(),'owner',session_user=NS(id='other'),db=None)
++        self.assertEqual(error.exception.status_code,403);u.update_user_api_key_by_id.assert_not_awaited()
++    async def test_owner_rotation_no_store_and_disabled_creation(self):
++        s,u=self.fixture();response=Response();result=await s['rotate_user_api_key_by_id'](None,response,'owner',session_user=NS(id='owner'),db=None)
++        self.assertEqual(result,{'api_key':'fixture-new-key'});self.assertEqual(response.headers['Cache-Control'],'no-store')
++        s,u=self.fixture(enabled=False)
++        with self.assertRaises(HTTPException):await s['rotate_user_api_key_by_id'](None,Response(),'owner',session_user=NS(id='owner'),db=None)
++        u.update_user_api_key_by_id.assert_not_awaited()
++    async def test_revocation_stays_available_when_creation_disabled(self):
++        s,u=self.fixture(enabled=False,permission=False,target='member')
++        self.assertTrue(await s['delete_user_api_key_by_id'](None,'member',session_user=NS(id='owner'),db=None));u.delete_user_api_key_by_id.assert_awaited_once_with('member',db=None)
++
++class EmbeddingBuffers(unittest.TestCase):
++    def exercise(self,fail=False,add=False):
++        loop=asyncio.new_event_loop();thread=threading.Thread(target=loop.run_forever,daemon=True);thread.start()
++        calls=[];inserted=[];deleted=[]
++        async def embedding(texts,**kwargs):
++            calls.append(texts)
++            if fail and len(calls)==2:raise RuntimeError('synthetic provider failure')
++            return [[1,2] for _ in texts]
++        client=NS(has_collection=lambda **_:False,insert=lambda **kwargs:inserted.extend(kwargs['items']),
++                  delete=lambda **kwargs:deleted.append(('ids',kwargs['ids'])),delete_collection=lambda **_:deleted.append(('collection',None)))
++        log=logging.getLogger('silent-embedding-fixture');log.disabled=True
++        scope={'log':log,'sanitize_text_for_db':lambda s:s,'get_vector_db_client':lambda:client,'get_embedding_function':lambda *a,**k:embedding,
++               'RAG_EMBEDDING_BUFFER_SIZE':3,'RAG_EMBEDDING_TIMEOUT':5,'asyncio':asyncio,'time':time,'uuid':uuid}
++        f=functions('routers/retrieval.py',['save_docs_to_vector_db'],scope)['save_docs_to_vector_db']
++        config={'rag.embedding_engine':'openai','rag.embedding_model':'fixture','rag.openai.api_base_url':'http://fixture.invalid',
++                'rag.openai.api_key':'fixture','rag.embedding_batch_size':2,'rag.embedding_content_prefix':'','rag.embedding_concurrent_requests':1,'rag.enable_async_embedding':True}
++        request=NS(app=NS(state=NS(ef=None,main_loop=loop)));docs=[NS(page_content='chunk'+str(i),metadata={'position':i}) for i in range(5)]
++        try:
++            if fail:
++                with self.assertRaisesRegex(RuntimeError,'synthetic'):f(request,docs,'fixture',config,split=False,add=add)
++            else:self.assertTrue(f(request,docs,'fixture',config,split=False))
++            return calls,inserted,deleted
++        finally:loop.call_soon_threadsafe(loop.stop);thread.join();loop.close()
++    def test_buffered_batches_keep_all_text_and_metadata_in_order(self):
++        calls,items,deleted=self.exercise();self.assertEqual(list(map(len,calls)),[4,1]);self.assertEqual([x['metadata']['position'] for x in items],list(range(5)));self.assertEqual(deleted,[])
++    def test_partial_failure_rolls_back_only_new_items_or_new_collection(self):
++        for add in (True,False):
++            calls,items,deleted=self.exercise(fail=True,add=add)
++            self.assertEqual(len(items),4);self.assertEqual(deleted[0][0],'ids' if add else 'collection')
++            if add:self.assertEqual(set(deleted[0][1]),{x['id'] for x in items})
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_daily_20261030.py b/.avx1/test_daily_20261030.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..077d35fa7e7306641bbcdb6f1b7fcfd84aab435a
+--- /dev/null
++++ b/.avx1/test_daily_20261030.py
+@@ -0,0 +1,194 @@
++"""Offline regressions for new MCP app authorization, KB limits and tool rounds."""
++import ast
++import asyncio
++import copy
++import hmac
++import json
++from pathlib import Path
++import re
++from types import SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, Mock
++
++from fastapi import HTTPException
++from pydantic import BaseModel, ConfigDict, Field, model_validator, ValidationError
++from typing import Literal
++
++ROOT = Path(__file__).resolve().parents[1] / 'backend/open_webui'
++
++
++def load(path, names, scope, owner=None):
++    tree = ast.parse((ROOT / path).read_text('utf-8'))
++    nodes = tree.body if owner is None else next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == owner).body
++    chosen = [copy.deepcopy(n) for n in nodes if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
++    assert {n.name for n in chosen} == set(names)
++    for node in chosen:
++        node.decorator_list = []
++    future = ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future, *chosen], type_ignores=[])), path, 'exec'), scope)
++    return scope
++
++
++class MCPApps(unittest.IsolatedAsyncioTestCase):
++    def fixture(self, binding=True, app_visible=True):
++        definitions = {'origin': {'name': 'origin', '_meta': {'ui': {'resourceUri': 'ui://fixture'}}},
++                       'action': {'name': 'action', '_meta': {'ui': {'visibility': ['app'] if app_visible else ['model']}}}}
++        client = NS(tool_definitions=definitions, disconnect=AsyncMock(), call_tool_raw=AsyncMock(return_value={'content': []}),
++                    read_resource=AsyncMock(return_value={'contents': []}))
++        scope = {'BaseModel': BaseModel, 'ConfigDict': ConfigDict, 'Field': Field, 'model_validator': model_validator,
++                 'Literal': Literal, 'Depends': lambda _: None, 'get_verified_user': object(),
++                 'HTTPException': HTTPException, 'asyncio': asyncio,
++                 'verify_app_binding': lambda *args: binding,
++                 'connect_mcp_server': AsyncMock(return_value=(client, []))}
++        load('utils/mcp/apps.py', ['ui_metadata', 'ui_resource_uri'], scope)
++        load('utils/mcp/client.py', ['tool_visible_to'], scope)
++        load('routers/tools.py', ['MCPAppRPCForm', 'mcp_app_rpc'], scope)
++        scope['MCPAppRPCForm'].model_rebuild(_types_namespace=scope)
++        return scope, client
++
++    def form(self, scope, **values):
++        return scope['MCPAppRPCForm'](tool_name='origin', binding='a' * 64,
++                                    method='tools/call', params={'name': 'action', 'arguments': {}}, **values)
++
++    async def test_bad_binding_never_opens_mcp_connection(self):
++        s, client = self.fixture(binding=False)
++        with self.assertRaises(HTTPException) as error:
++            await s['mcp_app_rpc'](None, 'server:mcp:fixture', self.form(s), NS(id='viewer'))
++        self.assertEqual(error.exception.status_code, 403)
++        s['connect_mcp_server'].assert_not_awaited()
++        client.call_tool_raw.assert_not_awaited()
++
++    async def test_app_cannot_call_model_only_tool_and_connection_closes(self):
++        s, client = self.fixture(app_visible=False)
++        with self.assertRaises(HTTPException) as error:
++            await s['mcp_app_rpc'](None, 'server:mcp:fixture', self.form(s), NS(id='viewer'))
++        self.assertEqual(error.exception.status_code, 403)
++        client.call_tool_raw.assert_not_awaited()
++        client.disconnect.assert_awaited_once()
++
++    async def test_allowed_call_uses_current_user_once(self):
++        s, client = self.fixture()
++        user = NS(id='viewer')
++        await s['mcp_app_rpc'](None, 'server:mcp:fixture', self.form(s), user)
++        s['connect_mcp_server'].assert_awaited_once_with(None, 'fixture', user, {})
++        client.call_tool_raw.assert_awaited_once_with('action', {})
++        client.disconnect.assert_awaited_once()
++
++    async def test_failed_uncertain_call_is_not_replayed(self):
++        s, client = self.fixture()
++        s['log'] = NS(warning=lambda *args: None)
++        client.call_tool_raw.side_effect = RuntimeError('synthetic uncertain outcome')
++        with self.assertRaises(HTTPException) as error:
++            await s['mcp_app_rpc'](None, 'server:mcp:fixture', self.form(s), NS(id='viewer'))
++        self.assertEqual(error.exception.status_code, 502)
++        self.assertEqual(client.call_tool_raw.await_count, 1)
++        client.disconnect.assert_awaited_once()
++
++    def test_form_rejects_arbitrary_rpc_and_extra_arguments(self):
++        s, _ = self.fixture()
++        for method, params in [('shell/exec', {}), ('tools/call', {'name': 'action', 'shell': 'bad'}), ('resources/read', {'uri': 42})]:
++            with self.assertRaises(ValidationError):
++                s['MCPAppRPCForm'](tool_name='origin', binding='a'*64, method=method, params=params)
++
++    def test_csp_injection_and_cross_tool_binding_rejected(self):
++        s = {'hmac': hmac, 'JSONCodec': json, 'WEBUI_SECRET_KEY': 'synthetic',
++             '_DOMAIN': re.compile(r'(?:https?|wss?)://(?:\*\.)?(?:[a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\])(?::[0-9]{1,5})?')}
++        load('utils/mcp/apps.py', ['app_csp', 'app_binding', 'verify_app_binding'], s)
++        token = s['app_binding']('server1', 'tool1')
++        self.assertFalse(s['verify_app_binding']('server2', 'tool1', token))
++        self.assertFalse(s['verify_app_binding']('server1', 'tool2', token))
++        for domain in ["https://example.org; script-src *", 'javascript:alert(1)', 'https://example.org/path']:
++            with self.assertRaises(ValueError):
++                s['app_csp']({'csp': {'connectDomains': [domain]}})
++        self.assertIn("connect-src 'none'", s['app_csp']({}))
++
++
++class KnowledgeLimits(unittest.IsolatedAsyncioTestCase):
++    async def test_pending_uploads_count_and_existing_files_are_excluded(self):
++        config = NS(get=AsyncMock(return_value=None))
++        knowledge = NS(get_knowledge_by_id=AsyncMock(return_value=NS(meta={})),
++                       get_file_limits=AsyncMock(return_value={'max_file_count': 2, 'max_file_size': None}),
++                       get_file_count_by_id=AsyncMock(return_value=2))
++        s = {'Config': config, 'Knowledges': knowledge, 'HTTPException': HTTPException}
++        load('routers/knowledge.py', ['check_knowledge_upload_limits'], s)
++        with self.assertRaises(HTTPException) as error:
++            await s['check_knowledge_upload_limits']('kb', 1, exclude_file_ids=['already-pending'])
++        self.assertEqual(error.exception.status_code, 400)
++        knowledge.get_file_count_by_id.assert_awaited_once_with('kb', include_pending=True, exclude_file_ids=['already-pending'], db=None)
++
++    async def test_oversized_file_rejected_before_embedding(self):
++        s = {'Config': NS(get=AsyncMock(return_value=None)), 'HTTPException': HTTPException,
++             'ERROR_MESSAGES': NS(FILE_TOO_LARGE=lambda **_: 'too large'),
++             'Knowledges': NS(get_knowledge_by_id=AsyncMock(return_value=NS(meta={})),
++                             get_file_limits=AsyncMock(return_value={'max_file_count': None, 'max_file_size': 1}))}
++        load('routers/knowledge.py', ['check_knowledge_upload_limits'], s)
++        with self.assertRaises(HTTPException) as error:
++            await s['check_knowledge_upload_limits']('kb', 1, file_size=1024*1024+1)
++        self.assertEqual(error.exception.status_code, 413)
++
++
++class ToolRounds(unittest.TestCase):
++    def test_reused_call_id_does_not_merge_separate_rounds(self):
++        s = load('utils/session_records.py', ['normalize_tool_output', 'pair_results'], {})
++        rows = [{'type': 'function_call', 'call_id': 'same', 'status': 'completed'},
++                {'type': 'function_call_output', 'call_id': 'same', 'output': 'first', 'duration': 1},
++                {'type': 'function_call', 'call_id': 'same', 'status': 'rejected'},
++                {'type': 'function_call_output', 'call_id': 'same', 'output': 'second', 'duration': 2}]
++        before = copy.deepcopy(rows)
++        result = s['normalize_tool_output'](rows)
++        self.assertEqual(rows, before)
++        self.assertEqual(len(result), 4)
++        self.assertEqual(result[0]['duration'], 1)
++        self.assertEqual(result[2]['duration'], 2)
++        self.assertEqual(result[2]['status'], 'rejected')
++
++
++class SubagentModels(unittest.IsolatedAsyncioTestCase):
++    async def test_admin_allowlist_is_intersected_with_current_user_model_access(self):
++        user=NS(id='viewer')
++        all_models=[{'id':'visible','info':None},{'id':'private','name':'Private'}]
++        s={'Config':NS(get=AsyncMock(return_value=[{'id':'visible'},{'id':'private'},'invalid'])),
++           'get_all_models':AsyncMock(return_value=all_models),
++           'get_filtered_models':AsyncMock(return_value=[all_models[0]])}
++        load('utils/subagents.py',['get_subagent_models'],s)
++        result=await s['get_subagent_models'](None,user)
++        self.assertEqual([m['id'] for m in result],['visible'])
++        s['get_filtered_models'].assert_awaited_once_with(all_models,user)
++
++    def test_author_modes_and_parent_controls_do_not_leak_to_different_model(self):
++        s=load('utils/subagents.py',['subagent_request_params'],{})
++        parent={'reasoning_effort':'ultra','temperature':.7,'custom_params':{'reason_mode':'auto'}}
++        before=copy.deepcopy(parent)
++        self.assertEqual(s['subagent_request_params']('davidau','deepseek',parent),{})
++        self.assertEqual(parent,before)
++        same=s['subagent_request_params']('davidau','davidau',parent)
++        self.assertEqual(same,parent);self.assertIsNot(same,parent)
++
++    async def test_unlisted_child_never_creates_a_chat_or_runs_model(self):
++        s={'Config':NS(get_many=AsyncMock(return_value={})),
++           'Chats':NS(get_chat_folder_id=AsyncMock(return_value=None),insert_new_chat=AsyncMock()),
++           'copy':copy,'UserModel':lambda **d:NS(**d),
++           'get_subagent_models':AsyncMock(return_value=[{'id':'allowed'}])}
++        load('utils/subagents.py',['delegate'],s)
++        metadata={'model_id':'parent','chat_context':{'params':{'temperature':.5}}}
++        before=copy.deepcopy(metadata)
++        result=await s['delegate']('task','context',False,model_id='private',request=None,
++                                   user_data={'id':'viewer'},metadata=metadata,parent_chat_id='chat',parent_message_id='message')
++        self.assertIn('not available',result);s['Chats'].insert_new_chat.assert_not_awaited()
++        self.assertEqual(metadata,before)
++
++
++class RemovedProvider(unittest.TestCase):
++    def test_browser_account_provider_and_native_host_are_not_shipped(self):
++        root=ROOT.parent.parent
++        self.assertFalse((ROOT/'providers').exists())
++        self.assertFalse((ROOT/'routers/local_providers.py').exists())
++        self.assertNotIn('local_providers', (ROOT/'main.py').read_text('utf-8'))
++        self.assertNotIn('dsw2api', (root/'src/lib/components/AddConnectionModal.svelte').read_text('utf-8'))
++        build=(root/'.avx1/build.py').read_text('utf-8')
++        self.assertNotIn('build_browser_bridge',build)
++        self.assertNotIn('owui-native-host.exe',build)
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/test_upstream_20261104.py b/.avx1/test_upstream_20261104.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0908d58fef7e4f78ed4503ab7d7bd7e5475ecf76
+--- /dev/null
++++ b/.avx1/test_upstream_20261104.py
+@@ -0,0 +1,83 @@
++"""Synthetic gates for upstream compaction, OAuth and bounded file reads."""
++import ast
++import asyncio
++import copy
++import json
++from pathlib import Path
++import sys
++from types import ModuleType, SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, patch
++
++ROOT = Path(__file__).resolve().parents[1] / 'backend/open_webui'
++
++
++def load(path, names, scope):
++    tree = ast.parse((ROOT / path).read_text('utf-8'))
++    nodes = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
++    assert {n.name for n in nodes} == names
++    future = ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[])), path, 'exec'), scope)
++    return scope
++
++
++class UpstreamChecks(unittest.IsolatedAsyncioTestCase):
++    def test_numbered_read_is_bounded_and_resumable(self):
++        fn = load('tools/builtin.py', {'_numbered_lines_within_cap'}, {'VIEW_FILE_MAX_CHARS': 12})['_numbered_lines_within_cap']
++        text, end = fn(['abcd', 'efgh', 'ijkl'], 0, 3)
++        self.assertLessEqual(len(text), 12)
++        self.assertEqual((text, end), ('1: abcd', 1))
++        text, end = fn(['x' * 100], 0, 1)
++        self.assertEqual((len(text), end), (12, 1))
++
++    def test_pkce_rejects_plain_and_keeps_timeout(self):
++        fn = load('config.py', {'oauth_client_kwargs'}, {})['oauth_client_kwargs']
++        self.assertEqual(fn('openid', '10', 'S256'), {'scope': 'openid', 'timeout': 10, 'code_challenge_method': 'S256'})
++        with self.assertRaises(ValueError):
++            fn('openid', 10, 'plain')
++
++    async def test_summary_preserves_tools_and_original_payload(self):
++        await self.summary_case(False)
++
++    async def test_tool_summary_response_falls_back_without_replaying_tools(self):
++        await self.summary_case(True)
++
++    async def summary_case(self, fallback):
++        module = ModuleType('open_webui.utils.chat')
++        module.generate_chat_completion = AsyncMock(side_effect=[
++            {'choices': [{'message': {'tool_calls': [{'id': 'unexpected'}]}}]} if fallback else
++            {'choices': [{'message': {'content': 'summary'}}]},
++            {'choices': [{'message': {'content': 'fallback summary'}}]},
++        ])
++        async def identity(value, user):
++            return value
++        scope = load('utils/context_compaction.py', {'_generate_summary', '_message_prefix', '_response_text'}, {
++            'copy': copy, 'JSONCodec': json, 'JSONResponse': type('UnusedResponse', (), {}),
++            'Config': NS(get_many=AsyncMock(return_value={})),
++            'DEFAULT_CONTEXT_COMPACTION_PROMPT': 'Summarize',
++            'get_content_from_message': lambda m: m.get('content', ''),
++            'get_last_user_message': lambda messages: 'question',
++            'replace_prompt_variable': lambda text, _: text,
++            'replace_messages_variable': lambda text, *args: text,
++            'prompt_variables_template': lambda text, _: text,
++            'prompt_template': identity,
++            'apply_params_to_form_data': lambda payload, *args: payload,
++        })
++        messages = [{'role': 'user', 'content': 'old'}, {'role': 'user', 'content': 'unique recent'}]
++        form = {'messages': messages, 'tools': [{'type': 'function', 'function': {'name': 'lookup'}}], 'tool_choice': 'required'}
++        before = copy.deepcopy(form)
++        with patch.dict(sys.modules, {'open_webui.utils.chat': module}):
++            result = await scope['_generate_summary'](NS(state=NS()), form, NS(), 'm', {'m': {}}, messages[:1], messages[1:], None, 'summary', True)
++        self.assertEqual(form, before)
++        calls = module.generate_chat_completion.call_args_list
++        self.assertEqual(calls[0].kwargs['form_data']['tools'], form['tools'])
++        self.assertNotIn('tool_choice', calls[0].kwargs['form_data'])
++        self.assertTrue(calls[0].kwargs['bypass_system_prompt'])
++        self.assertEqual(result, 'fallback summary' if fallback else 'summary')
++        self.assertEqual(len(calls), 2 if fallback else 1)
++        if fallback:
++            self.assertNotIn('tools', calls[1].kwargs['form_data'])
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/test_upstream_20261107.py b/.avx1/test_upstream_20261107.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..de5103b7368199a733ee917a607ad4970484c53e
+--- /dev/null
++++ b/.avx1/test_upstream_20261107.py
+@@ -0,0 +1,78 @@
++"""Synthetic native-login and tool-approval boundaries; no agents or providers started."""
++import ast
++import base64
++import hashlib
++import hmac
++import json
++from pathlib import Path
++import time
++from types import SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, MagicMock, Mock
++from urllib.parse import urlsplit
++from uuid import UUID
++from fastapi import HTTPException
++from pydantic import BaseModel, ConfigDict, Field, field_validator, ValidationError
++
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++
++
++def load(path,names,scope):
++    nodes=[n for n in ast.parse((ROOT/path).read_text('utf-8')).body
++           if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and n.name in names]
++    assert {n.name for n in nodes}==names
++    for n in nodes:n.decorator_list=[]
++    future=ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future,*nodes],type_ignores=[])),path,'exec'),scope)
++    return scope
++
++
++class UpstreamBoundaries(unittest.IsolatedAsyncioTestCase):
++    async def test_disabled_auto_preserves_ask_and_invalid_modes_fail(self):
++        s=load('utils/tool_permissions.py',{'resolve_tool_approval_mode'},
++               {'Config':NS(get_many=AsyncMock(return_value={'chat.tool_permissions.enable':True,'chat.tool_permissions.auto.enable':False})),
++                'HTTPException':HTTPException})
++        self.assertEqual(await s['resolve_tool_approval_mode']('auto'),'ask')
++        self.assertEqual(await s['resolve_tool_approval_mode']('ask'),'ask')
++        with self.assertRaises(HTTPException):await s['resolve_tool_approval_mode']('unknown')
++        with self.assertRaises(HTTPException):await s['resolve_tool_approval_mode']('auto',is_channel_chat=True)
++
++    async def test_changed_approved_call_always_requires_fresh_human_approval(self):
++        post=AsyncMock(side_effect=AssertionError('no provider request'))
++        s=load('utils/tool_permissions.py',{'requires_tool_approval','tool_permission_fingerprint'},
++               {'hashlib':hashlib,'JSONCodec':json,'post_decisions':post})
++        call={'name':'write','approved':True,'approval_fingerprint':'old'}
++        self.assertTrue(await s['requires_tool_approval']({}, {'params':{'tool_approval_mode':'auto'}},call,{'type':'builtin','spec':{}},{'path':'fixture'}))
++        self.assertEqual(call['permission_review']['reason'],'call_changed');post.assert_not_awaited()
++
++    def test_native_login_callback_accepts_only_exact_loopback_without_credentials(self):
++        scope={'BaseModel':BaseModel,'ConfigDict':ConfigDict,'Field':Field,'field_validator':field_validator,'urlsplit':urlsplit}
++        s=load('routers/sessions.py',{'SessionForm','AuthorizationRequest'},scope)
++        args={'name':'synthetic','state':'s'*32,'code_challenge':'c'*43}
++        s['AuthorizationRequest'](**args,redirect_uri='http://127.0.0.1:1234/callback')
++        for url in ['https://example.invalid/callback','http://localhost:1234/callback','http://user@127.0.0.1:1234/','http://127.0.0.1:1234/?q=x','http://127.0.0.1:1234/#x']:
++            with self.assertRaises(ValidationError):s['AuthorizationRequest'](**args,redirect_uri=url)
++
++    async def exchange_case(self,wrong_owner):
++        sid=UUID('12345678-1234-1234-1234-123456789abc');verifier='v'*43;code='synthetic-code'
++        authorization={'code_hash':hashlib.sha256(code.encode()).hexdigest(),'redirect_uri':'http://127.0.0.1:1234/callback',
++                       'code_challenge':base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()}
++        row=NS(user_id='owner',refresh_token_id=None,data={'authorization':authorization},expires_at=time.time()+600,id=str(sid))
++        sessions=NS(get=AsyncMock(return_value=row),change=AsyncMock(return_value=False))
++        proof=AsyncMock(return_value={});credentials=Mock();columns=MagicMock();columns.expires_at.__gt__.return_value=True
++        s=load('routers/sessions.py',{'exchange','digest','challenge'},
++               {'hashlib':hashlib,'base64':base64,'hmac':hmac,'time':time,'AuthSessions':sessions,'AuthSession':columns,
++                'decode_token':lambda _: {'typ':'session_code','sid':str(sid),'id':'intruder' if wrong_owner else 'owner'},
++                'HTTPException':HTTPException,'verify_proof':proof,'idle_expiry':AsyncMock(return_value=int(time.time())+600),
++                'throttle':AsyncMock(),'uuid4':lambda:'next-id','credentials':credentials})
++        with self.assertRaises(HTTPException) as failure:
++            await s['exchange'](NS(session_id=sid,code=code,code_verifier=verifier,redirect_uri=authorization['redirect_uri']),NS())
++        self.assertEqual(failure.exception.status_code,401);credentials.assert_not_called()
++        if wrong_owner:sessions.change.assert_not_awaited();proof.assert_not_awaited()
++        else:sessions.change.assert_awaited_once()
++
++    async def test_native_exchange_rejects_other_owner(self):await self.exchange_case(True)
++    async def test_native_exchange_rejects_already_consumed_atomic_claim(self):await self.exchange_case(False)
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/.avx1/test_upstream_daily.py b/.avx1/test_upstream_daily.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4374f9b7c623aa2872c8f51df1e948f669875db6
+--- /dev/null
++++ b/.avx1/test_upstream_daily.py
+@@ -0,0 +1,90 @@
++"""Target the new note migration/concurrency, attachment ACL and URL boundary."""
++import ast
++import copy
++from html import escape
++import json
++import logging
++from pathlib import Path
++import re
++import time
++from types import SimpleNamespace
++import unittest
++from unittest.mock import AsyncMock
++import uuid
++import markdown
++from bs4 import BeautifulSoup
++
++ROOT=Path(__file__).resolve().parents[1]/'backend/open_webui'
++
++def load(path,names,space):
++    tree=ast.parse((ROOT/path).read_text('utf-8'))
++    nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and n.name in names]
++    assert {n.name for n in nodes}==set(names)
++    future=ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0)
++    exec(compile(ast.fix_missing_locations(ast.Module(body=[future,*nodes],type_ignores=[])),str(path),'exec'),space)
++    return space
++
++class DailyRegressions(unittest.IsolatedAsyncioTestCase):
++    def notes(self):
++        names=['NotePageConflict','order_pages','subtree_ids','page_paths','get_content_files','migrate_page_files',
++               'get_note_files','normalize_pages','get_page','document_page','apply_page_operation','update_page_content']
++        return load('models/notes.py',names,dict(deepcopy=copy.deepcopy,json=json,re=re,uuid=uuid,
++            markdown=markdown,BeautifulSoup=BeautifulSoup,escape=escape,time=time))
++
++    def test_legacy_content_and_versions_migrate_without_mutating_original(self):
++        s=self.notes();data={'content':{'md':'Original','html':'','json':None},'versions':[{'md':'Earlier'}]}
++        frozen=copy.deepcopy(data);value=s['normalize_pages'](data,'Title')
++        self.assertEqual(data,frozen);self.assertEqual(value['pages'][0]['content']['md'],'Original')
++        self.assertEqual(value['pages'][0]['versions'],[{'md':'Earlier'}])
++        self.assertEqual(s['normalize_pages'](value),value)
++
++    def test_file_migration_and_html_reference_boundaries(self):
++        s=self.notes();value=s['normalize_pages']({'content':{'md':'Original'},'files':[{'id':'file-1','name':'A.pdf'}]})
++        self.assertEqual({f['id'] for f in s['get_note_files'](value)},{'file-1'})
++        self.assertEqual(s['get_content_files']({'html':'<a href="https://example.com/api/v1/files/foreign/content">x</a>'}),[])
++        self.assertEqual(s['get_content_files']({'json':{'type':'fileAttachment','attrs':{'id':'../foreign'}}}),[])
++
++    def test_cycle_and_duplicate_pages_rejected(self):
++        s=self.notes()
++        for pages in [[{'id':'x','parent_id':'x'}],[{'id':'main'},{'id':'main'}]]:
++            with self.assertRaises(ValueError):s['order_pages'](pages)
++
++    def test_stale_generation_document_rejected(self):
++        s=self.notes();data=s['normalize_pages']({'content':{'md':'A'}})
++        data['pages'][0]['generation']=1
++        for identifier in ['note:n','note:n:page:main:0']:
++            with self.assertRaises(s['NotePageConflict']):s['document_page'](data,identifier)
++        self.assertEqual(s['document_page'](data,'note:n:page:main:1')['id'],'main')
++
++    def test_revisions_prevent_lost_updates_and_require_page_selection(self):
++        s=self.notes();data=s['normalize_pages']({'content':{'md':'A'}})
++        newer=s['update_page_content'](data,'main',{'content':{'md':'B'}},revision=0)
++        self.assertEqual(s['get_page'](newer,'main')['content']['md'],'B')
++        with self.assertRaises(s['NotePageConflict']):s['update_page_content'](newer,'main',{'content':{'md':'C'}},revision=0)
++        op=SimpleNamespace(action='create',new_id=str(uuid.uuid4()),parent_id=None,title='Second',revision=0)
++        pages=s['apply_page_operation'](newer,op)
++        with self.assertRaises(s['NotePageConflict']):s['get_page'](pages)
++        op=SimpleNamespace(action='delete',page_id='main',revision=1)
++        with self.assertRaises(ValueError):s['apply_page_operation'](pages,op)
++
++    async def test_new_note_attachment_requires_read_access(self):
++        s=self.notes();groups=SimpleNamespace(get_groups_by_member_id=AsyncMock(return_value=[]))
++        access=AsyncMock(return_value=False)
++        s.update(Groups=groups,has_access_to_file=access)
++        load('utils/access_control/files.py',['get_note_file_ids','has_access_to_note_files'],s)
++        user=SimpleNamespace(id='editor',role='user')
++        self.assertFalse(await s['has_access_to_note_files'](None,[{'type':'file','id':'foreign-file'}],user))
++        access.assert_awaited_once()
++        access.reset_mock()
++        existing=SimpleNamespace(data=s['normalize_pages']({'content':{'html':'<a href="/api/v1/files/existing/content">A</a>'}}))
++        self.assertTrue(await s['has_access_to_note_files'](existing,[{'type':'file','id':'existing'}],user))
++        access.assert_not_awaited()
++
++    def test_compressed_remote_bodies_rejected(self):
++        s=load('retrieval/web/utils.py',['is_identity_encoding','assert_identity_encoding'],
++               {'log':logging.getLogger('fixture'),'ERROR_MESSAGES':SimpleNamespace(COMPRESSED_RESPONSE='blocked')})
++        for headers in [[],['identity'],['Identity','']]:s['assert_identity_encoding'](headers)
++        for headers in [['gzip'],['br'],['identity','deflate'],['gzip, identity']]:
++            with self.assertRaises(ValueError):s['assert_identity_encoding'](headers)
++
++if __name__=='__main__':unittest.main()

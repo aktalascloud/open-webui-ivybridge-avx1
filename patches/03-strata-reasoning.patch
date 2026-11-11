@@ -1,0 +1,735 @@
+diff --git a/.avx1/mnemosyne-source.json b/.avx1/mnemosyne-source.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..c3ea936a3cd614ca55c8047d5382f59c340c4d1d
+--- /dev/null
++++ b/.avx1/mnemosyne-source.json
+@@ -0,0 +1,17 @@
++{
++  "repository": "TheHubUser4860938/Strata-Mnemosyne",
++  "commit": "2ac28be317c8ecbabc935f6153333506fb80f3e2",
++  "source_path": "serve/server.py",
++  "source_sha256": "a9ec195f01963ba34dd511363f75452ec4bb9eac366afae0416e57923724676e",
++  "ported": [
++    "REASON_AUTO",
++    "reason_auto_pick"
++  ],
++  "license": "MIT",
++  "local_changes": [
++    "stable summation/ties",
++    "Russian keyword normalization in OWUI adapter",
++    "reasoning half of paired profiles; existing answer format retained"
++  ],
++  "memory_store_enabled": false
++}
+diff --git a/.avx1/strata_reasoning_browser.py b/.avx1/strata_reasoning_browser.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..531ee7f9dd49e39f2594a59eabe8edfb94b9d102
+--- /dev/null
++++ b/.avx1/strata_reasoning_browser.py
+@@ -0,0 +1,133 @@
++"""Exercise the packaged picker with a disposable user and mocked model transport."""
++import json
++import time
++from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
++from threading import Thread
++
++
++class ReasoningProvider:
++    def __init__(self):
++        self.captured=[]
++        owner=self
++        class Handler(BaseHTTPRequestHandler):
++            def log_message(self,*args):pass
++            def send(self,body,content_type='application/json'):
++                raw=body.encode() if isinstance(body,str) else json.dumps(body).encode()
++                self.send_response(200);self.send_header('Content-Type',content_type)
++                self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
++            def do_GET(self):
++                self.send({'data':[{'id':mid,'object':'model','owned_by':'strata'} for mid in ['fixture-base','other-base']]})
++            def do_POST(self):
++                body=json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))));owner.captured.append(body)
++                reply={'id':'fixture-completion','object':'chat.completion','model':body.get('model','fixture-base'),
++                    'choices':[{'index':0,'message':{'role':'assistant','content':'Fixture reply'},'finish_reason':'stop'}],
++                    'usage':{'prompt_tokens':1,'completion_tokens':1,'total_tokens':2}}
++                if body.get('stream'):
++                    reply['choices'][0]['delta']=reply['choices'][0].pop('message')
++                    self.send('data: '+json.dumps(reply)+'\n\ndata: [DONE]\n\n','text/event-stream')
++                else:self.send(reply)
++        self.server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
++        self.url='http://127.0.0.1:'+str(self.server.server_port)+'/v1'
++        self.thread=Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
++    def close(self):self.server.shutdown();self.server.server_close()
++
++
++def check_strata_reasoning(browser, base, work, provider):
++    context=browser.new_context(viewport={'width':1280,'height':900},service_workers='block',locale='en-US')
++    errors=[]
++    response=context.request.post(base+'/api/v1/auths/signup',data={
++        'name':'Reasoning fixture','email':'reasoning-fixture@example.com','password':'fixture-only-password-2026'})
++    if not response.ok:raise RuntimeError('Disposable reasoning user could not be created')
++    token=response.json()['token']
++    headers={'Authorization':'Bearer '+token}
++    for mid,name,profile in [('strata.fixture','Strata DavidAU Qwen3.8-Flash-Next','davidau'),('other.fixture','Other fixture',None)]:
++        meta={'capabilities':{'vision':False}}
++        if profile:meta.update(strata_reasoning_profile=profile,strata_reasoning_family='qwen3.8-next',strata_reasoning_model_id=mid,strata_reasoning_base_model_id='fixture-base',strata_adaptive_enabled=True,
++                               strata_reasoning_modes=['off','ultra','coder','spoon','low','medium','xhigh'])
++        result=context.request.post(base+'/api/v1/models/create',headers=headers,
++            data={'id':mid,'base_model_id':'fixture-base' if profile else 'other-base','name':name,'params':{},'meta':meta,'access_grants':[]})
++        if not result.ok:raise RuntimeError('Disposable reasoning model could not be created')
++    result=context.request.post(base+'/api/v1/users/user/settings/update',headers=headers,data={'ui':{
++        'theme':'dark','showChangelog':False,'showUpdateToast':False,'models':['strata.fixture'],
++        'params':{'stream_response':False}}})
++    if not result.ok:raise RuntimeError('Disposable reasoning settings failed')
++    context.add_init_script('localStorage.setItem("token",'+json.dumps(token)+');localStorage.setItem("locale","en-US");localStorage.setItem("theme","dark");')
++    page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
++    captured=[]
++    def outgoing(request):
++        if request.url.split('?')[0].endswith('/api/chat/completions'):captured.append(request.post_data_json)
++    page.on('request',outgoing)
++    page.goto(base+'/?models=strata.fixture',wait_until='domcontentloaded')
++    button=page.locator('[data-strata-reasoning]')
++    button.wait_for(state='visible',timeout=60000)
++    for level in ['high','xhigh','ultra','adaptive','none']:
++        button.click()
++        with page.expect_response('**/api/v1/users/user/settings/update') as saved:
++            page.locator('[data-reasoning-effort="'+level+'"]').click()
++        if not saved.value.ok:raise RuntimeError('Reasoning preference save failed')
++        page.wait_for_function('!document.querySelector("[data-strata-reasoning]").disabled')
++    page.reload(wait_until='domcontentloaded');button.wait_for(state='visible',timeout=60000)
++    if 'None' not in button.inner_text():raise RuntimeError('Reasoning preference did not survive reload')
++    button.click()
++    with page.expect_response('**/api/v1/users/user/settings/update'):
++        page.locator('[data-reasoning-effort="ultra"]').click()
++    page.wait_for_function('!document.querySelector("[data-strata-reasoning]").disabled')
++    button.click();page.locator('[data-reasoning-effort="ultra"]').wait_for(state='visible')
++    page.wait_for_timeout(350)
++    assert page.locator('html').evaluate('(e)=>e.classList.contains("dark")')
++    page.screenshot(path=str(work/'strata-reasoning-dark.png'))
++    page.keyboard.press('Escape')
++    page.locator('#chat-input').fill('Reasoning integration fixture.')
++    page.locator('#chat-input').press('Enter')
++    deadline=time.monotonic()+25
++    while not captured and time.monotonic()<deadline:page.wait_for_timeout(100)
++    if not captured:raise RuntimeError('Reasoning request was not emitted by the packaged UI')
++    params=captured[-1]['params']
++    if params.get('reasoning_effort')!='xhigh' or params.get('custom_params',{}).get('_strata_reasoning_mode')!='ultra':
++        raise RuntimeError('Packaged composer did not serialize the separate Ultra mode')
++    deadline=time.monotonic()+25
++    def matches(body):return any(m.get('role')=='user' and '{REASON:ultra}' in str(m.get('content')) for m in body.get('messages',[]))
++    while not any(matches(b) for b in provider.captured) and time.monotonic()<deadline:page.wait_for_timeout(100)
++    wire=next((b for b in provider.captured if matches(b)),None)
++    if not wire or '_strata_reasoning_mode' in wire or wire.get('reasoning_effort')!='xhigh':
++        raise RuntimeError('Actual OWUI provider boundary did not apply/strip the Ultra control')
++    if '{REASON:' in json.dumps(captured[-1].get('messages',[])):
++        raise RuntimeError('Composer changed the original user message')
++    button.click()
++    with page.expect_response('**/api/v1/users/user/settings/update'):
++        page.locator('[data-reasoning-effort="adaptive"]').click()
++    page.wait_for_function('!document.querySelector("[data-strata-reasoning]").disabled')
++    page.locator('#chat-input').fill('fix the python bug and refactor the parser module')
++    page.locator('#chat-input').press('Enter')
++    deadline=time.monotonic()+25
++    def adaptive_wire(body):return any(m.get('role')=='user' and '{REASON:coder}' in str(m.get('content')) for m in body.get('messages',[]))
++    while not any(adaptive_wire(b) for b in provider.captured) and time.monotonic()<deadline:page.wait_for_timeout(100)
++    if not any(adaptive_wire(b) for b in provider.captured):raise RuntimeError('Mnemosyne did not steer the actual provider request')
++    page.evaluate('document.documentElement.classList.remove("dark")')
++    button.click();page.locator('[data-reasoning-effort="ultra"]').wait_for(state='visible')
++    page.wait_for_timeout(350)
++    assert not page.locator('html').evaluate('(e)=>e.classList.contains("dark")')
++    page.screenshot(path=str(work/'strata-reasoning-light.png'))
++    page.keyboard.press('Escape');page.set_viewport_size({'width':360,'height':800})
++    button.click();menu=page.locator('[role="menu"]:visible').last;box=menu.bounding_box()
++    if not box or box['x']< -1 or box['x']+box['width']>361:raise RuntimeError('Reasoning menu overflows the mobile viewport')
++    page.keyboard.press('Escape')
++    page.goto(base+'/?models=other.fixture',wait_until='domcontentloaded')
++    button.wait_for(state='hidden',timeout=45000)
++    page.set_viewport_size({'width':1280,'height':900})
++    page.goto(base+'/admin/settings/connections',wait_until='domcontentloaded')
++    page.locator('[data-add-openai-connection]').click(timeout=45000)
++    selector=page.locator('#provider-select')
++    selector.wait_for(state='visible')
++    selector.select_option('freellm')
++    page.locator('[data-freellm-connection]').wait_for(state='visible')
++    if page.locator('#url-input').input_value() != 'https://ai-gateway.kilo.ai/api/v1':
++        raise RuntimeError('FreeLLM preset URL differs')
++    if selector.locator('option[value="freellm"]').count()!=1:
++        raise RuntimeError('FreeLLM provider missing or duplicated')
++    if selector.locator('option[value="dsw2api"]').count():raise RuntimeError('Removed provider still advertised')
++    schema=context.request.get(base+'/openapi.json').json()
++    if any('/local-providers/' in path or path.startswith('/dsw2api') for path in schema['paths']):raise RuntimeError('Removed provider API still registered')
++    if errors:raise RuntimeError('Reasoning UI JavaScript error: '+errors[0])
++    context.close()
++    print('CHROMIUM_STRATA_REASONING_SAVE_RELOAD_ULTRA_ADAPTIVE_REAL_PROXY_LIGHT_DARK_MOBILE_PASSED; real model requests=0')
+diff --git a/.avx1/test_strata_reasoning.mjs b/.avx1/test_strata_reasoning.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..652ab1c7a60358678b63036ff947473bde49b314
+--- /dev/null
++++ b/.avx1/test_strata_reasoning.mjs
+@@ -0,0 +1,70 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { applyStrataReasoning, isStrataModel, selectedStrataReasoning } from '../src/lib/utils/strataReasoning.js';
++
++const strata = {id: 'strata.test-model', name: 'Strata DavidAU Qwen3.8-Flash-Next', owned_by: 'openai'};
++test('Strata aliases are detected without enabling controls for another provider', () => {
++  assert.equal(isStrataModel(strata), true);
++  assert.equal(isStrataModel({id: 'model', owned_by: 'strata'}), true);
++  assert.equal(isStrataModel({id: 'other', name: 'Other provider'}), false);
++  assert.equal(isStrataModel({...strata, pipe: true}), false);
++});
++test('automatic mode and other models preserve existing chat parameters by identity', () => {
++  const params = {temperature: .7, reasoning_effort: 'medium', seed: 4};
++  assert.equal(applyStrataReasoning(params, strata, {}), params);
++  assert.equal(applyStrataReasoning(params, strata, {[strata.id]: 'auto'}), params);
++  assert.equal(applyStrataReasoning(params, {id:'other'}, {[strata.id]:'low'}), params);
++  assert.equal(selectedStrataReasoning(strata, {[strata.id]:'unsupported'}), 'auto');
++});
++test('every explicit level reaches both standard and template fields without mutating input', () => {
++  const params = {temperature: .7, top_p:.95, custom_params:{min_p:.05,
++    reasoning_effort:'high', chat_template_kwargs:'{"enable_thinking":false,"reasoning_effort":"high","keep":7}'}};
++  const original = structuredClone(params);
++  for (const level of ['none','low','medium','high','xhigh']) {
++    const out = applyStrataReasoning(params, strata, {[strata.id]:level});
++    assert.equal(out.reasoning_effort, level);
++    assert.equal(out.custom_params.reasoning_effort, level);
++    assert.equal(out.custom_params.chat_template_kwargs.reasoning_effort, level);
++    assert.equal(out.custom_params.chat_template_kwargs.enable_thinking, level !== 'none');
++    assert.equal(out.custom_params.chat_template_kwargs.keep, 7);
++    assert.equal(out.custom_params.min_p, .05);
++    assert.equal(out.temperature, .7);
++  }
++  assert.deepEqual(params, original);
++});
++test('a different selected model never receives the Strata override', () => {
++  const params={custom_params:{keep:true}};
++  assert.equal(applyStrataReasoning(params, {id:'other'}, {[strata.id]:'none'}),params);
++});
++test('Ultra is an explicit author mode; High/XHigh keep their standard transport values', () => {
++  const author={...strata,info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:strata.id}}};
++  for (const level of ['high','xhigh','ultra']) {
++    const out=applyStrataReasoning({},author,{[author.id]:level});
++    assert.equal(out.reasoning_effort,level==='ultra'?'xhigh':level);
++    assert.equal(out.custom_params._strata_reasoning_mode,level);
++  }
++  assert.equal(selectedStrataReasoning(strata,{[strata.id]:'ultra'}),'auto');
++});
++test('Adaptive is independently gated and sends a real task-router control', () => {
++  const model={...strata,info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:strata.id,strata_adaptive_enabled:true}}};
++  const params=applyStrataReasoning({},model,{[model.id]:'adaptive'});
++  assert.equal(params.reasoning_effort,'xhigh');
++  assert.equal(params.custom_params._strata_reasoning_mode,'adaptive');
++  assert.equal(params.custom_params.chat_template_kwargs.enable_thinking,true);
++  assert.equal(selectedStrataReasoning(strata,{[strata.id]:'adaptive'}),'auto');
++});
++
++test('author modes reject another alias, family or rebound base while sampling stays unchanged', () => {
++ const model={...strata,info:{base_model_id:'qwen-next',meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:strata.id,strata_reasoning_base_model_id:'qwen-next',strata_adaptive_enabled:true}}};
++ const params={temperature:.6,top_p:.9,seed:42};
++ for(const candidate of [{...model,id:'strata.other'},{...model,info:{...model.info,base_model_id:'another-model'}},{...model,info:{...model.info,meta:{...model.info.meta,strata_reasoning_family:'deepseek'}}}]) {
++   for(const level of ['ultra','adaptive']) assert.equal(applyStrataReasoning(params,candidate,{[candidate.id]:level}),params);
++ }
++ assert.equal(applyStrataReasoning(params,model,{[model.id]:'ultra'}).temperature,.6);
++});
++
++test('Swift cannot acquire author controls even through copied enrollment metadata', () => {
++ const id='strata.davidau-qwen3.8-next-swift';const model={...strata,id,name:'Strata Swift Qwen3.8-Next',info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:id,strata_adaptive_enabled:true}}};
++ for(const mode of ['ultra','adaptive']) assert.equal(selectedStrataReasoning(model,{[model.id]:mode}),'auto');
++ const params={temperature:.55,top_p:.8};assert.equal(applyStrataReasoning(params,model,{[model.id]:'ultra'}),params);
++});
+diff --git a/.avx1/test_strata_reasoning.py b/.avx1/test_strata_reasoning.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..221f2bde101fe48c8832afbd525fe1d31b3ba929
+--- /dev/null
++++ b/.avx1/test_strata_reasoning.py
+@@ -0,0 +1,146 @@
++"""Run real OWUI parameter conversion; optional pinned Strata parser, no model calls."""
++import argparse
++import ast
++import collections.abc
++import copy
++import hashlib
++import json
++from pathlib import Path
++import subprocess
++from typing import Callable
++import types
++import runpy
++import sys
++
++ROOT=Path(__file__).resolve().parents[1]
++parser=argparse.ArgumentParser()
++parser.add_argument('--strata-source',type=Path)
++parser.add_argument('--node',default='node')
++parser.add_argument('--template',type=Path)
++parser.add_argument('--receipt',type=Path)
++args=parser.parse_args()
++
++def functions(path,names,namespace):
++    tree=ast.parse(path.read_text('utf-8'))
++    nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in names]
++    if {n.name for n in nodes}!=set(names):raise RuntimeError('Actual parameter functions changed')
++    exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),namespace)
++    return tree
++
++namespace={'Callable':Callable,'collections':collections,'JSONCodec':json,
++           'log':types.SimpleNamespace(exception=lambda *a:None)}
++functions(ROOT/'backend/open_webui/utils/misc.py',['deep_update'],namespace)
++functions(ROOT/'backend/open_webui/utils/payload.py',
++          ['apply_params_to_form_data','apply_model_params_to_body','remove_open_webui_params','apply_model_params_to_body_openai'],namespace)
++script="""import {applyStrataReasoning} from './src/lib/utils/strataReasoning.js';
++const model={id:'strata.fixture',name:'DavidAU Qwen3.8-Flash-Next',info:{meta:{strata_reasoning_profile:'davidau',strata_reasoning_family:'qwen3.8-next',strata_reasoning_model_id:'strata.fixture'}}};
++console.log(JSON.stringify(['none','low','medium','high','xhigh','ultra'].map(level=>({level,
++params:applyStrataReasoning({temperature:.7,custom_params:{min_p:.05}},model,{[model.id]:level})}))));"""
++vectors=json.loads(subprocess.check_output([args.node,'--input-type=module','-e',script],cwd=ROOT,text=True))
++package=types.ModuleType('strata_reasoning_fixture')
++package.__path__=[str(ROOT/'backend/open_webui/utils')]
++sys.modules[package.__name__]=package
++module=runpy.run_path(str(ROOT/'backend/open_webui/utils/strata_reasoning.py'),run_name='strata_reasoning_fixture.strata_reasoning')
++adapter=module['apply_strata_reasoning_profile']
++picker=module['adaptive_reasoning_mode']
++meta=types.SimpleNamespace(strata_reasoning_profile='davidau',strata_reasoning_family='qwen3.8-next',strata_reasoning_model_id='strata.davidau-qwen3.8-next',strata_reasoning_base_model_id=None)
++info=types.SimpleNamespace(id=meta.strata_reasoning_model_id,name='DavidAU Qwen3.8-Next',base_model_id=None,meta=meta)
++assert module['has_strata_author_template'](info)
++info.name='Swift DavidAU Qwen3.8-Next'
++assert not module['has_strata_author_template'](info)
++info.name='DavidAU Qwen3.8-Next';info.base_model_id='swift-qwen'
++assert not module['has_strata_author_template'](info)
++
++supported=['coder','comedy','vader','spoon','ultra','curie','teacher','off','low','medium','xhigh']
++adaptive_vectors=[]
++for text,expected in [('fix the python bug and refactor the parser module','coder'),
++                      ('tell me a funny joke about my job','comedy'),
++                      ('we must decide whether to commit to the acquisition','vader'),
++                      ('research the sources and cite the papers','spoon'),
++                      ('исправь ошибку в Python и доработай парсер','coder'),
++                      ('исследуй источники и процитируй научные статьи','spoon'),
++                      ('flurb the wibbit qzpzz',None),('',None)]:
++    assert picker(text,supported)==expected,(text,picker(text,supported),expected)
++    source={'_strata_reasoning_mode':'adaptive','messages':[{'role':'user','content':text}]}
++    result=adapter(source,True,supported_modes=supported)
++    adaptive_vectors.append((source,result,expected))
++    if expected:assert result['messages'][0]['content']=='{REASON:'+expected+'}\n'+text
++    else:assert result['messages']==source['messages']
++assert picker('fix the python bug and refactor the parser module',[]) is None
++strata=None
++template=None
++proof=[]
++if args.template:
++    from jinja2.sandbox import ImmutableSandboxedEnvironment
++    env=ImmutableSandboxedEnvironment(trim_blocks=True,lstrip_blocks=True,extensions=['jinja2.ext.loopcontrols'])
++    env.filters['tojson']=lambda value,**kwargs:json.dumps(value,ensure_ascii=kwargs.pop('ensure_ascii',False),**kwargs)
++    env.filters['from_json']=json.loads
++    def invalid(value):raise ValueError(value)
++    env.globals['raise_exception']=invalid
++    template=env.from_string(args.template.read_text('utf-8'))
++if args.strata_source:
++    strata={'ENV_TO_USER':False,'_NUMERIC_EFFORT':False,'_BINARY_THINKING':False}
++    tree=functions(args.strata_source,['effort_kwargs','_object_list','_tool_list','_env_to_user','_late_system_to_user','openai_to_messages'],strata)
++    strata['EFFORT']=ast.literal_eval(next(n.value for n in tree.body if isinstance(n,ast.Assign)
++        and any(isinstance(t,ast.Name) and t.id=='EFFORT' for t in n.targets)))
++for vector in vectors:
++    level=vector['level'];params=vector['params']
++    transport='xhigh' if level=='ultra' else level
++    for converter in ['apply_params_to_form_data','apply_model_params_to_body_openai']:
++        body={'model':'fixture','messages':[]}
++        if converter=='apply_params_to_form_data':
++            body['params']=copy.deepcopy(params)
++            out=namespace[converter](body,{'owned_by':'openai'})
++        else:out=namespace[converter](copy.deepcopy(params),body)
++        assert out['reasoning_effort']==transport
++        assert out['chat_template_kwargs']['enable_thinking']==(level!='none')
++        assert out['temperature']==.7 and out['min_p']==.05
++        original={**out,'messages':[{'role':'system','content':'Preserve the application instructions.'},
++                                  {'role':'user','content':'reasoning probe'}]}
++        frozen=copy.deepcopy(original)
++        wire=adapter(original,author_template=True)
++        assert original==frozen and '_strata_reasoning_mode' not in wire
++        tag={'none':'ioff','high':'off','xhigh':'off'}.get(level,level)
++        assert wire['messages'][-1]['content']=='{REASON:'+tag+'}\nreasoning probe'
++        assert wire['messages'][0]==original['messages'][0]
++        if strata:
++            _,_,kwargs=strata['openai_to_messages'](out)
++            if level=='none':assert kwargs=={'enable_thinking':False}
++            else:assert kwargs['reasoning_effort']==('xhigh' if level in ('high','xhigh','ultra') else level)
++            if level=='ultra':assert kwargs['reasoning_effort']=='xhigh'
++            if template:
++                rendered=template.render(messages=wire['messages'],tools=None,add_generation_prompt=True,**kwargs)
++                reference_effort='off' if level in ('none','high','xhigh') else level
++                reference=template.render(messages=frozen['messages'],tools=None,add_generation_prompt=True,
++                    reasoning_effort=reference_effort,enable_thinking=level!='none')
++                assert rendered==reference,(level,'template mode differs from real reference')
++                proof.append({'mode':level,'converter':converter,'wire_effort':transport,
++                              'render_sha256':hashlib.sha256(rendered.encode()).hexdigest(),'reference_match':True})
++if template:
++    for original,wire,expected in adaptive_vectors:
++        if not original['messages'][0]['content']:continue
++        rendered=template.render(messages=wire['messages'],tools=None,add_generation_prompt=True,
++                                 reasoning_effort='xhigh',enable_thinking=True)
++        reference=template.render(messages=original['messages'],tools=None,add_generation_prompt=True,
++                                  reasoning_effort=expected or 'xhigh',enable_thinking=True)
++        assert rendered==reference,'Adaptive did not activate the actual selected template construct'
++        proof.append({'mode':'adaptive','selected_reasoning_mode':expected,'reference_match':True,
++                      'render_sha256':hashlib.sha256(rendered.encode()).hexdigest()})
++# Profile controls never affect tool records, original user content, or unrelated providers.
++body={'_strata_reasoning_mode':'ultra','messages':[{'role':'user','content':[{'type':'text','text':'probe'},
++      {'type':'image_url','image_url':{'url':'data:image/png;base64,fixture'}}]},
++      {'role':'assistant','tool_calls':[{'id':'call-1'}]},{'role':'tool','content':'result','tool_call_id':'call-1'}]}
++before=copy.deepcopy(body);wire=adapter(body,True)
++assert body==before and wire['messages'][1:]==body['messages'][1:]
++assert wire['messages'][0]['content'][1:]==body['messages'][0]['content']
++assert adapter(wire,True) is wire
++for invalid_mode in [None,{},[],42,'unknown']:
++    assert '_strata_reasoning_mode' not in adapter({**body,'_strata_reasoning_mode':invalid_mode},True)
++manual={'_strata_reasoning_mode':'high','messages':[{'role':'user','content':'{REASON:coder} probe'}]}
++assert adapter(manual,True)['messages']==manual['messages']
++assert adapter(body,False)['messages']==body['messages']
++if args.receipt:
++    args.receipt.write_text(json.dumps({'model_requests':0,'filter_checks':False,'vectors':proof,
++        'strata_parser_sha256':hashlib.sha256(args.strata_source.read_bytes()).hexdigest(),
++        'template_sha256':hashlib.sha256(args.template.read_bytes()).hexdigest()},indent=2)+'\n')
++print('STRATA_REASONING_6_LEVELS_2_REAL_OWUI_CONVERTERS_PASSED'+('_ACTUAL_STRATA_PARSER_PASSED' if strata else ''))
+diff --git a/NOTICE-MNEMOSYNE.txt b/NOTICE-MNEMOSYNE.txt
+new file mode 100644
+index 0000000000000000000000000000000000000000..9f13fa7d12cc39044fbd0b14721b40c4073e2d04
+--- /dev/null
++++ b/NOTICE-MNEMOSYNE.txt
+@@ -0,0 +1,27 @@
++Strata-Mnemosyne adaptive selector
++https://github.com/TheHubUser4860938/Strata-Mnemosyne/tree/2ac28be317c8ecbabc935f6153333506fb80f3e2
++
++The keyword table and selector are adapted under the following license.
++The model author's template text is not distributed by this integration.
++
++MIT License
++
++Copyright (c) 2026 Niko1221 and the Strata contributors
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/backend/open_webui/utils/mnemosyne_reasoning.py b/backend/open_webui/utils/mnemosyne_reasoning.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2a7c889b0ce4a06ab5771239b1b9d447932ecae3
+--- /dev/null
++++ b/backend/open_webui/utils/mnemosyne_reasoning.py
+@@ -0,0 +1,75 @@
++"""Mnemosyne task-to-reasoning selector; no memory store or model execution.
++
++Adapted from Strata-Mnemosyne serve/server.py, MIT.
++Copyright (c) 2026 Niko1221 and the Strata contributors.
++Source commit: 2ac28be317c8ecbabc935f6153333506fb80f3e2
++See NOTICE-MNEMOSYNE.txt. Local changes: stable summation/tie handling.
++"""
++import math
++import re
++from collections import Counter
++
++REASON_AUTO = {
++    'coder': frozenset(['api', 'async', 'backend', 'bug', 'build', 'cache', 'caching', 'class', 'cli', 'code', 'coding', 'compile', 'concurrency', 'css', 'database', 'dependency', 'deploy', 'distributed', 'docker', 'endpoint', 'exception', 'fix', 'frontend', 'function', 'git', 'golang', 'grpc', 'html', 'implement', 'java', 'javascript', 'json', 'kubernetes', 'latency', 'leak', 'library', 'lint', 'merge', 'microservice', 'module', 'null', 'package', 'pip', 'program', 'pytest', 'python', 'queue', 'race', 'react', 'rebase', 'redis', 'refactor', 'regex', 'rust', 'schema', 'script', 'server', 'sql', 'stack', 'swift', 'throughput', 'trace', 'typescript', 'undefined', 'unittest', 'venv', 'vue', 'websocket']),
++    'house': frozenset(['abscess', 'ailment', 'allergies', 'allergy', 'autoimmune', 'bacteria', 'benign', 'broken', 'bug', 'cardiology', 'cause', 'clinic', 'condition', 'coredump', 'cough', 'crash', 'cyst', 'debug', 'debugging', 'dermatology', 'diagnose', 'diagnosis', 'differential', 'disease', 'dizziness', 'dizzy', 'doctor', 'eliminate', 'elimination', 'error', 'exception', 'failing', 'fails', 'failure', 'fatigue', 'fracture', 'headache', 'heisenbug', 'hospital', 'hypothesis', 'illness', 'infection', 'inflammation', 'intermittent', 'lesion', 'logs', 'lump', 'malady', 'malignant', 'medical', 'medication', 'medicine', 'migraine', 'mystery', 'nausea', 'neurology', 'oncology', 'oom', 'palpitations', 'patient', 'prescription', 'prognosis', 'rash', 'reflux', 'regression', 'remedy', 'rheumatology', 'root', 'sarcoma', 'segfault', 'sprain', 'stack', 'suddenly', 'surgery', 'surgical', 'swelling', 'symptom', 'symptoms', 'therapy', 'timeout', 'trace', 'treatment', 'triage', 'tumor', 'tumour', 'vertigo', 'virus', 'worked']),
++    'stark': frozenset(['architect', 'architecture', 'blueprint', 'capacity', 'cluster', 'design', 'diagram', 'failover', 'foresight', 'infrastructure', 'integration', 'monolith', 'platform', 'redundancy', 'requirements', 'roadmapping', 'scalable', 'scaling', 'service', 'solutions', 'systems', 'topology', 'tradeoff', 'visionary', 'whiteboard']),
++    '007': frozenset(['agent', 'agentic', 'automation', 'autonomous', 'backpressure', 'batch', 'cron', 'daemon', 'deterministic', 'execute', 'fallback', 'fleet', 'job', 'monitor', 'multi-step', 'orchestrate', 'orchestration', 'pipeline', 'retry', 'runbook', 'schedule', 'self-healing', 'tool-calls', 'unattended', 'watchdog', 'workflow']),
++    'ultra': frozenset(['acceptance', 'benchmark', 'careful', 'complete', 'deliverable', 'deliverables', 'eval', 'evaluation', 'final', 'flawless', 'perfect', 'perfection', 'polish', 'production', 'release', 'review', 'reviews', 'ship', 'sign-off', 'validation', 'verify']),
++    'hyper': frozenset(['audit', 'breakdown', 'categorize', 'decompose', 'deconstruct', 'deconstruction', 'dissect', 'exhaustive', 'frameworks', 'granularity', 'mece', 'outline', 'sections', 'segmentation', 'structure', 'taxonomy']),
++    'spoon': frozenset(['archival', 'bibliography', 'citation', 'cite', 'claims', 'dossier', 'evidence', 'experts', 'fact-checking', 'facts', 'literature', 'meta-analysis', 'methodology', 'panel', 'paper', 'papers', 'peer-reviewed', 'referencing', 'research', 'rigor', 'sources', 'studies', 'study', 'survey']),
++    'deeptree': frozenset(['alternative', 'branch', 'causal', 'causality', 'contingency', 'counterfactual', 'decision', 'decision-tree', 'decisions', 'dependency', 'options', 'path', 'plan', 'planning', 'prune', 'pruning', 'roadmap', 'scenarios', 'stages', 'strategic', 'strategy', 'tree']),
++    'omni': frozenset(['across', 'analogy', 'connections', 'convergent', 'cross-domain', 'culture', 'domains', 'everything', 'fields', 'holistic', 'interdisciplinary', 'isomorphism', 'lenses', 'metaphor', 'paradigm', 'parallel', 'synthesis', 'synthesize', 'unified']),
++    'socrates': frozenset(['assumption', 'assumptions', 'clarify', 'counterexample', 'critique', 'define', 'definition', 'elenchus', 'examine', 'gaps', 'implication', 'implications', 'interrogate', 'meaning', 'premise', 'premises', 'probe', 'question', 'questions', 'refute', 'socratic']),
++    'teacher': frozenset(['beginner', 'crash-course', 'eli5', 'explain', 'foundations', 'guide', 'intro', 'introduction', 'learn', 'learned', 'lesson', 'mentor', 'plain', 'primer', 'simply', 'step-by-step', 'teach', 'teaching', 'tutorial', 'understand', 'walkthrough']),
++    'einstein': frozenset(['creative', 'creativity', 'divergent', 'ideas', 'ideation', 'imagine', 'improbable', 'invent', 'invention', 'lateral', 'novel', 'novelty', 'original', 'serendipity', 'speculative', 'surprising', 'thought-experiment', 'unusual', 'what-if']),
++    'brainstorm': frozenset(['brainstorm', 'generate', 'ideate', 'list', 'many', 'quickly', 'solutions']),
++    'business': frozenset(['acquisition', 'b2b', 'b2c', 'boardroom', 'brand', 'business', 'churn', 'company', 'competitor', 'competitors', 'customer', 'customers', 'differentiation', 'funding', 'funnel', 'go-to-market', 'growth', 'gtm', 'investor', 'market', 'marketing', 'merger', 'monetization', 'okrs', 'pitch', 'positioning', 'pricing', 'profit', 'retention', 'revenue', 'saas', 'sales', 'startup', 'valuation']),
++    'matlock': frozenset(['advocacy', 'arbitration', 'attorney', 'brief', 'compliance', 'contract', 'contracts', 'copyright', 'counsel', 'court', 'deposition', 'felony', 'gdpr', 'injunction', 'law', 'lawsuit', 'lawyer', 'legal', 'liability', 'litigation', 'misdemeanor', 'objection', 'patent', 'precedent', 'privacy', 'procedural', 'regulation', 'regulations', 'statute', 'subpoena', 'testimony', 'tort', 'trademark', 'verdict', 'witness']),
++    'musk': frozenset(['aerodynamic', 'battery', 'costs', 'energy', 'feasible', 'first-principles', 'fundamental', 'manufacturing', 'material', 'materials', 'orbital', 'physical', 'physics', 'propulsion', 'rocket', 'silicon', 'thruster', 'tolerances', 'volumetric', 'wafer']),
++    'curie': frozenset(['anatomy', 'atom', 'atoms', 'biology', 'chemistry', 'crispr', 'dna', 'enzyme', 'evolution', 'experiment', 'experiments', 'gene', 'genes', 'hormone', 'laboratory', 'measurement', 'mechanism', 'mechanistic', 'molecule', 'molecules', 'mrna', 'neuron', 'physiology', 'protein', 'radioactivity', 'rna', 'science', 'scientific', 'truth', 'vaccine']),
++    'story': frozenset(['antagonist', 'chapter', 'character', 'characters', 'climax', 'dialogue', 'ending', 'epic', 'fiction', 'lyrical', 'monologue', 'motif', 'narrative', 'novel', 'plot', 'poem', 'poetry', 'prose', 'protagonist', 'scene', 'screenplay', 'screenwriting', 'stories', 'story', 'tale', 'theme', 'themes', 'twist', 'writing']),
++    'comedy': frozenset(['amuse', 'bit', 'comedian', 'funny', 'humor', 'humorous', 'humour', 'joke', 'jokes', 'laugh', 'laughing', 'meme', 'pun', 'satire', 'silly', 'stand-up', 'witty']),
++    'joe': frozenset(['casual', 'everyday', 'folks', 'friend', 'honestly', 'regular', 'relatable']),
++    'prompt': frozenset(['chain-of-thought', 'claude', 'context-window', 'few-shot', 'gpt', 'instruct', 'instruction-tuning', 'llm', 'meta-prompt', 'prompt', 'prompt-template', 'prompting', 'prompts', 'system-prompt', 'token-budget']),
++    'holodeck': frozenset(['adversarial', 'argue', 'both-sides', 'debate', 'debates', 'devil-advocate', 'discuss', 'discussion', 'opposing', 'panelists', 'perspectives', 'roundtable', 'simulate', 'sparring', 'symposium', 'tribunal', 'versus']),
++    'vader': frozenset(['authority', 'choice', 'choose', 'command', 'commit', 'consequential', 'decide', 'decision', 'decisions', 'decree', 'duty', 'empire', 'irreversible', 'leadership', 'mandate', 'order', 'resolve', 'ruthless', 'sacrifice', 'ultimatum']),
++    'neo': frozenset(['awake', 'belief', 'believe', 'consciousness', 'control', 'determinism', 'doubt', 'glitch', 'illusion', 'matrix', 'morpheus', 'prophecy', 'reality', 'red-pill', 'reframe', 'simulation-hypothesis', 'skeptical', 'zion']),
++    'joker': frozenset(['absurd', 'anarchic', 'anarchy', 'chaos', 'disrupt', 'fragile', 'invert', 'irony', 'irreverent', 'mad', 'paradox', 'provocateur', 'subvert', 'topsy-turvy', 'trick', 'unconventional', 'upend']),
++    'quinn': frozenset(['bold', 'confident', 'daring', 'edgy', 'flair', 'opinion', 'opinions', 'personality', 'playful', 'unapologetic']),
++    'logic': frozenset(['axiom', 'consistent', 'contradiction', 'deduce', 'deduction', 'fallacy', 'first', 'formal', 'logic', 'logical', 'mathematics', 'modus-ponens', 'principles', 'proof', 'prove', 'proving', 'soundness', 'syllogism', 'tautology', 'theorem', 'validity']),
++    '007+coder': frozenset(['agentic', 'builds', 'circuit-breaker', 'idempotent', 'orchestration', 'rate-limiter', 'workers']),
++    'stark+coder': frozenset(['apis', 'frontends', 'microservices']),
++    'ultra+coder': frozenset(['clean', 'code-review', 'linting', 'refactoring']),
++    'deeptree+spoon': frozenset(['roadmaps', 'thesis']),
++    'hyper+socrates': frozenset(['dissertation', 'essay', 'structuring']),
++    'musk+business': frozenset(['fundamentals', 'manufacturing']),
++    'curie+teacher': frozenset(['crispr', 'lessons']),
++    'joe+comedy': frozenset(['relatable']),
++    'socrates+teacher': frozenset(['argument', 'drill', 'drills', 'ethics', 'exam', 'exams', 'flashcards', 'homework', 'memorize', 'philosophical', 'philosophy', 'position', 'quiz', 'quizzes', 'rebuttal', 'tutor', 'tutoring']),
++    'einstein+pkd': frozenset(['android', 'cyberpunk', 'dystopia', 'dystopian', 'fantasy', 'paranoid', 'sci-fi', 'scifi', 'simulation', 'what-if', 'worldbuilding']),
++    'prompt+prompt': frozenset(['optimize', 'tune']),
++    'house+teacher': frozenset(['diagnostic', 'layperson', 'patient-friendly', 'second-opinion']),
++    'matlock+hyper': frozenset(['addendum', 'boilerplate', 'clause', 'clauses', 'fine-print', 'indemnity', 'redline']),
++    'socrates+matlock': frozenset(['briefs', 'cross-examination', 'dissent', 'jurisprudence', 'policies', 'policy']),
++    'joker+comedy': frozenset(['deadpan', 'improv', 'one-liner', 'one-liners', 'punchline', 'punchlines', 'roast', 'roasts']),
++    'pkd+comedy': frozenset(['caricature', 'farce', 'gallows', 'parody', 'tragicomic']),
++    'stark+prompt': frozenset(['guardrail', 'guardrails', 'output-format', 'persona', 'personas', 'system-card']),
++    'joker+socrates': frozenset(['advocate', 'advocates', 'goad', 'raconteur']),
++    'business+hyper': frozenset(['five-forces', 'segment', 'segments', 'swot', 'white-space']),
++    'musk+logic': frozenset(['defensibility', 'moat', 'thermodynamics', 'unit-economics']),
++    'neo+story': frozenset(['deus-ex-machina', 'foreshadow', 'peripeteia', 'reversal', 'twists']),
++}
++
++_DF=Counter(word for words in REASON_AUTO.values() for word in words)
++REASON_AUTO_W={name:{word:1.0/_DF[word] for word in words} for name,words in REASON_AUTO.items()}
++
++def reason_auto_pick(text: str) -> str | None:
++    hits=set(re.findall(r"[a-z0-9][a-z0-9+#'-]{1,}",(text or '').lower()))
++    best,best_score,tied=None,0.0,False
++    for name,weights in REASON_AUTO_W.items():
++        score=math.fsum(weights[word] for word in sorted(hits) if word in weights)
++        if score>best_score+1e-12:
++            best,best_score,tied=name,score,False
++        elif abs(score-best_score)<=1e-12 and score>0 and name!=best:
++            tied=True
++    return best if best is not None and best_score>=0.4 and not tied else None
+diff --git a/backend/open_webui/utils/strata_reasoning.py b/backend/open_webui/utils/strata_reasoning.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..fbef8ca01cace3fde258d7691ec35a387eb37e0e
+--- /dev/null
++++ b/backend/open_webui/utils/strata_reasoning.py
+@@ -0,0 +1,73 @@
++"""Explicit, opt-in author-template controls at the provider boundary.
++
++No template text is bundled. Control tags use the existing template interface;
++only an outgoing copy changes, after the user's original chat text is stored.
++"""
++import re
++from .mnemosyne_reasoning import reason_auto_pick
++
++
++def has_strata_author_template(model_info) -> bool:
++    """Only the explicitly enrolled Qwen3.8-Next alias may use author modes."""
++    meta = getattr(model_info, 'meta', None)
++    identity = ' '.join(str(getattr(model_info, key, '') or '') for key in ('id', 'name', 'base_model_id')).lower()
++    return bool(meta and re.search(r'david[._ -]?au', identity) and re.search(r'qwen[._ -]?3[._ -]?8', identity)
++        and 'next' in identity and 'swift' not in identity
++        and getattr(meta, 'strata_reasoning_profile', None) == 'davidau'
++        and getattr(meta, 'strata_reasoning_family', None) == 'qwen3.8-next'
++        and getattr(meta, 'strata_reasoning_model_id', None) == getattr(model_info, 'id', None)
++        and getattr(meta, 'strata_reasoning_base_model_id', None) == getattr(model_info, 'base_model_id', None))
++
++
++def adaptive_reasoning_mode(text: str, supported_modes) -> str | None:
++    # Normalize domain words for the English upstream task map. The user's text
++    # is never translated or changed by this normalization; only the score input.
++    words = []
++    for pattern, equivalents in (
++        (r'\bошиб\w*', 'bug'), (r'\bисправ\w*', 'fix'),
++        (r'\bкод\w*', 'code'), (r'\bпарсер\w*', 'parser'),
++        (r'\bрефактор\w*', 'refactor'), (r'\bпрограмм\w*', 'programming'),
++        (r'\bисслед\w*', 'research'), (r'\bисточник\w*', 'sources'),
++        (r'\bпроцитир\w*', 'cite'), (r'\bстат(?:ья|ьи|ью|ей|ьям|ьями|ьях)\b', 'papers'),
++        (r'\bобъясн\w*', 'explain'), (r'\bнаучи\w*', 'teach'),
++        (r'\bшут\w*', 'joke'), (r'\bсмешн\w*', 'funny'),
++    ):
++        if re.search(pattern, text.lower()): words.append(equivalents)
++    picked = reason_auto_pick(text + ' ' + ' '.join(words))
++    mode = picked.partition('+')[0] if picked else None
++    supported = {value for value in supported_modes or [] if isinstance(value, str)}
++    return mode if mode in supported else None
++
++
++def apply_strata_reasoning_profile(payload: dict, author_template: bool = False, supported_modes=None) -> dict:
++    if '_strata_reasoning_mode' not in payload:
++        return payload
++    result = dict(payload)
++    mode = result.pop('_strata_reasoning_mode')
++    tags = {'none': 'ioff', 'low': 'low', 'medium': 'medium',
++            'high': 'off', 'xhigh': 'off', 'ultra': 'ultra', 'adaptive': None}
++    if not author_template or not isinstance(mode, str) or mode not in tags or not isinstance(payload.get('messages'), list):
++        return result
++    for index in range(len(payload['messages']) - 1, -1, -1):
++        message = payload['messages'][index]
++        if not isinstance(message, dict) or message.get('role') != 'user':
++            continue
++        content = message.get('content')
++        if isinstance(content, str):
++            text = content
++        elif isinstance(content, list):
++            text = '\n'.join(p.get('text', '') for p in content
++                             if isinstance(p, dict) and isinstance(p.get('text'), str))
++        else:
++            return result
++        # A manually supplied author control retains its existing precedence.
++        if re.search(r'\{REASON:[A-Za-z0-9_]+\}', text):
++            return result
++        tag = adaptive_reasoning_mode(text, supported_modes) if mode == 'adaptive' else tags[mode]
++        if not tag:return result
++        prefix = '{REASON:' + tag + '}\n'
++        outgoing = prefix + content if isinstance(content, str) else [{'type': 'text', 'text': prefix}, *content]
++        result['messages'] = [*payload['messages']]
++        result['messages'][index] = {**message, 'content': outgoing}
++        break
++    return result
+diff --git a/src/lib/components/chat/MessageInput/StrataReasoning.svelte b/src/lib/components/chat/MessageInput/StrataReasoning.svelte
+new file mode 100644
+index 0000000000000000000000000000000000000000..c771c17c4b3d4361512680846ad573b120dd07cd
+--- /dev/null
++++ b/src/lib/components/chat/MessageInput/StrataReasoning.svelte
+@@ -0,0 +1,80 @@
++<script lang="ts">
++  import { getContext, tick } from 'svelte';
++  import { models, settings, user } from '$lib/stores';
++  import { updateUserSettings } from '$lib/apis/users';
++  import { toast } from 'svelte-sonner';
++  import Dropdown from '$lib/components/common/Dropdown.svelte';
++  import DropdownMenu from '$lib/components/common/DropdownMenu.svelte';
++  import Tooltip from '$lib/components/common/Tooltip.svelte';
++  import Sparkles from '$lib/components/icons/Sparkles.svelte';
++  import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
++  import Check from '$lib/components/icons/Check.svelte';
++  import { isStrataModel, hasStrataAuthorTemplate, hasStrataAdaptiveProfile, selectedStrataReasoning, STRATA_REASONING_LEVELS } from '$lib/utils/strataReasoning';
++
++  const i18n: any = getContext('i18n');
++  export let selectedModels: string[] = [];
++  export let disabled = false;
++  let saving = false;
++  let trigger: HTMLButtonElement;
++  $: model = selectedModels.length === 1 ? $models.find((m) => m.id === selectedModels[0]) : undefined;
++  $: value = selectedStrataReasoning(model, $settings.strataReasoningEfforts);
++  $: levels = STRATA_REASONING_LEVELS.filter((level) =>
++    (level !== 'ultra' || hasStrataAuthorTemplate(model)) &&
++    (level !== 'adaptive' || hasStrataAdaptiveProfile(model)));
++  const labels: Record<string, string> = {auto: 'Reasoning default', none: 'Reasoning off', low: 'Reasoning low',
++    medium: 'Reasoning medium', high: 'Reasoning high', xhigh: 'Reasoning xhigh', ultra: 'Reasoning ultra', adaptive: 'Reasoning adaptive'};
++
++  async function select(level: string) {
++    if (!model || saving || disabled || !STRATA_REASONING_LEVELS.includes(level)) return;
++    const id = model.id;
++    const previous = $settings.strataReasoningEfforts ?? {};
++    const next = {...previous};
++    next[id] = level;
++    settings.set({...$settings, strataReasoningEfforts: next});
++    saving = true;
++    try {
++      if (!await updateUserSettings(localStorage.token, {ui: {strataReasoningEfforts: next}})) {
++        throw new Error($i18n.t('Failed to save settings'));
++      }
++    } catch (error) {
++      settings.set({...$settings, strataReasoningEfforts: previous});
++      toast.error(String(error));
++    } finally {
++      saving = false;
++      await tick();
++      if (model?.id === id && trigger?.isConnected) trigger.focus();
++    }
++  }
++</script>
++
++{#if isStrataModel(model) && ($user?.role === 'admin' || ($user?.permissions?.chat?.params ?? true))}
++  <Dropdown align="end" visualViewportAware closeOnSelect>
++    <Tooltip content={`${$i18n.t(labels[value])}. ${$i18n.t('Strata reasoning description')}`} placement="top">
++      <button bind:this={trigger} type="button" data-strata-reasoning aria-label={`${$i18n.t('Strata reasoning')}: ${$i18n.t(labels[value])}`}
++        disabled={disabled || saving}
++        class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[0.8125rem] text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:focus-visible:outline-gray-500">
++        <Sparkles className="size-4" />
++        <span class="hidden max-w-24 truncate sm:inline">{$i18n.t(labels[value])}</span>
++        <ChevronDown className="size-3" />
++      </button>
++    </Tooltip>
++    <div slot="content">
++      <DropdownMenu className="w-52 max-w-[calc(100vw-2rem)]">
++        <div class="px-2 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">{$i18n.t('Strata reasoning')}</div>
++        {#each levels as level}
++          {#if level === 'ultra'}<hr />{/if}
++          <button type="button" role="menuitemradio" aria-checked={value === level}
++            disabled={disabled || saving} data-reasoning-effort={level}
++            class="flex min-h-9 w-full items-center justify-between gap-3 rounded-lg px-2 text-left text-sm text-gray-800 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gray-400 disabled:opacity-50 dark:text-gray-100 dark:hover:bg-gray-800"
++            on:click={() => select(level)}>
++            <span>{$i18n.t(labels[level])}</span>
++            {#if level === 'ultra' || level === 'adaptive'}
++              <span class="ml-auto text-[0.6875rem] text-gray-500 dark:text-gray-400">{level === 'ultra' ? 'DavidAU' : 'Mnemosyne'}</span>
++            {/if}
++            {#if value === level}<Check className="size-4 shrink-0" />{/if}
++          </button>
++        {/each}
++      </DropdownMenu>
++    </div>
++  </Dropdown>
++{/if}
+diff --git a/src/lib/utils/strataReasoning.js b/src/lib/utils/strataReasoning.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..f7d4323141a6f8e5d51d5493e8b20ee1cb2ff57c
+--- /dev/null
++++ b/src/lib/utils/strataReasoning.js
+@@ -0,0 +1,60 @@
++// Composer preferences are scoped to a model, never injected into other providers.
++export const STRATA_REASONING_LEVELS = ['auto', 'none', 'low', 'medium', 'high', 'xhigh', 'ultra', 'adaptive'];
++
++export function isStrataModel(model) {
++  if (!model || model.pipe || model.direct) return false;
++  return String(model.owned_by ?? '').toLowerCase() === 'strata' ||
++    model.info?.meta?.backend === 'strata' ||
++    /^strata(?:[.:/_-]|$)/i.test(model.id ?? '') || /^strata\b/i.test(model.name ?? '');
++}
++
++export function selectedStrataReasoning(model, preferences = {}) {
++  const value = preferences?.[model?.id];
++  if (value === 'ultra' && !hasStrataAuthorTemplate(model)) return 'auto';
++  if (value === 'adaptive' && !hasStrataAdaptiveProfile(model)) return 'auto';
++  return isStrataModel(model) && STRATA_REASONING_LEVELS.includes(value) ? value : 'auto';
++}
++
++export function hasStrataAuthorTemplate(model) {
++  const info = model?.info;
++  const meta = info?.meta;
++  const identity = [model?.id, model?.name, info?.id, info?.name, info?.base_model_id].filter(Boolean).join(' ').toLowerCase();
++  return isStrataModel(model) && /david[._ -]?au/.test(identity) && /qwen[._ -]?3[._ -]?8/.test(identity) &&
++    /next/.test(identity) && !/swift/.test(identity) && meta?.strata_reasoning_profile === 'davidau' &&
++    meta.strata_reasoning_family === 'qwen3.8-next' &&
++    meta.strata_reasoning_model_id === model.id &&
++    (meta.strata_reasoning_base_model_id ?? null) === (info.base_model_id ?? null);
++}
++
++export function hasStrataAdaptiveProfile(model) {
++  return hasStrataAuthorTemplate(model) && model.info?.meta?.strata_adaptive_enabled === true;
++}
++
++function object(value) {
++  if (typeof value === 'string') {
++    try { value = JSON.parse(value); } catch { return {}; }
++  }
++  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
++}
++
++export function applyStrataReasoning(params, model, preferences) {
++  const effort = selectedStrataReasoning(model, preferences);
++  if (effort === 'auto') return params;
++  const transport = ['ultra', 'adaptive'].includes(effort) ? 'xhigh' : effort;
++  const custom = object(params?.custom_params);
++  const template = object(custom.chat_template_kwargs ?? params?.chat_template_kwargs);
++  return {
++    ...params,
++    reasoning_effort: transport,
++    custom_params: {
++      ...custom,
++      reasoning_effort: transport,
++      ...(hasStrataAuthorTemplate(model) ? { _strata_reasoning_mode: effort } : {}),
++      chat_template_kwargs: {
++        ...template,
++        ...(Object.hasOwn(template, 'reasoning_effort') ? { reasoning_effort: transport } : {}),
++        enable_thinking: effort !== 'none'
++      }
++    }
++  };
++}

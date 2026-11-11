@@ -1,0 +1,434 @@
+diff --git a/.avx1/bench_json.py b/.avx1/bench_json.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4e308c93c41c3baa999bc844c09b94a2a1fc81a5
+--- /dev/null
++++ b/.avx1/bench_json.py
+@@ -0,0 +1,45 @@
++"""Synthetic JSON transport benchmark; never invokes an LLM or reads user data."""
++import argparse
++import json
++from pathlib import Path
++import statistics
++import time
++
++
++def main():
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--output", type=Path)
++    args = parser.parse_args()
++    import orjson
++    payloads = []
++    for size in (1, 8, 64):
++        payloads += [
++            {"id": "synthetic", "choices": [{"delta": {"content": "hello мир " * size}, "index": 0}]},
++            {"tools": [{"type": "function", "function": {"name": "search", "arguments": {"query": "test", "limit": 10}}} for _ in range(size)]},
++            {"messages": [{"role": "user", "content": "Synthetic public fixture" * size}]},
++        ]
++    for payload in payloads:
++        assert orjson.loads(orjson.dumps(payload)) == payload
++        assert json.loads(orjson.dumps(payload)) == payload
++    encoded = [orjson.dumps(payload) for payload in payloads]
++    repeats, loops = 9, 12000
++    measurements = []
++    for repeat in range(repeats):
++        start = time.perf_counter_ns()
++        for i in range(loops):
++            orjson.dumps(payloads[i % len(payloads)])
++            orjson.loads(encoded[i % len(encoded)])
++        elapsed = (time.perf_counter_ns() - start) / loops
++        if repeat:
++            measurements.append(elapsed)
++    result = {"workload": "synthetic-json-roundtrip-v1", "version": orjson.__version__,
++              "median_ns": statistics.median(measurements), "samples_ns": measurements,
++              "scope": "JSON serialization and parsing only; not LLM tokens/s"}
++    if args.output:
++        args.output.write_text(json.dumps(result, indent=2), encoding="utf-8")
++    else:
++        print(json.dumps(result))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/.avx1/bench_json_profiles.py b/.avx1/bench_json_profiles.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..b916cd9355b32eb7d84bbcee96095c6cc8649ba7
+--- /dev/null
++++ b/.avx1/bench_json_profiles.py
+@@ -0,0 +1,46 @@
++"""CPU-only JSON measurements; import a wheel extracted to --module-dir when supplied."""
++import argparse
++import hashlib
++import json
++from pathlib import Path
++import statistics
++import sys
++import time
++import ctypes
++kernel=ctypes.WinDLL('kernel32',use_last_error=True)
++kernel.GetCurrentThread.restype=ctypes.c_void_p
++kernel.QueryThreadCycleTime.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_ulonglong)]
++thread_handle=kernel.GetCurrentThread()
++def cpu_cycles():
++    value=ctypes.c_ulonglong()
++    if not kernel.QueryThreadCycleTime(thread_handle,ctypes.byref(value)):raise RuntimeError('CPU cycle counter unavailable')
++    return value.value
++
++def main(args):
++    if args.module_dir:sys.path.insert(0,str(Path(args.module_dir).resolve()))
++    import orjson
++    fixtures={
++      'stream_event':{'id':'synthetic','choices':[{'delta':{'content':'Ответ агента: проверка данных.'},'index':0}]},
++      'tool_schema':{'tools':[{'type':'function','function':{'name':'tool_'+str(n),'description':'Synthetic tool schema','parameters':{'type':'object','properties':{'query':{'type':'string'},'limit':{'type':'integer'}},'required':['query']}}} for n in range(40)]},
++      'report_rows':{'rows':[{'id':n,'amount':n*17.25,'vat':0.12,'name':'Синтетическая строка '+str(n),'ok':n%3==0} for n in range(1000)]},
++      'unicode_text':{'text':('Проверка JSON и инструментов.\n'*2000)},
++    }
++    results={};outputs={}
++    for name,payload in fixtures.items():
++        encoded=orjson.dumps(payload);outputs[name]=hashlib.sha256(encoded).hexdigest()
++        for op,fn in [('dumps',lambda p=payload:orjson.dumps(p)),('loads',lambda p=encoded:orjson.loads(p))]:
++            for _ in range(20):fn()
++            samples=[];count=100
++            for sample in range(5):
++                while True:
++                    start=cpu_cycles()
++                    for _ in range(count):fn()
++                    elapsed=cpu_cycles()-start
++                    if elapsed>=500000000:break
++                    count*=2
++                samples.append(elapsed/count)
++            results[name+'_'+op]={'median_cpu_cycles':statistics.median(samples),'samples_cpu_cycles':samples,'iterations':count}
++    result={'orjson':orjson.__version__,'scope':'Synthetic JSON dumps/loads CPU time; no model inference; five calibrated samples per case; QueryThreadCycleTime, high-resolution CPU cycles','fixtures_sha256':outputs,'results':results}
++    Path(args.output).write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
++if __name__=='__main__':
++    parser=argparse.ArgumentParser();parser.add_argument('--module-dir');parser.add_argument('--output',required=True);main(parser.parse_args())
+diff --git a/.avx1/experiment_json.py b/.avx1/experiment_json.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..85c5d9d6dad87f77e52f2e4ef8096a50dc14088e
+--- /dev/null
++++ b/.avx1/experiment_json.py
+@@ -0,0 +1,7 @@
++import os
++from common import OUT
++from native_json import build,EXPERIMENTS
++profile=os.environ['JSON_EXPERIMENT']
++if profile not in EXPERIMENTS:raise RuntimeError('Unknown compiler experiment')
++OUT.mkdir()
++build(OUT,experiment=profile)
+diff --git a/.avx1/hardware-profile.json b/.avx1/hardware-profile.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..5628d30505e9d81b8231df63380f6652df80d919
+--- /dev/null
++++ b/.avx1/hardware-profile.json
+@@ -0,0 +1,25 @@
++{
++  "cpu": {
++    "model": "Ivy Bridge",
++    "rust_flags": "-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma",
++    "pgo": false,
++    "fast_math": false
++  },
++  "cuda_source_build": {
++    "toolkit": "12.9",
++    "TORCH_CUDA_ARCH_LIST": "6.1",
++    "CMAKE_CUDA_ARCHITECTURES": "61",
++    "nvcc_flags": [
++      "-O3",
++      "--generate-code=arch=compute_61,code=sm_61"
++    ],
++    "validated": "Installed nvcc12.9 --list-gpu-code contains sm_61; no GPU model or CUDA context was started",
++    "source": "https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/"
++  },
++  "installed_owui_dependency": {
++    "torch": "2.14.0+cpu",
++    "cuda_runtime": null,
++    "cuda_flags_applied": false,
++    "reason": "The installed PyTorch dependency is a vendor CPU wheel; setting compiler variables does not rebuild it. Source CUDA flags are a separate build profile, not a GPU speed claim."
++  }
++}
+diff --git a/.avx1/native-policy.json b/.avx1/native-policy.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..ebade131ebac0f4a00936bdc439ec2d4ab0e2aae
+--- /dev/null
++++ b/.avx1/native-policy.json
+@@ -0,0 +1,5 @@
++{
++  "default": "stock",
++  "selection_reason": "Four explicit Ivy Bridge O2/O3 Fat/ThinLTO/codegen profiles passed23 compatibility vectors. Best mixed JSON CPU throughput was +0.40%, with a -5.42% tool-schema dumps regression; stock remains the default.",
++  "measurement": ".avx1/measurements/ivy-flags-20261024.json"
++}
+diff --git a/.avx1/native_cache.py b/.avx1/native_cache.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..ac213b7a73da9f347cd01ebfcd427783a05dfc5c
+--- /dev/null
++++ b/.avx1/native_cache.py
+@@ -0,0 +1,61 @@
++"""Exact native-only input cache; application changes do not impersonate native builds."""
++import hashlib
++import json
++import os
++from pathlib import Path
++import platform
++import shutil
++import sys
++import sysconfig
++import importlib.metadata
++from common import ROOT,sha256,run,write_json
++
++def toolchain():
++    packaging={}
++    for name in ('maturin','wheel','pip'):
++        try:packaging[name]=importlib.metadata.version(name)
++        except importlib.metadata.PackageNotFoundError:packaging[name]=None
++    return {'image':os.environ.get('ImageVersion',''),'rustc':run('rustc','-Vv',capture=True).stdout.strip(),
++            'packaging':packaging,
++            'python':sys.version,'abi':sysconfig.get_config_var('SOABI'),'machine':platform.machine(),
++            'windows_sdk':os.environ.get('WindowsSDKVersion',''),'vc_tools':os.environ.get('VCToolsVersion',''),
++            'environment':{key:os.environ.get(key,'') for key in ('RUSTFLAGS','CARGO_ENCODED_RUSTFLAGS','CARGO_PROFILE_RELEASE_LTO',
++                'CARGO_PROFILE_RELEASE_CODEGEN_UNITS','CARGO_PROFILE_RELEASE_OPT_LEVEL','CC','CXX','CFLAGS','CXXFLAGS','LDFLAGS')}}
++
++def signature(source,lto,flags,profile):
++    descriptor={'toolchain':toolchain(),'source_sha256':source,'lto':lto,'flags':flags,'profile':profile,
++                'recipes':{name:sha256(ROOT/'.avx1'/name) for name in ('native_json.py','native_cache.py','common.py','native-policy.json')}}
++    return hashlib.sha256(json.dumps(descriptor,sort_keys=True).encode()).hexdigest()
++
++def enabled():
++    # The hosted image identity pins its linker/SDK as well as Windows tools.
++    # Unknown/custom native wrappers must be freshly qualified instead.
++    return bool(os.environ.get('ImageVersion')) and not any(os.environ.get(key) for key in ('RUSTC_WRAPPER','RUSTC_WORKSPACE_WRAPPER','PYO3_CONFIG_FILE','CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER'))
++
++def restore(destination,input_hash):
++    cache=ROOT/'.avx1-native-cache';receipt=cache/'receipt.json'
++    if not receipt.is_file() or cache.is_symlink():return None
++    value=json.loads(receipt.read_text('utf-8'))
++    if value.get('input_hash')!=input_hash:return None
++    for name,digest in value.get('files',{}).items():
++        if Path(name).name!=name or not (cache/name).is_file() or (cache/name).is_symlink() or sha256(cache/name)!=digest:return None
++    files=value.get('files',{})
++    if 'native-build.json' not in files or 'wheel.sha256' not in files or len([n for n in files if n.startswith('orjson-') and n.endswith('.whl')])!=1:return None
++    for name in files:shutil.copy2(cache/name,Path(destination)/name)
++    result=json.loads((cache/'native-build.json').read_text('utf-8'))
++    result.update(native_qualification_reuse=True,native_input_hash=input_hash)
++    write_json(Path(destination)/'native-build.json',result)
++    return result
++
++def store(destination,input_hash,wheel):
++    cache=ROOT/'.avx1-native-cache'
++    if cache.is_symlink():raise RuntimeError('Unsafe native cache directory')
++    cache.mkdir(exist_ok=True)
++    names=[wheel.name,'native-build.json','wheel.sha256']
++    for name in names:shutil.copy2(Path(destination)/name,cache/name)
++    write_json(cache/'receipt.json',{'input_hash':input_hash,'files':{name:sha256(cache/name) for name in names}})
++
++if __name__=='__main__':
++    descriptor=toolchain();key=hashlib.sha256(json.dumps(descriptor,sort_keys=True).encode()).hexdigest()
++    with Path(os.environ['GITHUB_OUTPUT']).open('a',encoding='utf-8') as output:
++        output.write('key='+key+'\ncacheable='+str(enabled()).lower()+'\n')
+diff --git a/.avx1/native_json.py b/.avx1/native_json.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..002f9d71a817749750afa4e0e52fe4e00cee1b7c
+--- /dev/null
++++ b/.avx1/native_json.py
+@@ -0,0 +1,76 @@
++"""Build orjson for Ivy Bridge with O3 and LTO or ThinLTO; no PGO."""
++from __future__ import annotations
++import argparse
++import json
++import os
++from pathlib import Path
++import sys
++import tarfile
++import tomllib
++import urllib.request
++
++from common import ROOT, WORK, download, run, sha256, write_json
++
++EXPERIMENTS = {
++    'ivy-o3-fat-cgu1': {'lto':'fat','opt':3,'codegen':1},
++    'ivy-o3-thin-cgu1': {'lto':'thin','opt':3,'codegen':1},
++    'ivy-o3-thin-cgu8': {'lto':'thin','opt':3,'codegen':8},
++    'ivy-o2-thin-cgu1': {'lto':'thin','opt':2,'codegen':1},
++}
++
++def build(destination, lto=None, experiment=None):
++    profile=EXPERIMENTS[experiment] if experiment else None
++    lto = profile['lto'] if profile else lto or os.environ.get("NATIVE_LTO", "fat")
++    if lto not in ("fat", "thin"):
++        raise ValueError("Expected fat or thin LTO")
++    destination = Path(destination)
++    destination.mkdir(parents=True, exist_ok=True)
++    dependencies = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"]["dependencies"]
++    version = next(item.split("==")[1] for item in dependencies if item.startswith("orjson=="))
++    with urllib.request.urlopen(f"https://pypi.org/pypi/orjson/{version}/json", timeout=60) as response:
++        metadata = json.load(response)
++    source = next(item for item in metadata["urls"] if item["packagetype"] == "sdist")
++    archive = download(source["url"], WORK / "orjson.tar.gz", source["digests"]["sha256"])
++    source_root = WORK / ("native-source-" + lto)
++    source_root.mkdir(parents=True, exist_ok=True)
++    with tarfile.open(archive) as stream:
++        stream.extractall(source_root, filter="data")
++    checkout = next(path for path in source_root.iterdir() if path.is_dir())
++    run(sys.executable, "-m", "pip", "install", "maturin>=1.9,<2", "wheel")
++    base_flags = "-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma -C opt-level=3 -C embed-bitcode=yes"
++    if profile:
++        base_flags = ("-C target-cpu=ivybridge -C target-feature=+sse4.2,+avx,+f16c,+popcnt,-avx2,-fma "
++                      f"-C opt-level={profile['opt']} -C embed-bitcode=yes")
++    from native_cache import enabled,signature,restore,store
++    cache_key=signature(sha256(archive),lto,base_flags,profile) if enabled() else None
++    if cache_key:
++        cached=restore(destination,cache_key)
++        if cached is not None:return cached
++    environment = dict(os.environ, CARGO_BUILD_JOBS="4", CARGO_INCREMENTAL="0", RUSTFLAGS=base_flags,
++                       CARGO_PROFILE_RELEASE_LTO=lto, CARGO_TARGET_DIR=str(WORK / ("cargo-" + lto)))
++    if profile:
++        environment.update(CARGO_PROFILE_RELEASE_CODEGEN_UNITS=str(profile['codegen']),
++                           CARGO_PROFILE_RELEASE_OPT_LEVEL=str(profile['opt']))
++    environment.pop("LLVM_PROFILE_FILE", None)
++    run(sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation", "--wheel-dir", destination,
++        checkout, env=environment)
++    wheel = next(Path(destination).glob("orjson*.whl"))
++    result = {"package": "orjson", "version": version, "source_sha256": sha256(archive),
++              "flags": base_flags, "pgo": False, "lto": lto, "wheel_sha256": sha256(wheel),
++              "rustc": run("rustc", "--version", capture=True).stdout.strip()}
++    if profile:result.update(experiment=experiment,codegen_units=profile['codegen'],opt_level=profile['opt'])
++    write_json(destination / "native-build.json", result)
++    (destination / "wheel.sha256").write_text(sha256(wheel) + "  " + wheel.name + "\n", encoding="utf-8")
++    if cache_key:
++        result.update(native_qualification_reuse=False,native_input_hash=cache_key)
++        write_json(destination/'native-build.json',result)
++        store(destination,cache_key,wheel)
++    return result
++
++
++if __name__ == "__main__":
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--lto", choices=("fat", "thin"), default="fat")
++    parser.add_argument("--output", type=Path, required=True)
++    args = parser.parse_args()
++    build(args.output, args.lto)
+diff --git a/.avx1/native_json_compat.py b/.avx1/native_json_compat.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..254d4bb4b86384ab814122b6e7d9d7d54d3bf026
+--- /dev/null
++++ b/.avx1/native_json_compat.py
+@@ -0,0 +1,17 @@
++"""Differential native-wheel fixtures; no private data or model generation."""
++import base64
++import datetime as dt
++import json
++import orjson
++
++values=[None,False,True,0,-1,2**63-1,2**64-1,0.0,-0.0,5e-324,1.7976931348623157e308,
++        float('nan'),float('inf'),float('-inf'),'Привет 世界 😀',{'tool':'fixture','args':[None,True,1.25]},
++        dt.datetime(2026,10,23,7,0,tzinfo=dt.timezone(dt.timedelta(hours=6)))]
++results=[]
++for value in values:
++    try:results.append(['dump',base64.b64encode(orjson.dumps(value)).decode()])
++    except Exception as error:results.append(['dump-error',type(error).__name__])
++for value in [b'{"a":1,"b":[true,null]}',b'1e309',b'NaN',b'{"a":}',b'"\xed\xa0\x80"',b'['*1100+b'0'+b']'*1100]:
++    try:results.append(['load',json.dumps(orjson.loads(value),sort_keys=True,ensure_ascii=True)])
++    except Exception as error:results.append(['load-error',type(error).__name__])
++print(json.dumps(results,separators=(',',':')))
+diff --git a/.avx1/test_native_cache.py b/.avx1/test_native_cache.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..abbcac3ae65c395a6a3e2571be3f61a30a21607f
+--- /dev/null
++++ b/.avx1/test_native_cache.py
+@@ -0,0 +1,25 @@
++"""Never reuse an unmatching native input or corrupted cached wheel."""
++import json
++from pathlib import Path
++import tempfile
++import unittest
++from unittest.mock import patch
++import native_cache as cache
++from common import sha256,write_json
++
++class NativeCacheGates(unittest.TestCase):
++    def test_exact_cache_reuses_bytes_but_wrong_input_and_corruption_do_not(self):
++        with tempfile.TemporaryDirectory(prefix='native-cache-fixture-') as name:
++            root=Path(name);source=root/'produced';source.mkdir();destination=root/'restored';destination.mkdir()
++            wheel=source/'orjson-fixture.whl';wheel.write_bytes(b'fixture-native-binary')
++            write_json(source/'native-build.json',{'wheel_sha256':sha256(wheel),'pgo':False,'lto':'fat'})
++            (source/'wheel.sha256').write_text(sha256(wheel)+'  '+wheel.name)
++            with patch.object(cache,'ROOT',root):
++                cache.store(source,'input-a',wheel)
++                self.assertIsNone(cache.restore(destination,'input-b'))
++                result=cache.restore(destination,'input-a')
++                self.assertTrue(result['native_qualification_reuse']);self.assertEqual((destination/wheel.name).read_bytes(),wheel.read_bytes())
++                (root/'.avx1-native-cache'/wheel.name).write_bytes(b'corrupt')
++                self.assertIsNone(cache.restore(destination,'input-a'))
++
++if __name__=='__main__':unittest.main()
+diff --git a/.github/workflows/avx1-json-experiments.yml b/.github/workflows/avx1-json-experiments.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..8cd87c25dd3be7205bb39e9e8d884261d0a34e85
+--- /dev/null
++++ b/.github/workflows/avx1-json-experiments.yml
+@@ -0,0 +1,32 @@
++name: Ivy Bridge JSON experiments
++on:
++  workflow_dispatch:
++permissions:
++  contents: read
++jobs:
++  wheels:
++    runs-on: windows-2022
++    timeout-minutes: 45
++    strategy:
++      fail-fast: false
++      matrix:
++        profile: [ivy-o3-fat-cgu1, ivy-o3-thin-cgu1, ivy-o3-thin-cgu8, ivy-o2-thin-cgu1]
++    steps:
++      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
++        with:
++          ref: ${{ github.sha }}
++          persist-credentials: false
++      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
++        with:
++          python-version: '3.12'
++      - name: Compile the exact locked source with explicit Ivy Bridge features
++        env:
++          JSON_EXPERIMENT: ${{ matrix.profile }}
++        run: python .avx1/experiment_json.py
++      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
++        with:
++          name: json-experiment-${{ matrix.profile }}
++          path: .avx1-out/*
++          retention-days: 2
++          include-hidden-files: true
++          if-no-files-found: error
+diff --git a/.github/workflows/native-compare.yml b/.github/workflows/native-compare.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..92ad04e449ff9f39270f6489896047c2fdad1c72
+--- /dev/null
++++ b/.github/workflows/native-compare.yml
+@@ -0,0 +1,29 @@
++name: Native LTO comparison
++on:
++  workflow_dispatch:
++permissions:
++  contents: read
++jobs:
++  compare:
++    runs-on: windows-2022
++    timeout-minutes: 40
++    strategy:
++      fail-fast: false
++      matrix:
++        lto: [fat, thin]
++    steps:
++      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
++        with:
++          persist-credentials: false
++      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
++        with:
++          python-version: '3.12'
++      - name: Compile O3 without PGO
++        run: python .avx1/native_json.py --lto ${{ matrix.lto }} --output .avx1-native/${{ matrix.lto }}
++      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
++        with:
++          name: native-${{ matrix.lto }}
++          path: .avx1-native/${{ matrix.lto }}/*
++          include-hidden-files: true
++          if-no-files-found: error
++          retention-days: 7

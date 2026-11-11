@@ -1,0 +1,671 @@
+diff --git a/.avx1/android_sdk.py b/.avx1/android_sdk.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..81cd1e22f117a086b3819069fe8ff2569804ef15
+--- /dev/null
++++ b/.avx1/android_sdk.py
+@@ -0,0 +1,43 @@
++"""Resolve stable Android SDK packages from Google's official repository metadata."""
++import json
++import os
++from pathlib import Path
++import re
++import subprocess
++import urllib.request
++import xml.etree.ElementTree as ET
++
++
++def resolve_flutter():
++    with urllib.request.urlopen("https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json", timeout=90) as response:
++        data = json.load(response)
++    release = next(item for item in data["releases"] if item["hash"] == data["current_release"]["stable"])
++    return {"flutter_sha": release["hash"], "flutter_version": release["version"]}
++
++
++def resolve():
++    with urllib.request.urlopen("https://dl.google.com/android/repository/repository2-3.xml", timeout=90) as response:
++        root = ET.fromstring(response.read())
++    packages = [node for node in root if node.tag.endswith("remotePackage") and
++                any(child.tag.endswith("channelRef") and child.attrib.get("ref") == "channel-0" for child in node)]
++    def newest(prefix, pattern):
++        candidates = [node.attrib["path"] for node in packages if node.attrib["path"].startswith(prefix)
++                      and re.fullmatch(pattern, node.attrib["path"].split(";", 1)[1])]
++        return max(candidates, key=lambda value: tuple(map(int, value.split(";", 1)[1].removeprefix("android-").split("."))))
++    platform = newest("platforms;", r"android-\d+(?:\.\d+)?")
++    version = platform.split("android-", 1)[1].split(".")
++    return {"platform": platform, "api_level": int(version[0]), "minor_api_level": int(version[1]) if len(version) > 1 else 0,
++            "build_tools": newest("build-tools;", r"\d+\.\d+\.\d+"),
++            "commandline_tools": newest("cmdline-tools;", r"\d+\.\d+"),
++            "ndk": "ndk;29.0.14206865", "metadata": "https://dl.google.com/android/repository/repository2-3.xml"}
++
++
++if __name__ == "__main__":
++    root = Path(__file__).resolve().parents[1]
++    pins = json.loads((root / ".avx1/toolchains.json").read_text("utf-8"))["android"]
++    sdk = Path(os.environ.get("ANDROID_SDK_ROOT") or os.environ["ANDROID_HOME"])
++    original = sdk / "cmdline-tools/latest/bin/sdkmanager"
++    subprocess.run([str(original), pins["commandline_tools"]], check=True)
++    manager = sdk / "cmdline-tools" / pins["commandline_tools"].split(";", 1)[1] / "bin/sdkmanager"
++    subprocess.run([str(manager), "--licenses"], input="y\n" * 100, text=True, check=True)
++    subprocess.run([str(manager), pins["platform"], pins["build_tools"], pins["ndk"]], check=True)
+diff --git a/.avx1/build.py b/.avx1/build.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..24abe65958ed754405ea22afe5b9db864d490c41
+--- /dev/null
++++ b/.avx1/build.py
+@@ -0,0 +1,302 @@
++"""Build one exact source revision. Outputs contain no local configuration."""
++from __future__ import annotations
++import base64
++import datetime as dt
++import json
++import os
++from pathlib import Path
++import re
++import shutil
++import sys
++import time
++import tomllib
++import zipfile
++import subprocess
++
++from common import ROOT, WORK, OUT, SecretPatternError, download, run, sha256, verify_archive, write_json, zip_folder
++
++
++def license_files(destination):
++    destination.mkdir(parents=True, exist_ok=True)
++    paths = [path for path in ROOT.iterdir() if path.is_file() and
++             any(word in path.name.upper() for word in ("LICENSE", "NOTICE", "COPYING", "CONTRIBUTOR_LICENSE"))]
++    if not any(path.name.upper().startswith(("LICENSE", "COPYING")) for path in paths):
++        raise RuntimeError("Project license missing")
++    for path in paths:
++        shutil.copy2(path, destination / path.name)
++
++
++def audit_python(wheels, manifest):
++    target = WORK / "audit-packages"
++    run(sys.executable, "-m", "pip", "install", "--no-cache-dir", "--target", target, *wheels)
++    run(sys.executable, "-m", "pip", "install", "pip-audit")
++    report = WORK / "pip-audit.json"
++    # Mainstream's development version need not exist on PyPI. Every resolved
++    # third-party package still goes through the strict advisory gate.
++    from audit_requirements import resolved_requirements
++    configuration = tomllib.loads((ROOT / 'pyproject.toml').read_text('utf-8'))
++    project = configuration['project']
++    version = project.get('version')
++    if version is None:
++        if configuration['tool']['hatch']['version']['path'] != 'package.json':
++            raise RuntimeError('Unknown local application version source')
++        version = json.loads((ROOT / 'package.json').read_text('utf-8'))['version']
++    libraries, own = resolved_requirements(target, project['name'], version)
++    requirements = WORK / 'resolved-audit-requirements.txt'
++    requirements.write_text(''.join(item['name']+'=='+item['version']+'\n' for item in libraries), encoding='utf-8')
++    # A missing advisory service or unresolved advisory blocks publication.
++    audit=subprocess.run([sys.executable,'-m','pip_audit','--requirement',str(requirements),'--no-deps','--disable-pip','--strict','--format','json','--output',str(report)],cwd=ROOT)
++    if audit.returncode not in {0,1} or not report.exists():raise RuntimeError('Dependency audit unavailable; publication blocked')
++    data = json.loads(report.read_text("utf-8"))
++    audited = {(re.sub(r'[-_.]+','-',item['name']).lower(), item['version']) for item in data['dependencies']}
++    if audited != {(item['name'],item['version']) for item in libraries}:
++        raise RuntimeError('Resolved dependency audit inventory differs')
++    if manifest['project']=='webui':
++        from security_scope import review
++        assessment=review(data,ROOT)
++    else:
++        if any(item.get('vulns') for item in data['dependencies']):
++            raise RuntimeError('Dependency advisory blocks this package')
++        assessment={'status':'passed; no dependency advisories','exceptions':[]}
++    write_json(WORK/'security-review.json',assessment)
++    manifest["security"] = {"python_audit": "passed with explicit applicability review", "dependencies": len(data["dependencies"]),
++                            'assessment':assessment, 'local_application': {**own, 'source_commit': manifest['source_commit'],
++                            'scope': 'Reviewed fork source and tests; local development version is not a published PyPI dependency'}}
++    manifest["resolved_dependencies"] = [own, *libraries]
++    return target
++
++
++def build_python(project, package, manifest):
++    wheels = package / "wheels"
++    wheels.mkdir()
++    environment = dict(os.environ, CYPRESS_INSTALL_BINARY="0", HUSKY="0", PIP_DISABLE_PIP_VERSION_CHECK="1")
++    run(sys.executable, "-m", "pip", "install", "build", "hatchling", "wheel")
++    if project == "webui":
++        run(sys.executable,ROOT/'.avx1/test_native_cache.py')
++        run('node','--test',ROOT/'.avx1/test_strata_reasoning.mjs',env=environment)
++        run('node','--test',ROOT/'.avx1/test_chat_model_preservation.mjs',env=environment)
++        run('node','--test',ROOT/'.avx1/test_free_llm.mjs',env=environment)
++        run(sys.executable,ROOT/'.avx1/test_strata_reasoning.py')
++        run("node", "--experimental-strip-types", "--test", ROOT / ".avx1/test_suggestions.mjs", ROOT / '.avx1/test_tool_server_policy.mjs', env=environment)
++        run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
++        # The reviewed hatch hook uses npm ci and the checked-in lockfile.
++        run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
++        run("npm", "audit", "--omit=dev", "--audit-level=high", env=environment)
++        from native_json import build
++        manifest["native_json"] = build(wheels)
++        policy = json.loads((ROOT / ".avx1/native-policy.json").read_text("utf-8"))
++        if policy["default"] not in ("stock", "optimized"):
++            raise RuntimeError("Unknown native JSON selection policy")
++        manifest["native_json"].update(policy)
++    else:
++        run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
++    wheel_paths = list(wheels.glob("*.whl"))
++    for path in wheel_paths:
++        verify_archive(path)
++    audit_target = audit_python(wheel_paths, manifest)
++    def checked_script(script, *arguments):
++        # --target installs do not process .pth files through PYTHONPATH alone.
++        # pywin32 uses one to register its win32 paths and DLL directory.
++        launcher = "import runpy,site,sys;from pathlib import Path;site.addsitedir(sys.argv[1]);sys.argv=sys.argv[2:];sys.path.insert(0,str(Path(sys.argv[0]).resolve().parent));runpy.run_path(sys.argv[0],run_name='__main__')"
++        run(sys.executable, "-c", launcher, audit_target, script, *arguments)
++    if project == "terminal":
++        checked_script(ROOT / ".avx1/test_terminal.py")
++        measurement=WORK/'grep-preview-measurement.json'
++        if measurement.exists():manifest['context_guard']=json.loads(measurement.read_text('utf-8'))
++    else:
++        checked_script(ROOT / '.avx1/test_upstream_daily.py')
++        checked_script(ROOT / '.avx1/test_daily_20261029.py')
++        checked_script(ROOT / '.avx1/test_daily_20261030.py')
++        checked_script(ROOT / '.avx1/test_mainstream_policy.py')
++        checked_script(ROOT / '.avx1/test_responses_clients.py')
++        checked_script(ROOT / '.avx1/test_upstream_20261104.py')
++        checked_script(ROOT / '.avx1/test_upstream_20261107.py')
++        checked_script(ROOT / '.avx1/test_free_llm.py')
++        checked_script(ROOT / '.avx1/test_authlib_security.py')
++        checked_script(ROOT / '.avx1/test_oauthlib_security.py')
++        checked_script(ROOT / ".avx1/test_mcp_compat.py", "--source", ROOT / "backend/open_webui")
++        checked_script(ROOT / ".avx1/test_mcp_protocol.py")
++        checked_script(ROOT / ".avx1/bench_json.py")
++        checked_script(ROOT / ".avx1/test_brotli.py")
++        checked_script(ROOT / ".avx1/test_frontend_browser.py")
++        manifest['security']['browser_smoke']='Chromium rendered the packaged login form without JavaScript page errors'
++    bootstrap = package / "bootstrap"
++    bootstrap.mkdir()
++    run(sys.executable, "-m", "pip", "download", "--no-deps", "--only-binary=:all:", "pip", "--dest", bootstrap)
++    manifest["python"] = json.loads((ROOT / ".avx1/toolchains.json").read_text("utf-8"))["python"]
++    manifest["optimization_scope"] = (
++        "orjson experiment: Rust O3 + LTO for Ivy Bridge, no PGO; stock wheel is the measured faster default; Python/TypeScript retain normal semantics"
++        if project == "webui" else "Pure Python application; native compiler flags do not optimize Python bytecode"
++    )
++
++
++def build_desktop(package, manifest):
++    environment = dict(os.environ, npm_config_build_from_source="true", CSC_IDENTITY_AUTO_DISCOVERY="false")
++    # MSVC O2 is its highest standard optimization level; /fp:precise preserves numerical semantics.
++    environment["CL"] = "/O2 /Ob3 /GL /arch:AVX /fp:precise"
++    environment["_LINK_"] = "/LTCG"
++    run("npm", "ci", "--no-audit", "--no-fund", env=environment)
++    run("npm", "audit", "--omit=dev", "--audit-level=high", env=environment)
++    run("npm", "run", "build", env=environment)
++    original=json.loads((ROOT/'package.json').read_text('utf-8'))['version']
++    major,minor,patch=original.split('-')[0].split('.')
++    version=f"{major}.{minor}.{int(patch)+1}-avx1.{manifest['day']}.{os.environ.get('GITHUB_RUN_NUMBER','1')}"
++    manifest['desktop_version']=version
++    run("npx", "--no-install", "electron-builder", "--win", "nsis", "--x64", "--publish", "never",
++        "-c.win.signAndEditExecutable=false",'-c.extraMetadata.version='+version, env=environment)
++    shutil.copytree(ROOT / "dist/win-unpacked", package / "desktop", ignore=shutil.ignore_patterns("*.pdb", "*.map"))
++    installers=list((ROOT/'dist').glob('*-setup.exe'))
++    if len(installers)!=1:raise RuntimeError('Exactly one NSIS installer is required')
++    installer_dir=package/'installer';installer_dir.mkdir()
++    shutil.copy2(installers[0],installer_dir/'Open-WebUI-AVX1-Setup.exe')
++    smoke=WORK/'nsis-smoke-install'
++    run(installers[0],'/S','/D='+str(smoke))
++    if not (smoke/'open-webui.exe').is_file():raise RuntimeError('NSIS installation failed')
++    for relative in ('resources/app.asar','resources/app.asar.unpacked/node_modules/node-pty/build/Release/pty.node'):
++        if sha256(smoke/relative)!=sha256(package/'desktop'/relative):raise RuntimeError('Installed NSIS content differs from the qualified app')
++    test_tools=WORK/'test-tools'
++    run('npm','install','--prefix',test_tools,'--ignore-scripts','--no-package-lock','--no-save','playwright@1.58.2')
++    ui_environment=dict(os.environ,TEST_PLAYWRIGHT=str(test_tools/'node_modules/playwright'),EXPECTED_DESKTOP_VERSION=version)
++    run('node',ROOT/'.avx1/test_desktop_ui.cjs',smoke/'open-webui.exe',WORK/'desktop-test-profile',env=ui_environment)
++    manifest['installer_test']='NSIS installed in an isolated directory; app/PTY digests matched; Russian onboarding rendered without page errors'
++    manifest["security"] = {"npm_runtime_audit": "passed; high/critical gate"}
++    manifest["optimization_scope"] = "node-pty rebuilt with MSVC O2/GL/LTCG/AVX; Electron/Chromium use upstream prebuilt engines"
++    manifest["authenticode"] = "Unsigned community build"
++
++
++def build_conduit(package, manifest, channel):
++    # Build tools and downloaded dependency code never receive the signing secrets.
++    signing_material = os.environ.pop("CONDUIT_KEYSTORE_BASE64")
++    password = os.environ.pop("CONDUIT_KEYSTORE_PASSWORD")
++    os.environ['PUB_CACHE'] = str(WORK/'pub-cache')
++    toolchains = json.loads((ROOT / ".avx1/toolchains.json").read_text("utf-8"))
++    flutter_root = WORK / "flutter"
++    run("git", "init", flutter_root)
++    run("git", "-C", flutter_root, "remote", "add", "origin", "https://github.com/flutter/flutter.git")
++    run("git", "-C", flutter_root, "fetch", "--depth=1", "origin", toolchains["flutter_sha"])
++    run("git", "-C", flutter_root, "checkout", "--detach", "FETCH_HEAD")
++    run("git", "-C", flutter_root, "fetch", "--depth=1", "origin",
++        f"refs/tags/{toolchains['flutter_version']}:refs/tags/{toolchains['flutter_version']}")
++    if run("git", "-C", flutter_root, "rev-parse", f"{toolchains['flutter_version']}^{{commit}}", capture=True).stdout.strip() != toolchains["flutter_sha"]:
++        raise RuntimeError("Flutter tag/hash mismatch")
++    run("git", "-C", flutter_root, "switch", "--create", "stable")
++    flutter = flutter_root / "bin/flutter"
++    dart = flutter_root / "bin/dart"
++    os.environ["PATH"] = str(flutter_root / 'bin') + os.pathsep + os.environ['PATH']
++    run(flutter, "--version")
++    run("git", "submodule", "update", "--init", "--recursive", "--depth", "1", "third_party/katex", "third_party/mermaid")
++    run(flutter, "pub", "get", "--enforce-lockfile")
++    from native_arm64 import prepare as prepare_native, inventory as native_inventory
++    native_receipt = prepare_native()
++    # Workspace members must finish their code generation before the app.
++    for parent in (ROOT / "packages", ROOT / "apps"):
++        if parent.exists():
++            for folder in sorted(parent.iterdir()):
++                pubspec = folder / "pubspec.yaml"
++                if pubspec.exists() and re.search(r"(?m)^  build_runner:", pubspec.read_text("utf-8")):
++                    run(dart, "run", "build_runner", "build", "--delete-conflicting-outputs", cwd=folder)
++    run(dart, "run", "build_runner", "build", "--delete-conflicting-outputs")
++    run(flutter, "analyze", "--no-fatal-infos", "--no-fatal-warnings")
++    run(flutter, "test")
++    outdated = run(flutter, "pub", "outdated", "--json", capture=True).stdout
++    (WORK / "dependency-review.json").write_text(outdated, encoding="utf-8")
++    key = WORK / "conduit-signing.p12"
++    properties = ROOT / "android/key.properties"
++    key.write_bytes(base64.b64decode(signing_material, validate=True))
++    properties.write_text(f"storeFile={key.as_posix()}\nstorePassword={password}\nkeyPassword={password}\nkeyAlias=conduit\n", encoding="utf-8")
++    android = toolchains["android"]
++    environment = dict(os.environ,
++                       ORG_GRADLE_PROJECT_avx1ApiLevel=str(android["api_level"]),
++                       ORG_GRADLE_PROJECT_avx1MinorApiLevel=str(android["minor_api_level"]))
++    manifest["android_sdk"] = android
++    try:
++        symbols = WORK / "private-symbols"
++        run(flutter, "build", "apk", "--release", "--split-per-abi", "--target-platform", "android-arm64",
++            "--tree-shake-icons", "--obfuscate", f"--split-debug-info={symbols}",
++            f"--build-number={int(time.time())}", env=environment)
++    finally:
++        properties.unlink(missing_ok=True)
++        key.unlink(missing_ok=True)
++    apk = ROOT / "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
++    if not apk.is_file():
++        raise RuntimeError("ARM64 APK missing")
++    manifest['native_arm64'] = native_inventory(apk,native_receipt)
++    sdk = Path(os.environ.get("ANDROID_SDK_ROOT") or os.environ["ANDROID_HOME"])
++    apksigner = sorted((sdk / "build-tools").glob("*/apksigner"))[-1]
++    signing = run(apksigner, "verify", "--verbose", "--print-certs", apk, capture=True).stdout
++    manifest["apk_signing"] = signing.strip().splitlines()
++    with zipfile.ZipFile(apk) as archive:
++        abis = {item.split("/")[1] for item in archive.namelist() if item.startswith("lib/")}
++        if abis != {"arm64-v8a"}:
++            raise RuntimeError(f"Unexpected APK architectures: {abis}")
++    shutil.copy2(apk, package / f"conduit-{channel}-arm64-v8a.apk")
++    manifest["optimization_scope"] = "Flutter release AOT, ARM64, R8/tree shaking; SQLite/dartjni/ONNX Runtime+JNI rebuilt with O3 ARMv8-A ThinLTO; remaining vendor libraries explicitly inventoried"
++    manifest["security"] = {"flutter_tests": "passed", "apk_signature": "verified",
++                            "dependency_review": "outdated report; not a complete vulnerability audit"}
++    manifest["application_id"] = "io.github.aktalascloud.conduit"
++    manifest["device_performance"] = "Not measured on a physical Android device"
++
++
++def reusable_native_cache(project):
++    if project!='conduit' or WORK.is_symlink() or not WORK.is_dir():return False
++    if {p.name for p in WORK.iterdir()}!={'native'}:return False
++    folder=WORK/'native'
++    return folder.is_dir() and not folder.is_symlink() and {p.name for p in folder.iterdir()}.issubset({'onnxruntime','eigen','ort-build'})
++
++
++def main():
++    project = json.loads((ROOT / ".avx1/project.json").read_text("utf-8"))
++    channel = os.environ.get("BUILD_CHANNEL", "latest")
++    day = os.environ.get("BUILD_DAY") or dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
++    if channel != "latest" or not re.fullmatch(r"\d{8}", day):
++        raise ValueError("Invalid build channel/date")
++    if OUT.exists() or (WORK.exists() and not reusable_native_cache(project['id'])):
++        raise RuntimeError("Use a fresh checkout for each build")
++    WORK.mkdir(exist_ok=True)
++    OUT.mkdir()
++    run(sys.executable, ROOT / '.avx1/test_public_gate.py')
++    run(sys.executable, ROOT / '.avx1/test_locales.py')
++    if project['id']=='webui':
++        run(sys.executable, ROOT / '.avx1/test_security_scope.py')
++        run(sys.executable, ROOT / '.avx1/test_audit_requirements.py')
++        run(sys.executable, ROOT / '.avx1/test_agent_prs.py')
++    package = WORK / "package"
++    package.mkdir()
++    manifest = {"schema": 1, "project": project["id"], "upstream": project["upstream"],
++                "repository": project["repository"], "channel": channel, "day": day,
++                "source_commit": run("git", "rev-parse", "HEAD", capture=True).stdout.strip(),
++                "upstream_commit": project["upstream_commit"], "stable_tag": project["stable_tag"],
++                "built_utc": dt.datetime.now(dt.timezone.utc).isoformat(), "llm_weights_included": False,
++                "llm_speedup_percent": None}
++    license_files(package / "licenses")
++    helper_files=(['Install.cmd','Install.ps1'] if project['id'] in ('webui','terminal') else [])
++    if project['id']=='webui':helper_files.append('bench_json.py')
++    for name in helper_files:
++        shutil.copy2(ROOT / ".avx1" / name, package / name)
++    if project["id"] in {"webui", "terminal"}:
++        build_python(project["id"], package, manifest)
++    elif project["id"] == "desktop":
++        build_desktop(package, manifest)
++    else:
++        build_conduit(package, manifest, channel)
++    shutil.copy2(ROOT / ".avx1/PATCHES.json", package / "PATCHES.json")
++    # Exact corresponding source accompanies every binary; all upstream notices remain in it.
++    source = package / "corresponding-source.tar.gz"
++    run("git", "archive", "--format=tar.gz", "--output", source, "HEAD")
++    manifest["files"] = [{"path": path.relative_to(package).as_posix(), "sha256": sha256(path), "bytes": path.stat().st_size}
++                         for path in sorted(package.rglob("*")) if path.is_file()]
++    write_json(package / "manifest.json", manifest)
++    name = f"{project['slug']}-{channel}-{day}-{manifest['source_commit'][:8]}.zip"
++    archive = OUT / name
++    zip_folder(package, archive)
++    write_json(OUT / f"{name}.manifest.json", {**manifest, "archive": name, "archive_sha256": sha256(archive)})
++    (OUT / f"{name}.sha256").write_text(f"{sha256(archive)}  {name}\n", encoding="ascii")
++    print(f"Candidate verified: {name}")
++
++
++if __name__ == "__main__":
++    try:
++        main()
++    except SecretPatternError as error:
++        write_json(WORK/'security-gate.json',error.metadata)
++        raise
+diff --git a/.avx1/common.py b/.avx1/common.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e874280cb0d73c156847d9c271a8253fad0fe854
+--- /dev/null
++++ b/.avx1/common.py
+@@ -0,0 +1,121 @@
++"""Small, dependency-free helpers shared by the public build recipes."""
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++from pathlib import Path
++import re
++import shutil
++import subprocess
++import urllib.request
++import zipfile
++
++ROOT = Path(__file__).resolve().parents[1]
++WORK = ROOT / ".avx1-work"
++OUT = ROOT / ".avx1-out"
++
++
++def run(*args, cwd=ROOT, env=None, capture=False):
++    command = [str(arg) for arg in args]
++    command[0] = shutil.which(command[0]) or command[0]
++    return subprocess.run(command, cwd=cwd, env=env, check=True,
++                          text=True, encoding="utf-8", errors="replace",
++                          stdout=subprocess.PIPE if capture else None,
++                          stderr=subprocess.PIPE if capture else None)
++
++
++def sha256(path):
++    with Path(path).open("rb") as stream:
++        return hashlib.file_digest(stream, "sha256").hexdigest()
++
++
++def download(url, path, expected=None):
++    if not url.startswith("https://"):
++        raise ValueError("HTTPS required")
++    path = Path(path)
++    path.parent.mkdir(parents=True, exist_ok=True)
++    with urllib.request.urlopen(url, timeout=120) as response, path.open("wb") as stream:
++        shutil.copyfileobj(response, stream)
++    if expected and sha256(path) != expected:
++        path.unlink()
++        raise ValueError("Download checksum mismatch")
++    return path
++
++
++def write_json(path, value):
++    Path(path).parent.mkdir(parents=True, exist_ok=True)
++    Path(path).write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
++
++
++SECRET_PATTERNS = [
++    rb"-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----",
++    rb"(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{30,}",
++    rb"(?<![A-Za-z0-9_-])github_pat_[A-Za-z0-9_]{40,}",
++    rb"(?<![A-Za-z0-9_-])sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{24,}",
++    rb"(?<![A-Za-z0-9_-])hf_[A-Za-z0-9]{30,}",
++    rb"[0-9]{8,12}:[A-Za-z0-9_-]{30,}",
++]
++SECRET_PREFIXES = [(b'-----BEGIN ',),(b'ghp_',b'gho_',b'ghu_',b'ghs_',b'ghr_'),
++                   (b'github_pat_',),(b'sk-',),(b'hf_',),None]
++FORBIDDEN_PARTS = {".git", "__pycache__", ".venv", "node_modules", "logs", "cache", "uploads"}
++FORBIDDEN_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".log", ".pdb", ".jks", ".p12", ".pem", ".key", ".gguf", ".safetensors"}
++
++
++class SecretPatternError(ValueError):
++    def __init__(self, label, number, matched):
++        self.metadata = {'file':label,'pattern_index':number,'length':len(matched),
++                         'match_sha256':hashlib.sha256(matched).hexdigest()}
++        super().__init__(f'Secret pattern in {label}; pattern={number}; length={len(matched)}; contents withheld')
++
++
++def scan_bytes(data, label):
++    for content in (data, data.replace(b"\x00", b"")):
++        for number, pattern in enumerate(SECRET_PATTERNS):
++            expression=re.compile(pattern)
++            prefixes=SECRET_PREFIXES[number]
++            if prefixes is None:
++                # Telegram's numeric ID is before ':'. Match only those candidate positions.
++                colon=content.find(b':')
++                while colon>=0:
++                    for width in range(8,13):
++                        if colon>=width:
++                            match=expression.match(content,colon-width)
++                            if match:raise SecretPatternError(label,number,match.group(0))
++                    colon=content.find(b':',colon+1)
++            else:
++                for prefix in prefixes:
++                    position=content.find(prefix)
++                    while position>=0:
++                        match=expression.match(content,position)
++                        if match:raise SecretPatternError(label,number,match.group(0))
++                        position=content.find(prefix,position+1)
++
++
++def verify_archive(path):
++    with zipfile.ZipFile(path) as archive:
++        bad = archive.testzip()
++        if bad:
++            raise ValueError(f"Archive CRC failure: {bad}")
++        for entry in archive.infolist():
++            parts = Path(entry.filename.replace("\\", "/")).parts
++            if entry.filename.startswith(("/", "\\")) or ".." in parts:
++                raise ValueError("Unsafe archive member")
++            forbidden = set(parts) & FORBIDDEN_PARTS
++            if entry.filename.startswith("desktop/resources/app.asar.unpacked/node_modules/"):
++                forbidden.discard("node_modules")
++            if forbidden or Path(entry.filename).suffix.lower() in FORBIDDEN_SUFFIXES:
++                raise ValueError(f"Private/runtime residue: {entry.filename}")
++            if not entry.is_dir():
++                scan_bytes(archive.read(entry), entry.filename)
++
++
++def zip_folder(folder, target):
++    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
++        for path in sorted(Path(folder).rglob("*")):
++            if path.is_symlink():
++                raise ValueError("Symlink in package")
++            if path.is_file():
++                scan_bytes(path.read_bytes(), path.name)
++                archive.write(path, path.relative_to(folder).as_posix())
++    verify_archive(target)
+diff --git a/.avx1/project.json b/.avx1/project.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..d6e5202d5eda0d841fda9c0a2d6a87632f7843a2
+--- /dev/null
++++ b/.avx1/project.json
+@@ -0,0 +1,13 @@
++{
++  "id": "webui",
++  "slug": "open-webui-ivybridge-avx1",
++  "upstream": "open-webui/open-webui",
++  "development": "dev",
++  "runner": "windows-2022",
++  "description": "Open WebUI for Ivy Bridge AVX1: reviewed fixes, LTO experiments, agent compatibility; extended Russian UI translation / дополненный русский перевод.",
++  "repository": "aktalascloud/open-webui-ivybridge-avx1",
++  "channel": "latest",
++  "upstream_commit": "055bd98f3a223cadd8be381422238ca9410cc9db",
++  "stable_tag": "v0.13.0",
++  "distribution": "single unified latest"
++}
+diff --git a/.avx1/test_build_inputs.py b/.avx1/test_build_inputs.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..ecce1bfed1c03926187ae2a16fc5fb4e14d25316
+--- /dev/null
++++ b/.avx1/test_build_inputs.py
+@@ -0,0 +1,14 @@
++"""Catch missing recipe inputs and contradictory dependency pins before compiling."""
++import re
++import tomllib
++from pathlib import Path
++root=Path(__file__).resolve().parents[1]
++seen={}
++for requirement in tomllib.loads((root/'pyproject.toml').read_text('utf-8'))['project']['dependencies']:
++    if ';' in requirement:continue
++    name=re.match(r'[A-Za-z0-9_.-]+',requirement).group().lower().replace('_','-')
++    if name in seen:raise RuntimeError('Duplicate unconditional dependency: '+name)
++    seen[name]=requirement
++for name in ('Install.cmd','Install.ps1','bench_json.py','test_brotli.py','test_suggestions.mjs','test_frontend_browser.py','test_mcp_compat.py','native_json.py','security_scope.py'):
++    if not (root/'.avx1'/name).is_file():raise RuntimeError('Missing build input: '+name)
++print('WEBUI_BUILD_INPUTS_AND_DEPENDENCY_NAMES_VERIFIED')
+diff --git a/.avx1/test_public_gate.py b/.avx1/test_public_gate.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..47c838c134e28d50bc0af648203721f193559e63
+--- /dev/null
++++ b/.avx1/test_public_gate.py
+@@ -0,0 +1,18 @@
++import unittest
++from common import scan_bytes
++
++
++class PublicGateTests(unittest.TestCase):
++    def test_tailwind_mask_classes_are_not_api_keys(self):
++        scan_bytes(b'.mask-linear-from-transparent-to-transparent{mask-type:luminance}', 'fixture.css')
++
++    def test_real_token_shapes_and_utf16_private_keys_still_fail_closed(self):
++        for prefix, length in ((b'sk-', 48), (b'sk-proj-', 64), (b'ghp_', 40), (b'hf_', 36)):
++            value = b'"' + prefix + b'a' * length + b'"'
++            with self.subTest(prefix=prefix):
++                with self.assertRaises(ValueError): scan_bytes(value, 'credential fixture')
++                with self.assertRaises(ValueError): scan_bytes(value.decode().encode('utf-16-le'), 'UTF16 fixture')
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/.avx1/toolchains.json b/.avx1/toolchains.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..180cfecb28ddc8ea148ff9bbaf0be138fdaa3d2c
+--- /dev/null
++++ b/.avx1/toolchains.json
+@@ -0,0 +1,9 @@
++{
++  "python": {
++    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-x86_64-pc-windows-msvc-install_only.tar.gz",
++    "sha256": "590dfcbe3a34c07301e6332e13e2188b98655cd072b08afa45a7998dc4c22bc5",
++    "source": "https://github.com/astral-sh/python-build-standalone",
++    "asset": "cpython-3.12.16+20261026-x86_64-pc-windows-msvc-install_only.tar.gz"
++  },
++  "flutter_sha": "abaf9c523780a608bd46686fd5e53740a07077f8"
++}
+diff --git a/.gitattributes b/.gitattributes
+index bf368a4c6cad6fde3a2d5d6299bf135cb2bd1fe5..8931f529c7df9e58df7e99d5a81fac9baed62eea 100644
+--- a/.gitattributes
++++ b/.gitattributes
+@@ -46,4 +46,7 @@
+ 
+ # Misc
+ *.env text eol=lf
+-*.lock text eol=lf
+\ No newline at end of file
++*.lock text eol=lf
++README.md merge=ours
++README.ru.md merge=ours
++.avx1/project.json merge=ours
+diff --git a/.github/workflows/avx1-build.yml b/.github/workflows/avx1-build.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..f4c119ca1ceb1a4657546d6607c124e08924f63f
+--- /dev/null
++++ b/.github/workflows/avx1-build.yml
+@@ -0,0 +1,70 @@
++name: AVX1 verified candidates
++on:
++  workflow_dispatch:
++    inputs:
++      day:
++        description: Build date YYYYMMDD
++        required: true
++        type: string
++permissions:
++  contents: read
++concurrency:
++  group: avx1-candidates
++  cancel-in-progress: false
++jobs:
++  build:
++    runs-on: windows-2022
++    timeout-minutes: 180
++    steps:
++      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
++        with:
++          ref: ${{ github.sha }}
++          persist-credentials: false
++      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
++        with:
++          python-version: '3.12'
++      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
++        with:
++          node-version: '22'
++          cache: npm
++          cache-dependency-path: package-lock.json
++
++      - name: Identify native compiler and hosted SDK image
++        id: native-inputs
++        run: python .avx1/native_cache.py
++      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
++        if: steps.native-inputs.outputs.cacheable == 'true'
++        with:
++          path: .avx1-native-cache
++          key: ivy-native-${{ runner.os }}-${{ steps.native-inputs.outputs.key }}-${{ hashFiles('pyproject.toml', '.avx1/native_json.py', '.avx1/native_cache.py', '.avx1/common.py', '.avx1/native-policy.json') }}
++          restore-keys: ivy-native-${{ runner.os }}-${{ steps.native-inputs.outputs.key }}-
++      - name: Build, test, audit and package
++        env:
++          BUILD_CHANNEL: latest
++          BUILD_DAY: ${{ inputs.day }}
++          NPM_CONFIG_FETCH_TIMEOUT: '60000'
++          NPM_CONFIG_FETCH_RETRIES: '2'
++          NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: '1000'
++          NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '5000'
++
++        run: python .avx1/build.py
++      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
++        with:
++          name: candidate-latest
++          path: .avx1-out/*
++          if-no-files-found: error
++          retention-days: 7
++          include-hidden-files: true
++      - name: Upload safe diagnostics
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
++        with:
++          name: diagnostics-latest
++          path: |
++            .avx1-work/pip-audit.json
++            .avx1-work/security-gate.json
++            .avx1-work/browser-smoke-server.log
++            .avx1-work/strata-reasoning-*.png
++          if-no-files-found: ignore
++          include-hidden-files: true
++          retention-days: 3
+diff --git a/.gitignore b/.gitignore
+index 6a7cc23090fbc66826e9518c2f2af8f063524b01..b31620eeb93a97d600dea3b9a0def4b79a8b7756 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -311,6 +311,14 @@ cypress/videos
+ cypress/screenshots
+ .vscode/settings.json
+ .cptr
++
++# Fork build outputs and private material
++.avx1-work/
++.avx1-out/
++.avx1-native-cache/
++*.p12
++*.jks
++android/key.properties
+ /evals/
+ 
+ # Local temporary fixtures and screenshots
