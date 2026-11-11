@@ -256,10 +256,10 @@ index 0000000000000000000000000000000000000000..4b77458338c8c51c8f40f8d17ecaeb15
 +if __name__=='__main__':unittest.main()
 diff --git a/.avx1/test_tool_server_policy.mjs b/.avx1/test_tool_server_policy.mjs
 new file mode 100644
-index 0000000000000000000000000000000000000000..ce239e2810a1e035a49fbf2c45f0b37fdca62167
+index 0000000000000000000000000000000000000000..96f7f9784cf0898a6e98f45b37cf237b7e5831e3
 --- /dev/null
 +++ b/.avx1/test_tool_server_policy.mjs
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,62 @@
 +import {test} from 'node:test';
 +import assert from 'node:assert/strict';
 +import fs from 'node:fs';
@@ -305,43 +305,28 @@ index 0000000000000000000000000000000000000000..ce239e2810a1e035a49fbf2c45f0b37f
 +  assert.equal(result[0].id,'123abc');assert.deepEqual(result[0].specs,[specs[0]]);
 +});
 +
-+test('actual side-chat send isolates mic metadata and cannot alias an explicit server id to its index', async () => {
-+  const source=fs.readFileSync(new URL('../src/lib/components/chat/ChatTabs/SideChat.svelte',import.meta.url),'utf8');
-+  const start=source.indexOf('\tconst send =');
-+  const end=source.indexOf('\tconst stop =',start);
-+  assert.ok(start>=0&&end>start);
-+  const body=stripTypeScriptTypes(source.slice(start,end));
-+  for(const sideVoice of [false,true]){
-+    const nodes=new Map();
-+    for(const id of ['chat-input','side-fixture'])nodes.set(id,{textContent:'same',addEventListener(){}});
-+    globalThis.document={getElementById:id=>nodes.get(id)};
-+    mic.mark('same');
-+    if(sideVoice)mic.mark('same','side-fixture');
-+    let payload;
-+    const context={canSend:true,disposed:false,sending:false,recovering:false,temporary:true,isShared:false,originalChatId:null,parentFolderId:null,sideChatAllowed:true,draft:'same',files:[],busy:false,atSelectedModel:{id:'model'},
-+      selectedModels:['model'],error:'',id:'temporary-fixture',inputId:'side-fixture',
-+      $i18n:{t:value=>value},$socket:{connected:true,id:'fixture-socket'},sideModelId:'model',
-+      tick:async()=>{},input:{uploadPendingFiles:async()=>true,setText(){}},uuidv4:()=>String(Math.random()),
-+      messages:[],context:[],params:{},toolApprovalMode:'prompt',selectedToolIds:['direct_server:kept','direct_server:0'],
-+      selectedSkillIds:[],selectedFilterIds:[],autoScroll:false,scroll:async()=>{},request:null,
-+      localStorage:{token:'synthetic'},$models:[{id:'model'}],$config:{features:{enable_tool_servers:true}},
-+      $toolServers:[{id:'wrong',url:'https://wrong.invalid'},{id:'kept',url:'https://kept.invalid'}],
-+      $terminalServers:[],$selectedTerminalId:null,$settings:{},system:'',
-+      webSearchEnabled:false,imageGenerationEnabled:false,codeInterpreterEnabled:false,
-+      isRasterImageContentType:()=>false,__assistantMicOrigin:mic,isSelectedDirectToolServer,
-+      generateOpenAIChatCompletion:async(_token,data)=>{payload=data;return{};},getErrorMessage:String};
-+    const send=new Function('context',`with(context){${body};return send;}`)(context);
-+    await send();
-+    assert.deepEqual(payload.tool_servers,[{id:'kept',url:'https://kept.invalid'}]);
-+    assert.deepEqual(payload.user_message.meta,sideVoice?{input_source:'microphone'}:undefined);
-+    assert.deepEqual(mic.peek('same'),{input_source:'microphone'});
-+  }
++test('shared side-chat composer preserves mic provenance and exact tool IDs', () => {
++  const source = fs.readFileSync(new URL('../src/lib/components/chat/Chat.svelte', import.meta.url), 'utf8');
++  const side = fs.readFileSync(new URL('../src/lib/components/chat/Tabs/SideChat.svelte', import.meta.url), 'utf8');
++  assert.match(side, /side=\{true\}/);
++  const micExpression = source.match(/const microphoneMeta = (.*);/)[1];
++  const select = source.match(/\.filter\(\s*\(server, idx\) => isSelectedDirectToolServer\(server, idx, toolServerIds\)\s*\)/)[0];
++  const provenance = new Function('__assistantMicOrigin', 'userPrompt', 'inputId', 'return ' + micExpression);
++  const filtered = new Function('servers', 'isSelectedDirectToolServer', 'toolServerIds', 'return servers' + select);
++  const nodes = new Map(['chat-input', 'side-fixture'].map(id => [id, {textContent:'same', addEventListener(){}}]));
++  globalThis.document = {getElementById:id => nodes.get(id)};
++  mic.mark('same', 'chat-input');
++  assert.equal(provenance(mic, 'same', 'side-fixture'), undefined);
++  mic.mark('same', 'side-fixture');
++  assert.deepEqual(provenance(mic, 'same', 'side-fixture'), {input_source:'microphone'});
++  assert.deepEqual(provenance(mic, 'same', 'chat-input'), {input_source:'microphone'});
++  assert.deepEqual(filtered([{id:'wrong',url:'https://wrong.invalid'}, {id:'kept',url:'https://kept.invalid'}], isSelectedDirectToolServer, ['kept','0']), [{id:'kept',url:'https://kept.invalid'}]);
 +});
 diff --git a/backend/open_webui/tools/builtin.py b/backend/open_webui/tools/builtin.py
-index 1f5dc1b1b9e796d06e6615feb798a4f0585a13fe..05cfb7c2848542d16f49877613592e83a1c8d272 100644
+index ec79e105b950dd2ad5f222460fd9d592966e3e70..bc1f498dbb3162fe7b6047e2d7e1d4c92c2cb68b 100644
 --- a/backend/open_webui/tools/builtin.py
 +++ b/backend/open_webui/tools/builtin.py
-@@ -1791,7 +1791,7 @@ async def delegate_task(
+@@ -1852,7 +1852,7 @@ async def delegate_task(
      :param file_ids: Attached file IDs the sub-agent needs. Use this for images or files;
          do not put file IDs only in context.
      :param background: Return immediately and continue this chat when the sub-agent finishes
@@ -351,10 +336,10 @@ index 1f5dc1b1b9e796d06e6615feb798a4f0585a13fe..05cfb7c2848542d16f49877613592e83
      """
      if __request__ is None:
 diff --git a/backend/open_webui/utils/access_control/__init__.py b/backend/open_webui/utils/access_control/__init__.py
-index c9a9d2c69deac746a3f12668b814c1a97a573ea6..776218eada05f5657ffa21a7986ff0f3f47d484f 100644
+index cc57a76101c187c575dd674c344a931f95e7d0a4..d44d0bf83cb079864212f1f7775952bfa24eb439 100644
 --- a/backend/open_webui/utils/access_control/__init__.py
 +++ b/backend/open_webui/utils/access_control/__init__.py
-@@ -236,12 +236,23 @@ async def filter_allowed_access_grants(
+@@ -237,12 +237,23 @@ async def filter_allowed_access_grants(
      user_role: str,
      access_grants: list | None,
      resource_type: str,
@@ -381,7 +366,7 @@ index c9a9d2c69deac746a3f12668b814c1a97a573ea6..776218eada05f5657ffa21a7986ff0f3
  
      if not access_grants:
 diff --git a/backend/open_webui/utils/subagents.py b/backend/open_webui/utils/subagents.py
-index 9d237d2e0f91e7b68f614e7774799c9046943579..bee6a4bdd79bdcfce14f45b3242304f8ff2fcd0d 100644
+index e447424f9cfbf97cdde1e87f31bcc970e894612a..73dd320136f94517b5ddbe75a804c24a320a8984 100644
 --- a/backend/open_webui/utils/subagents.py
 +++ b/backend/open_webui/utils/subagents.py
 @@ -18,7 +18,7 @@ from open_webui.tasks import create_task, has_active_tasks
@@ -390,10 +375,10 @@ index 9d237d2e0f91e7b68f614e7774799c9046943579..bee6a4bdd79bdcfce14f45b3242304f8
  from open_webui.utils.misc import add_or_update_system_message, get_message_list, is_raster_image_content_type
 -from open_webui.utils.models import get_filtered_models
 +from open_webui.utils.models import get_all_models, get_filtered_models
+ from open_webui.utils.tool_calling import strip_tool_approval_prompt
  from open_webui.utils.tool_search import strip_deferred_tools_manifest
  from starlette.datastructures import Headers
- 
-@@ -46,22 +46,6 @@ _foreground_semaphore: asyncio.Semaphore | None = None
+@@ -47,22 +47,6 @@ _foreground_semaphore: asyncio.Semaphore | None = None
  _parent_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
  
  
@@ -416,7 +401,7 @@ index 9d237d2e0f91e7b68f614e7774799c9046943579..bee6a4bdd79bdcfce14f45b3242304f8
  async def _build_request(source: Request, user_id: str, *, internal: bool) -> Request:
      scope = {
          'type': 'http',
-@@ -90,6 +74,34 @@ async def _build_request(source: Request, user_id: str, *, internal: bool) -> Re
+@@ -91,6 +75,34 @@ async def _build_request(source: Request, user_id: str, *, internal: bool) -> Re
      return request
  
  
@@ -451,7 +436,7 @@ index 9d237d2e0f91e7b68f614e7774799c9046943579..bee6a4bdd79bdcfce14f45b3242304f8
  async def process_pending_internal_messages(
      source_request: Request,
      parent_chat_id: str,
-@@ -370,12 +382,12 @@ async def delegate(
+@@ -374,12 +386,12 @@ async def delegate(
      if run.get('direct'):
          return 'Error: sub-agents are unavailable for direct connections.'
      if model_id:
@@ -468,7 +453,7 @@ index 9d237d2e0f91e7b68f614e7774799c9046943579..bee6a4bdd79bdcfce14f45b3242304f8
                  'Omit model_id to use the current model.'
              )
      model_id = model_id or run['model_id']
-@@ -509,7 +521,7 @@ async def delegate(
+@@ -513,7 +525,7 @@ async def delegate(
              )
              form_data = {
                  'model': model_id,
@@ -478,10 +463,10 @@ index 9d237d2e0f91e7b68f614e7774799c9046943579..bee6a4bdd79bdcfce14f45b3242304f8
                      subagent_system_prompt,
                      [*chat_context.get('messages', []), {'role': 'user', 'content': prompt}],
 diff --git a/backend/open_webui/utils/tools.py b/backend/open_webui/utils/tools.py
-index c5aeb7dd87881c7d87e6b757d56ee67214df6ba5..e27cc8394d3dead9ae0f6a798ee82d08183922b0 100644
+index 6359b3e8debda1cf90e1fe55ae930e1b9b2f5c09..09c0f96f3444e00280493063f73424b9f3589c66 100644
 --- a/backend/open_webui/utils/tools.py
 +++ b/backend/open_webui/utils/tools.py
-@@ -965,7 +965,7 @@ async def get_builtin_tools(
+@@ -967,7 +967,7 @@ async def get_builtin_tools(
  
              subagent_models = await get_subagent_models(request, UserModel(**user), model) if user else []
              if subagent_models:
@@ -617,7 +602,7 @@ index 574d82351b1d8898d660d52a92c9efb76714d3dc..5af1d68f4d6254484af7bbaacc2975d5
  						<label class="text-xs text-gray-600 dark:text-gray-400" for="sa-concurrent">
  							{$i18n.t('settings.admin.subagents.maxConcurrent.label')}
 diff --git a/src/lib/components/chat/MessageInput/IntegrationsMenu.svelte b/src/lib/components/chat/MessageInput/IntegrationsMenu.svelte
-index 34d017c694b336295a748d53a49b850d6aa7538c..2e09528bf381b9d8e49093b48072013a6fc022d8 100644
+index 2c7c6e2660f74f1aa34ba78ddb117a0382123543..bde1e4964b3028bb6ed35a9ad5b031b9d067b2c8 100644
 --- a/src/lib/components/chat/MessageInput/IntegrationsMenu.svelte
 +++ b/src/lib/components/chat/MessageInput/IntegrationsMenu.svelte
 @@ -1,4 +1,5 @@
@@ -625,8 +610,8 @@ index 34d017c694b336295a748d53a49b850d6aa7538c..2e09528bf381b9d8e49093b48072013a
 +	import { directToolServerKey } from '$lib/utils/toolServerPolicy.js';
  	import { resolveLocalizedResource, resolveLocalizedFunction } from '$lib/utils/localizedContent';
  	import { functions as localizedFunctions } from '$lib/stores';
- 	import { getContext, onDestroy, tick } from 'svelte';
-@@ -151,8 +152,9 @@
+ 	import { getContext, onDestroy, onMount, tick } from 'svelte';
+@@ -170,8 +171,9 @@
  					continue;
  				}
  

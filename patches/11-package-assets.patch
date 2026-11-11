@@ -1,5 +1,5 @@
 diff --git a/hatch_build.py b/hatch_build.py
-index 623b368b781d4cc4735afefd8295271470bfaf2b..1b0492a8501cffb93bcec4f9a88649c4417fe630 100644
+index 4565377d0ed257bf5a150fb1b0ef8a908442007c..ebae42563368f95d97a96ba7bc2cdb0c6a423b1a 100644
 --- a/hatch_build.py
 +++ b/hatch_build.py
 @@ -1,5 +1,6 @@
@@ -9,10 +9,10 @@ index 623b368b781d4cc4735afefd8295271470bfaf2b..1b0492a8501cffb93bcec4f9a88649c4
  import shutil
  import subprocess
  from sys import stderr
-@@ -15,9 +16,10 @@ class CustomBuildHook(BuildHookInterface):
-         if npm is None:
+@@ -16,9 +17,10 @@ class CustomBuildHook(BuildHookInterface):
              raise RuntimeError('NodeJS `npm` is required for building Open Webui but it was not found')
          stderr.write('### npm install\n')
+         os.environ.setdefault('ONNXRUNTIME_NODE_INSTALL_CUDA', 'skip')
 -        subprocess.run([npm, 'install', '--force'], check=True)  # noqa: S603
 +        subprocess.run([npm, 'ci', '--no-audit', '--no-fund'], check=True)  # noqa: S603
          stderr.write('\n### npm run build\n')
@@ -100,7 +100,7 @@ index 918a92aad71d708ae13fedb8b91f79c29a5b3e9d..984483979f0f6f4fc4f01ba87a2ed1bb
 -Name,Email,Password,Role
 +Name,Email,Password,Role
 diff --git a/vite.config.ts b/vite.config.ts
-index a2cbcd8d7bc579892b003236c670b2c22739de37..cfc4c375e1a9c1016e54880a4d50bdd16376f33f 100644
+index fc520821d0e47fba59c0f8d7a9ea86911e4e77c8..448e2533ad4d05e30b12a73e400e2d182c79d9b1 100644
 --- a/vite.config.ts
 +++ b/vite.config.ts
 @@ -9,7 +9,7 @@ const buildInfo = resolveBuildInfo();

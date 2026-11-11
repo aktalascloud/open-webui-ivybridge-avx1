@@ -1,9 +1,9 @@
 diff --git a/.avx1/test_mainstream_policy.py b/.avx1/test_mainstream_policy.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..eae02c123a0879b661850db8f04b4340e16c2155
+index 0000000000000000000000000000000000000000..0b799b9c1465b0f1ee8691ee436148a4f0e9ba4f
 --- /dev/null
 +++ b/.avx1/test_mainstream_policy.py
-@@ -0,0 +1,277 @@
+@@ -0,0 +1,278 @@
 +"""Offline regressions for mainstream browser and subagent trust boundaries."""
 +import ast
 +import copy
@@ -217,7 +217,8 @@ index 0000000000000000000000000000000000000000..eae02c123a0879b661850db8f04b4340
 +        self.proxy = AsyncMock(return_value='response')
 +        return load('routers/terminals.py', {'browser_http', 'browser_ws'}, {
 +            'HTTPException': HTTPException, 'browser_access': AsyncMock(return_value=(NS(id='owner'), data)),
-+            'proxy_terminal': self.proxy, 'Config': NS(get=AsyncMock(return_value=[{'id': 'server'}])),
++            '_proxy_terminal': self.proxy, 'browser_context': lambda data: {'chat_id': data['chat']},
++            'find_terminal_connection': AsyncMock(return_value={'id': 'server'}), 'terminal_headers': lambda _: {}, 'Config': NS(get=AsyncMock(return_value=[{'id': 'server'}])),
 +            'get_terminal_connections': AsyncMock(return_value=[{'id':'server'}]),
 +            'get_terminal_client':lambda *a,**k:Context(client),
 +            'ENABLE_TOOL_SERVERS': True, 'has_connection_access': AsyncMock(return_value=True),
@@ -957,68 +958,85 @@ index 0000000000000000000000000000000000000000..fcee49980febac5dc96994b1ab6e52af
 +FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 +OTHER DEALINGS IN THE FONT SOFTWARE.
 diff --git a/backend/open_webui/routers/terminals.py b/backend/open_webui/routers/terminals.py
-index 73182f70cb9f161ac2488652a310c1945f4efb95..a787ec531062a96ef132eb37afeaf1b9e5c48e9f 100644
+index 1a85ff61d70ebb33757e6af991c97d460cbeab32..3d06717ba0f6132baf94e2006c2b7cb726556b2d 100644
 --- a/backend/open_webui/routers/terminals.py
 +++ b/backend/open_webui/routers/terminals.py
-@@ -164,7 +164,9 @@ def _sanitize_proxy_path(path: str) -> str | None:
+@@ -24,7 +24,7 @@ from open_webui.models.groups import Groups
+ from open_webui.routers.templates import router as templates_router
+ from open_webui.utils.access_control import has_connection_access
+ from open_webui.utils.auth import get_verified_user, get_verified_user_by_token
+-from open_webui.utils.browser import browser_access, create_browser_token
++from open_webui.utils.browser import browser_access, browser_ticket
+ from open_webui.utils.tether import RelayInterrupted, get_terminal_connections, get_terminal_client
+ from open_webui.utils.headers import bearer_auth_header, normalize_bearer_token
+ from open_webui.utils.json_codec import JSONCodec
+@@ -162,7 +162,7 @@ def _sanitize_proxy_path(path: str) -> str | None:
      methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
  )
- async def browser_http(request: Request, server_id: str, sid: str, ticket: str, path: str):
--    user, data = await browser_access(server_id, sid, ticket)
-+    user, data = await browser_access(server_id, sid, ticket, request)
-+    if data['mode'] != 'proxy':
-+        raise HTTPException(403, 'Browser mode unavailable')
-     request.state.browser_auth = data['relay']
-     request.scope['path_params']['chat_id'] = data.get('chat', '')
-     return await proxy_terminal(server_id, f'browser/view/{sid}/{data["capability"]}/{path}', request, user)
-@@ -191,10 +193,10 @@ async def relay_to_browser(ws, upstream):
-             return
- 
- 
--async def watch_access(server_id, sid, ticket):
-+async def watch_access(server_id, sid, ticket, request):
+ async def browser_http(request: Request, server_id: str, sid: str, browser_token: str, path: str):
+-    user, data = await browser_access(server_id, sid, browser_token)
++    user, data = await browser_access(server_id, sid, browser_token, request)
+     if data.get('resource') == 'files':
+         if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+             raise HTTPException(405, 'File preview tokens are read-only')
+@@ -171,6 +171,8 @@ async def browser_http(request: Request, server_id: str, sid: str, browser_token
+             raise HTTPException(400, 'Invalid file path')
+         path = f'files/serve/{file_path}'
+     else:
++        if data['mode'] != 'proxy':
++            raise HTTPException(403, 'Browser mode unavailable')
+         path = f'browser/view/{sid}/{data["capability"]}/{path}'
+     return await _proxy_terminal(
+         server_id, path, request, user,
+@@ -202,7 +204,7 @@ async def relay_to_browser(ws, upstream):
+ async def watch_access(server_id, sid, browser_token, request):
      while True:
          await asyncio.sleep(10)
--        current_user, _ = await browser_access(server_id, sid, ticket)
-+        current_user, _ = await browser_access(server_id, sid, ticket, request)
-         latest = await get_terminal_connections(current_user)
-         current = next((c for c in latest if c.get('id') == server_id), None)
-         if (
-@@ -210,11 +212,12 @@ async def watch_access(server_id, sid, ticket):
- @router.websocket('/{server_id}/browser/view/{sid}/{ticket}/{kind}')
- async def browser_ws(ws: WebSocket, server_id: str, sid: str, ticket: str, kind: str):
+-        current_user, data = await browser_access(server_id, sid, browser_token)
++        current_user, data = await browser_access(server_id, sid, browser_token, request)
+         current = await find_terminal_connection(current_user, server_id, browser_context(data), request=request)
+         if not current:
+             return
+@@ -211,11 +213,12 @@ async def watch_access(server_id, sid, browser_token, request):
+ @router.websocket('/{server_id}/browser/view/{sid}/{browser_token}/{kind}')
+ async def browser_ws(ws: WebSocket, server_id: str, sid: str, browser_token: str, kind: str):
      try:
--        user, data = await browser_access(server_id, sid, ticket)
-+        user, data = await browser_access(server_id, sid, ticket, ws)
-         connections = await get_terminal_connections(user)
-         connection = next((c for c in connections if c.get('id') == server_id), None)
+-        user, data = await browser_access(server_id, sid, browser_token)
++        user, data = await browser_access(server_id, sid, browser_token, ws)
+         connection = await find_terminal_connection(user, server_id, browser_context(data), request=ws)
          if (
              kind not in ('ws', 'stream', 'vnc')
+             or data.get('resource') == 'files'
 +            or data['mode'] != ('proxy' if kind == 'ws' else 'chrome')
              or not ENABLE_TOOL_SERVERS
              or not connection
-             or not connection.get('enabled', True)
-@@ -249,7 +252,7 @@ async def browser_ws(ws: WebSocket, server_id: str, sid: str, ticket: str, kind:
-                 tasks = [
-                     asyncio.create_task(relay_from_browser(ws, upstream)),
-                     asyncio.create_task(relay_to_browser(ws, upstream)),
--                    asyncio.create_task(watch_access(server_id, sid, ticket)),
-+                    asyncio.create_task(watch_access(server_id, sid, ticket, ws)),
-                 ]
-                 await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-     except aiohttp.WSServerHandshakeError as exc:
-@@ -462,7 +465,8 @@ async def proxy_terminal(
+         ):
+@@ -383,9 +386,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
+         headers['Content-Type'] = content_type
+ 
+     if connection.get('template_id') and safe_path == 'files/preview' and request.method == 'POST':
+-        browser_token = create_browser_token(
++        browser_token = browser_ticket(
+             server_id, user.id, session_id or '', {'id': 'files', 'token': ''},
+-            headers, cookies, resource='files',
++            headers, cookies, resource='files', owner_token=request.state.token.credentials,
+         )
+         base = request.url.path.removesuffix('/files/preview')
+         return {'url': f'{base}/browser/view/files/{quote(browser_token, safe="")}/'}
+@@ -461,8 +464,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
+         ):
              browser_session = json.loads(response_body)
              if isinstance(browser_session, dict) and browser_session.get('id') and browser_session.get('token'):
-                 browser_session['token'] = browser_ticket(
+-                browser_session['token'] = create_browser_token(
 -                    server_id, user.id, session_id or '', browser_session, headers, cookies
++                browser_session['token'] = browser_ticket(
 +                    server_id, user.id, session_id or '', browser_session, headers, cookies,
 +                    owner_token=request.state.token.credentials,
                  )
                  response_body = json.dumps(browser_session).encode()
          if port_prefix and 'text/html' in upstream_content_type:
 diff --git a/backend/open_webui/utils/browser.py b/backend/open_webui/utils/browser.py
-index 2bc3ebf3d7e3bdd032c9c615918501c0701c2802..9eae3f696854901f2ecadb5e2f005f50837f795c 100644
+index 19041c21b6220d900390d7b82ae6e5b1fd0dbfbc..08e90e52bceecbcab02d9c0bd2d93733ff2b70d8 100644
 --- a/backend/open_webui/utils/browser.py
 +++ b/backend/open_webui/utils/browser.py
 @@ -1,14 +1,17 @@
@@ -1029,8 +1047,8 @@ index 2bc3ebf3d7e3bdd032c9c615918501c0701c2802..9eae3f696854901f2ecadb5e2f005f50
 +from open_webui.utils.auth import create_token, decode_token, get_optional_verified_user_from_request
  
  
--def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None):
-+def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None, *, owner_token):
+-def create_browser_token(server_id, user_id, chat_id, session, headers=None, cookies=None, *, resource='browser'):
++def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None, *, owner_token, resource='browser'):
      from open_webui.utils.oauth import encrypt_data
  
      relay = encrypt_data(
@@ -1042,20 +1060,23 @@ index 2bc3ebf3d7e3bdd032c9c615918501c0701c2802..9eae3f696854901f2ecadb5e2f005f50
          }
      )
      return create_token(
-@@ -18,25 +21,40 @@ def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=N
+@@ -18,27 +21,42 @@ def create_browser_token(server_id, user_id, chat_id, session, headers=None, coo
              'user': user_id,
              'chat': chat_id,
              'session': session['id'],
--            'capability': session['token'],
 +            'mode': session.get('mode', 'proxy'),
+             'resource': resource,
+             'model': (headers or {}).get('X-Terminal-Model-Id'),
+-            'capability': session['token'],
              'relay': relay,
          },
      )
  
  
--async def browser_access(server_id, sid, ticket):
+-async def browser_access(server_id, sid, browser_token):
+-    data = decode_token(browser_token)
 +async def browser_access(server_id, sid, ticket, request):
-     data = decode_token(ticket)
++    data = decode_token(ticket)
      if (
          not data
          or data.get('purpose') != 'terminal-browser'
@@ -1074,7 +1095,7 @@ index 2bc3ebf3d7e3bdd032c9c615918501c0701c2802..9eae3f696854901f2ecadb5e2f005f50
 +        relay = decrypt_data(data['relay'])
 +        owner_token = relay.pop('owner_token')
 +        capability = relay.pop('capability')
-+        if not isinstance(capability, str) or not capability:
++        if not isinstance(capability, str) or (not capability and data.get('resource') != 'files'):
 +            raise ValueError('Missing browser capability')
 +        if not isinstance(owner_token, str) or not owner_token:
 +            raise ValueError('Missing browser owner credential')

@@ -3,9 +3,9 @@
   "grouping_version": 3,
   "ownership": "applied-downstream-only",
   "project": "webui",
-  "upstream": "055bd98f3a223cadd8be381422238ca9410cc9db",
-  "snapshot_source": "cbbed36c2ec9cf667ed0b338350c5770ca93a3ff",
-  "downstream_tree_without_patches": "132eec3f594ad15f822e99af21dfa7e3cdd27554",
+  "upstream": "782f4b705fc6de807ff6aa1a235ea46dcc982057",
+  "snapshot_source": "f89c4a413260134447bd5b432d7ebf5a20551746",
+  "downstream_tree_without_patches": "56110f3b72f89be3a61a32b71f9b735e0bcfc2b0",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -26,7 +26,7 @@
         "pyproject.toml",
         "uv.lock"
       ],
-      "sha256": "021dd1e4b348710a4437380e8b1be4504ac9029a036ce6783ccf7f15142b7483"
+      "sha256": "f0ca6b399123d505320771a1822147d63cffe4f5db905614418e7d4a11527825"
     },
     {
       "patch": "02-free-llm.patch",
@@ -90,7 +90,7 @@
         "src/lib/utils/protectedFiles.test.ts",
         "src/lib/utils/protectedFiles.ts"
       ],
-      "sha256": "f500896a3ddeae0f111d7575201307df7145fe1b3a68859bc72f69d09b5cd7e9"
+      "sha256": "f034e41b4f1cb251f661546dace870d687051b27b1b22dc69e6eb71854b9dbcf"
     },
     {
       "patch": "06-terminal-browser-access.patch",
@@ -102,7 +102,7 @@
         "backend/open_webui/routers/terminals.py",
         "backend/open_webui/utils/browser.py"
       ],
-      "sha256": "627759cab2608531f72b48df139dc2348759e70e8c624a53f30cc71317e46407"
+      "sha256": "ed1c6a648bdf5d6228c762bb716293e5a9e255faeb1deac17295123c7aa17dc2"
     },
     {
       "patch": "07-tools-and-subagents.patch",
@@ -118,7 +118,7 @@
         "src/lib/components/chat/MessageInput/IntegrationsMenu.svelte",
         "src/lib/utils/toolServerPolicy.js"
       ],
-      "sha256": "bc36d3d3009e84df9dd288400fe7aa8255f11886875672ba502127860b8834b1"
+      "sha256": "7003e00834d4feaf56ea508ac0df72f702519a787bbab142465caa231dc2a0c4"
     },
     {
       "patch": "08-chat-integration.patch",
@@ -142,13 +142,12 @@
         "backend/open_webui/utils/response.py",
         "src/lib/apis/index.ts",
         "src/lib/components/chat/Chat.svelte",
-        "src/lib/components/chat/ChatTabs/SideChat.svelte",
         "src/lib/components/chat/MessageInput.svelte",
         "src/lib/components/workspace/Models/ModelEditor.svelte",
         "src/lib/stores/index.ts",
         "src/lib/utils/assistantCompatibility.js"
       ],
-      "sha256": "f9ff1ab5d12a46c5fca26ea5de7598453519bee629e08d415c295ebd2bddd86f"
+      "sha256": "5376a946bd835dcb72cec39bb41b8791353aaa603ff1e0342326aeb515ed16dc"
     },
     {
       "patch": "09-localization.patch",
@@ -160,7 +159,7 @@
         "src/lib/i18n/locales/ru-RU/translation.json",
         "src/lib/utils/localizedContent.ts"
       ],
-      "sha256": "bd8678245e311aaff9524aca727e808c49cdf29ca2251a0a8b08492969ac721a"
+      "sha256": "ee61315abc7a20b491e7cd352e6143eea7b430c89119b77e7385352bc2d7494e"
     },
     {
       "patch": "10-native-json.patch",
@@ -190,7 +189,7 @@
         "static/static/user-import.csv",
         "vite.config.ts"
       ],
-      "sha256": "12ebf1526f10eafd379f1a3519727f1deaae7a91e2b6a699065cda624dd407bd"
+      "sha256": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac"
     },
     {
       "patch": "12-portable-install.patch",
@@ -218,7 +217,7 @@
         ".github/workflows/avx1-build.yml",
         ".gitignore"
       ],
-      "sha256": "aade7618b2bff03ecf231b3d038e00812ab93603e63dba3933337428fada7538"
+      "sha256": "2e9e170cbbe71034939c0e33b91d57f22756b671e37b6faae50d9679508b1958"
     },
     {
       "patch": "14-upstream-regressions.patch",
@@ -255,24 +254,24 @@
     }
   ],
   "files": {
-    "01-dependencies.patch": "021dd1e4b348710a4437380e8b1be4504ac9029a036ce6783ccf7f15142b7483",
+    "01-dependencies.patch": "f0ca6b399123d505320771a1822147d63cffe4f5db905614418e7d4a11527825",
     "02-free-llm.patch": "34a315385a9d8b37cdd09e4aaedf39378086186317aee41d3a60c1ea11fff179",
     "03-strata-reasoning.patch": "0a18b93a488faabd2b41ab4827aa4468d5793c5e59a928784ba7030e07d92492",
     "04-voice-avatars.patch": "176deca91ce8a90ca2e291dadcc42c91562d9d63a15e9524fb0411ba1d2357a5",
-    "05-protected-media.patch": "f500896a3ddeae0f111d7575201307df7145fe1b3a68859bc72f69d09b5cd7e9",
-    "06-terminal-browser-access.patch": "627759cab2608531f72b48df139dc2348759e70e8c624a53f30cc71317e46407",
-    "07-tools-and-subagents.patch": "bc36d3d3009e84df9dd288400fe7aa8255f11886875672ba502127860b8834b1",
-    "08-chat-integration.patch": "f9ff1ab5d12a46c5fca26ea5de7598453519bee629e08d415c295ebd2bddd86f",
-    "09-localization.patch": "bd8678245e311aaff9524aca727e808c49cdf29ca2251a0a8b08492969ac721a",
+    "05-protected-media.patch": "f034e41b4f1cb251f661546dace870d687051b27b1b22dc69e6eb71854b9dbcf",
+    "06-terminal-browser-access.patch": "ed1c6a648bdf5d6228c762bb716293e5a9e255faeb1deac17295123c7aa17dc2",
+    "07-tools-and-subagents.patch": "7003e00834d4feaf56ea508ac0df72f702519a787bbab142465caa231dc2a0c4",
+    "08-chat-integration.patch": "5376a946bd835dcb72cec39bb41b8791353aaa603ff1e0342326aeb515ed16dc",
+    "09-localization.patch": "ee61315abc7a20b491e7cd352e6143eea7b430c89119b77e7385352bc2d7494e",
     "10-native-json.patch": "25910fe5c82c97e3b77a0092295e61f4192c3ddafc665730548f6591adf4bd57",
-    "11-package-assets.patch": "12ebf1526f10eafd379f1a3519727f1deaae7a91e2b6a699065cda624dd407bd",
+    "11-package-assets.patch": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac",
     "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
-    "13-ci-build.patch": "aade7618b2bff03ecf231b3d038e00812ab93603e63dba3933337428fada7538",
+    "13-ci-build.patch": "2e9e170cbbe71034939c0e33b91d57f22756b671e37b6faae50d9679508b1958",
     "14-upstream-regressions.patch": "68a8a7f545cc3f994b49569e5cca80a15557a350acecbd6acc3a7f94c9b32f75",
     "15-project-docs.patch": "c25c22758154576587dd5ed61a51921b2ffc580729f9a7971c6f7427a5d2a501",
     "16-fork-records.patch": "83885d10769e75d26c0c118975c20f10f70a66d35a26d342af58bf1b7cccee7d",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "d75c171ec990d68d24aebae9f7cd6aaf9d21c97a3b3dbc2da7d393f6c24fec76",
-    "README.md": "21e356c0bfbf97a73c487e793ca4fef016b394a265ff15e1cda1bccf7e216852"
+    "README.md": "8d4ab9fb82acd1f3c3760e7b59676e5f43e8e976c041f1acfec7062f43abc77f"
   }
 }

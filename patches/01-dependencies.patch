@@ -563,7 +563,7 @@ index f4589de5bd70022fec27c016d99425555e5e378b..1e606507481c2c0823c22da8cfb6a227
  
  pydub==0.25.1
 diff --git a/package-lock.json b/package-lock.json
-index cce74baf868e4ddcc617ccd32c5eb6c39c88a350..b2ed21a639d4399c2b6cca470d3e356de930c41a 100644
+index 20532540300555ccac828655fd7167825ba50549..854d3de1da19cbfabf7dd93695234325f1e117da 100644
 --- a/package-lock.json
 +++ b/package-lock.json
 @@ -23,7 +23,6 @@
@@ -10072,7 +10072,7 @@ index cce74baf868e4ddcc617ccd32c5eb6c39c88a350..b2ed21a639d4399c2b6cca470d3e356d
  		},
  		"node_modules/zod": {
 diff --git a/package.json b/package.json
-index 8c5c9212b469c7eea57658f4754d2de286bc1f34..5b10d5d32a7380f45da269bcc9c8a68d4ba0ae4c 100644
+index db7b6fdabe401443550fcb5c3e0958cfdb69ef8d..bdbcabcf6fbeeb16d4cb225897a57b9b5c413583 100644
 --- a/package.json
 +++ b/package.json
 @@ -29,9 +29,10 @@
@@ -10134,7 +10134,7 @@ index 8c5c9212b469c7eea57658f4754d2de286bc1f34..5b10d5d32a7380f45da269bcc9c8a68d
  	}
  }
 diff --git a/pyproject.toml b/pyproject.toml
-index 737226fb10971e5fd875c8a02f62730324760aa2..da6207832bdde1a27c1b9cdc8cc1d44c95bc5410 100644
+index fe473953ba4a354bf28d6c42eaa0cae7fc6e3ed8..57a3e0ae3bac76fb999ff31ddec5f28d4c006ce5 100644
 --- a/pyproject.toml
 +++ b/pyproject.toml
 @@ -6,6 +6,8 @@ authors = [
