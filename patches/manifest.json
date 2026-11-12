@@ -3,9 +3,9 @@
   "grouping_version": 3,
   "ownership": "applied-downstream-only",
   "project": "webui",
-  "upstream": "782f4b705fc6de807ff6aa1a235ea46dcc982057",
-  "snapshot_source": "f89c4a413260134447bd5b432d7ebf5a20551746",
-  "downstream_tree_without_patches": "56110f3b72f89be3a61a32b71f9b735e0bcfc2b0",
+  "upstream": "d42988f0c5ca8f2e2eab36e02016219b5a3ec12c",
+  "snapshot_source": "539cef7974031b0acdbb68555236fe7cb6702342",
+  "downstream_tree_without_patches": "ae414d9b0f9462b9d0afe1d9aff0696137694097",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -217,7 +217,7 @@
         ".github/workflows/avx1-build.yml",
         ".gitignore"
       ],
-      "sha256": "2e9e170cbbe71034939c0e33b91d57f22756b671e37b6faae50d9679508b1958"
+      "sha256": "d27fd1a08df143e7298357a0653df839a930c2d339698f21fc44c58827fe3f21"
     },
     {
       "patch": "14-upstream-regressions.patch",
@@ -266,12 +266,12 @@
     "10-native-json.patch": "25910fe5c82c97e3b77a0092295e61f4192c3ddafc665730548f6591adf4bd57",
     "11-package-assets.patch": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac",
     "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
-    "13-ci-build.patch": "2e9e170cbbe71034939c0e33b91d57f22756b671e37b6faae50d9679508b1958",
+    "13-ci-build.patch": "d27fd1a08df143e7298357a0653df839a930c2d339698f21fc44c58827fe3f21",
     "14-upstream-regressions.patch": "68a8a7f545cc3f994b49569e5cca80a15557a350acecbd6acc3a7f94c9b32f75",
     "15-project-docs.patch": "c25c22758154576587dd5ed61a51921b2ffc580729f9a7971c6f7427a5d2a501",
     "16-fork-records.patch": "83885d10769e75d26c0c118975c20f10f70a66d35a26d342af58bf1b7cccee7d",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "d75c171ec990d68d24aebae9f7cd6aaf9d21c97a3b3dbc2da7d393f6c24fec76",
-    "README.md": "8d4ab9fb82acd1f3c3760e7b59676e5f43e8e976c041f1acfec7062f43abc77f"
+    "README.md": "f2c5343607d5cebf69b7ef0ffc3c1cbf41ced5140c14a0ce6f7bb679f0c114f3"
   }
 }

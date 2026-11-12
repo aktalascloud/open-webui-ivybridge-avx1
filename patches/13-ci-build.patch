@@ -484,7 +484,7 @@ index 0000000000000000000000000000000000000000..e874280cb0d73c156847d9c271a8253f
 +    verify_archive(target)
 diff --git a/.avx1/project.json b/.avx1/project.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..c58728277bdbae508535f14b2fb41d4205fd7faa
+index 0000000000000000000000000000000000000000..a5788ab802d4bc2dd007adfdeca4ae8dad73c9d4
 --- /dev/null
 +++ b/.avx1/project.json
 @@ -0,0 +1,13 @@
@@ -497,7 +497,7 @@ index 0000000000000000000000000000000000000000..c58728277bdbae508535f14b2fb41d42
 +  "description": "Open WebUI for Ivy Bridge AVX1: reviewed fixes, LTO experiments, agent compatibility; extended Russian UI translation / дополненный русский перевод.",
 +  "repository": "aktalascloud/open-webui-ivybridge-avx1",
 +  "channel": "latest",
-+  "upstream_commit": "782f4b705fc6de807ff6aa1a235ea46dcc982057",
++  "upstream_commit": "d42988f0c5ca8f2e2eab36e02016219b5a3ec12c",
 +  "stable_tag": "v0.13.3",
 +  "distribution": "single unified latest"
 +}
