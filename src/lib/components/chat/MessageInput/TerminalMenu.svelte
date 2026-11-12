@@ -1,6 +1,6 @@
 <script lang="ts">
 	export let modelId: string | null = null;
-	import { getContext, onDestroy, tick } from 'svelte';
+	import { getContext, tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import { templatesApi, resolveTerminalTarget, type TerminalTarget } from '$lib/apis/terminal';
 	import UserTerminalsModal from '../UserTerminalsModal.svelte';
@@ -20,7 +20,7 @@
 		temporaryChatEnabled,
 		user
 	} from '$lib/stores';
-	import { getToolServersData } from '$lib/apis';
+	import { selectTerminal } from '$lib/utils/terminal';
 	import { isTemporaryChatId, isSavedChatId } from '$lib/utils/chatId';
 
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
@@ -50,8 +50,6 @@
 	export let disabled = false;
 	export let chatId: string | null = null;
 	export let terminalContext: TerminalContext | null = null;
-	let disposed = false;
-	onDestroy(() => (disposed = true));
 
 	// Connections the user may create terminals on; a terminal on one of them is theirs to manage.
 	let writable: { id: string; name: string }[] = [];
@@ -128,76 +126,9 @@
 			: []
 	).filter((s) => s.url);
 
-	const refreshTerminalServersStore = async (servers: typeof directTerminals) => {
-		// Preserve system terminals (those with an `id`) — only refresh direct ones
-		const existingSystemTerminals = ($terminalServers ?? []).filter((t) => t.id);
-
-		const activeTerminals = servers.filter((s) => s.enabled);
-		if (activeTerminals.length > 0) {
-			let data = await getToolServersData(
-				activeTerminals.map((t) => ({
-					url: t.url,
-					auth_type: t.auth_type ?? 'bearer',
-					key: t.key ?? '',
-					path: t.path ?? '/openapi.json',
-					config: { enable: true }
-				}))
-			);
-			data = data.filter((d) => d && !d.error);
-			terminalServers.set([
-				...data.map((d, i) => ({
-					...d,
-					key: activeTerminals[i]?.key ?? '',
-					config: activeTerminals[i]?.config ?? d?.config ?? {}
-				})),
-				...existingSystemTerminals
-			]);
-		} else {
-			terminalServers.set(existingSystemTerminals);
-		}
-	};
-
-	const selectDirect = async (terminal: (typeof directTerminals)[0]) => {
-		const newId = $selectedTerminalId === terminal.url ? null : terminal.url;
-		if (!(await saveSelection(newId))) return;
-		selectedTerminalId.set(newId);
-
-		// Enable the selected direct terminal, disable all others
-		const updatedServers = ($settings?.terminalServers ?? []).map((s) => ({
-			...s,
-			enabled: newId !== null && s.url === terminal.url
-		}));
-
-		settings.set({
-			...$settings,
-			terminalServers: updatedServers
-		});
-
+	const toggleTerminal = (id: string) => {
 		show = false;
-
-		// Refresh the store so Chat.svelte can inject it as a tool
-		await refreshTerminalServersStore(updatedServers);
-	};
-
-	const selectSystem = async (terminal: (typeof systemTerminals)[0]) => {
-		const newId = $selectedTerminalId === terminal.id ? null : terminal.id;
-		if (!(await saveSelection(newId))) return;
-		selectedTerminalId.set(newId);
-
-		// Disable all direct terminals when switching to a system terminal
-		if ($settings?.terminalServers?.some((s) => s.enabled)) {
-			const updatedServers = ($settings.terminalServers ?? []).map((s) => ({
-				...s,
-				enabled: false
-			}));
-			settings.set({
-				...$settings,
-				terminalServers: updatedServers
-			});
-			await refreshTerminalServersStore(updatedServers);
-		}
-
-		show = false;
+		selectTerminal(selectedTerminalId, $selectedTerminalId === id ? null : id, chatId);
 	};
 
 	$: selectedSystemTerminal = systemTerminals.find(
@@ -228,25 +159,6 @@
 		show = false;
 		showTerminals = true;
 	};
-	async function saveSelection(id: string | null) {
-		const ownerChatId = chatId;
-		const ownerActiveChatId = $activeChatId;
-		if (isSavedChatId(ownerChatId)) {
-			try {
-				await updateChatById(localStorage.token, ownerChatId!, {
-					terminal_id: id,
-					working_directory: ''
-				});
-			} catch (e) {
-				toast.error(String(e));
-				return false;
-			}
-		}
-		return !disposed && chatId === ownerChatId && $activeChatId === ownerActiveChatId;
-	}
-	async function selectTerminal(id: string) {
-		if (await saveSelection(id)) selectedTerminalId.set(id);
-	}
 	let info: { target: TerminalTarget; label: string } | null = null;
 	let files: { target: TerminalTarget; label: string } | null = null;
 	const openFiles = async (selector: string, label: string) => {
@@ -384,7 +296,7 @@
 									class="{rowClass} {$selectedTerminalId === terminal.url
 										? 'pr-14 bg-gray-50/40 dark:bg-gray-800/40'
 										: 'pr-8'}"
-									on:click={() => selectDirect(terminal)}
+									on:click={() => toggleTerminal(terminal.url)}
 								>
 									<div class="flex flex-1 gap-2 items-center truncate">
 										<Cloud className="size-3.5 shrink-0" strokeWidth="2" />
@@ -464,7 +376,7 @@
 									class="{rowClass} {$selectedTerminalId === terminal.id
 										? 'pr-14 bg-gray-50/40 dark:bg-gray-800/40'
 										: 'pr-8'}"
-									on:click={() => selectSystem(terminal)}
+									on:click={() => toggleTerminal(terminal.id)}
 								>
 									<div class="flex flex-1 gap-2 items-center truncate">
 										{#if section.devices}
@@ -538,7 +450,7 @@
 		bind:show={showTerminals}
 		terminalId={managedTerminalId}
 		connections={writable}
-		onCreate={selectTerminal}
+		onCreate={async (id) => selectTerminal(selectedTerminalId, id, chatId)}
 	/>
 {/if}
 
