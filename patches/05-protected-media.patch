@@ -98,10 +98,10 @@ index 4c2732cf41635f30d5f081c0859dc60e71336406..35c74626d208f5802b25a73431336a5d
  			const url = new URL(href, window.location.origin);
  			// Check if same origin and an in-app route
 diff --git a/src/lib/components/chat/Messages/ResponseMessage.svelte b/src/lib/components/chat/Messages/ResponseMessage.svelte
-index 17571311770536a56b8a1e4d84732caecd1a25c3..9a2a0910b19e4c65edb3bc4c0b6da1ad0b071101 100644
+index 5c5b1f893dc56278b3e6113fd6d9eba52f918dc5..e9db8e511c96fb12d86cd817f97064d1c618ccc0 100644
 --- a/src/lib/components/chat/Messages/ResponseMessage.svelte
 +++ b/src/lib/components/chat/Messages/ResponseMessage.svelte
-@@ -323,10 +323,8 @@
+@@ -324,10 +324,8 @@
  			};
  
  			loadingSpeech = true;
@@ -114,7 +114,7 @@ index 17571311770536a56b8a1e4d84732caecd1a25c3..9a2a0910b19e4c65edb3bc4c0b6da1ad
  
  			if (!messageContentParts.length) {
  				toast.info($i18n.t('No content to speak'));
-@@ -374,7 +372,9 @@
+@@ -375,7 +373,9 @@
  					if (signal.aborted) return;
  					if (!speaking) break;
  

@@ -958,10 +958,10 @@ index 0000000000000000000000000000000000000000..fcee49980febac5dc96994b1ab6e52af
 +FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 +OTHER DEALINGS IN THE FONT SOFTWARE.
 diff --git a/backend/open_webui/routers/terminals.py b/backend/open_webui/routers/terminals.py
-index 1a85ff61d70ebb33757e6af991c97d460cbeab32..3d06717ba0f6132baf94e2006c2b7cb726556b2d 100644
+index 753a1316db68ae762ee92dc8ea0b43abca8d3c29..0eed0770c834a6496ee78c34ec6d4b1bb3e008dc 100644
 --- a/backend/open_webui/routers/terminals.py
 +++ b/backend/open_webui/routers/terminals.py
-@@ -24,7 +24,7 @@ from open_webui.models.groups import Groups
+@@ -25,7 +25,7 @@ from open_webui.models.groups import Groups
  from open_webui.routers.templates import router as templates_router
  from open_webui.utils.access_control import has_connection_access
  from open_webui.utils.auth import get_verified_user, get_verified_user_by_token
@@ -970,7 +970,7 @@ index 1a85ff61d70ebb33757e6af991c97d460cbeab32..3d06717ba0f6132baf94e2006c2b7cb7
  from open_webui.utils.tether import RelayInterrupted, get_terminal_connections, get_terminal_client
  from open_webui.utils.headers import bearer_auth_header, normalize_bearer_token
  from open_webui.utils.json_codec import JSONCodec
-@@ -162,7 +162,7 @@ def _sanitize_proxy_path(path: str) -> str | None:
+@@ -163,7 +163,7 @@ def _sanitize_proxy_path(path: str) -> str | None:
      methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
  )
  async def browser_http(request: Request, server_id: str, sid: str, browser_token: str, path: str):
@@ -979,7 +979,7 @@ index 1a85ff61d70ebb33757e6af991c97d460cbeab32..3d06717ba0f6132baf94e2006c2b7cb7
      if data.get('resource') == 'files':
          if request.method not in ('GET', 'HEAD', 'OPTIONS'):
              raise HTTPException(405, 'File preview tokens are read-only')
-@@ -171,6 +171,8 @@ async def browser_http(request: Request, server_id: str, sid: str, browser_token
+@@ -172,6 +172,8 @@ async def browser_http(request: Request, server_id: str, sid: str, browser_token
              raise HTTPException(400, 'Invalid file path')
          path = f'files/serve/{file_path}'
      else:
@@ -988,7 +988,7 @@ index 1a85ff61d70ebb33757e6af991c97d460cbeab32..3d06717ba0f6132baf94e2006c2b7cb7
          path = f'browser/view/{sid}/{data["capability"]}/{path}'
      return await _proxy_terminal(
          server_id, path, request, user,
-@@ -202,7 +204,7 @@ async def relay_to_browser(ws, upstream):
+@@ -205,7 +207,7 @@ async def relay_to_browser(ws, upstream):
  async def watch_access(server_id, sid, browser_token, request):
      while True:
          await asyncio.sleep(10)
@@ -997,7 +997,7 @@ index 1a85ff61d70ebb33757e6af991c97d460cbeab32..3d06717ba0f6132baf94e2006c2b7cb7
          current = await find_terminal_connection(current_user, server_id, browser_context(data), request=request)
          if not current:
              return
-@@ -211,11 +213,12 @@ async def watch_access(server_id, sid, browser_token, request):
+@@ -214,11 +216,12 @@ async def watch_access(server_id, sid, browser_token, request):
  @router.websocket('/{server_id}/browser/view/{sid}/{browser_token}/{kind}')
  async def browser_ws(ws: WebSocket, server_id: str, sid: str, browser_token: str, kind: str):
      try:
@@ -1011,7 +1011,7 @@ index 1a85ff61d70ebb33757e6af991c97d460cbeab32..3d06717ba0f6132baf94e2006c2b7cb7
              or not ENABLE_TOOL_SERVERS
              or not connection
          ):
-@@ -383,9 +386,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
+@@ -386,9 +389,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
          headers['Content-Type'] = content_type
  
      if connection.get('template_id') and safe_path == 'files/preview' and request.method == 'POST':
@@ -1023,7 +1023,7 @@ index 1a85ff61d70ebb33757e6af991c97d460cbeab32..3d06717ba0f6132baf94e2006c2b7cb7
          )
          base = request.url.path.removesuffix('/files/preview')
          return {'url': f'{base}/browser/view/files/{quote(browser_token, safe="")}/'}
-@@ -461,8 +464,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
+@@ -462,8 +465,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
          ):
              browser_session = json.loads(response_body)
              if isinstance(browser_session, dict) and browser_session.get('id') and browser_session.get('token'):

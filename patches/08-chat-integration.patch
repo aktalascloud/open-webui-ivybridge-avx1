@@ -1,9 +1,9 @@
 diff --git a/.avx1/frontend-contract.json b/.avx1/frontend-contract.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..170876f536be960964c98baf1704a152ebe9e41f
+index 0000000000000000000000000000000000000000..7c82d66e6d3dabb1a333709241dc0e53995ba39a
 --- /dev/null
 +++ b/.avx1/frontend-contract.json
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,27 @@
 +{
 +  "schema": 1,
 +  "hooks": [
@@ -15,10 +15,10 @@ index 0000000000000000000000000000000000000000..170876f536be960964c98baf1704a152
 +  "helper_sha256": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
 +  "sources": {
 +    "src/lib/utils/assistantCompatibility.js": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
-+    "src/lib/components/chat/MessageInput.svelte": "38309f4b358ebc9b6a5f5188362da94b29ff4a01757ab29fd7a15646afb1a4ba",
-+    "src/lib/components/chat/Chat.svelte": "339550e252a6e396f091b455169d04d33bbeacfbfbd06daf21a576fb9fbb2987",
++    "src/lib/components/chat/MessageInput.svelte": "3f667cf82063c2d7b6f16574cb400cd703f18386711af976fb520124d0bc6b1b",
++    "src/lib/components/chat/Chat.svelte": "9cc45d1c24f9e9a26fa8bb153faa6a458ea3442c7dd567a7c4afa47adc0c95d3",
 +    "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "5719c357f0ebeca8ce641121ea297f56794a4dcec8401814b3a66014fbed05f5",
++    "src/lib/components/chat/Messages/ResponseMessage.svelte": "ce328c1e16a630e7ddcec85b83eed8c183d77301603281de3e7fbd0ec04d1e00",
 +    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "39c5d885756c7b15b1c9ee5801cd13bbd7a832a8d366536ec7d36545c2671869"
 +  },
 +  "reviewed_upstream_change": {
@@ -27,9 +27,8 @@ index 0000000000000000000000000000000000000000..170876f536be960964c98baf1704a152
 +  },
 +  "reviewed_local_change": "The shared Chat composer now handles main and side chats. Mic provenance selects the actual editor inputId; explicit direct tool IDs and voice wire V1 retained.",
 +  "reviewed_mainstream_change": {
-+    "upstream_commit": "055bd98f3a223cadd8be381422238ca9410cc9db",
-+    "scope": "Native sessions/agents and scoped tool permissions; persistent side chats and file/voice-note tabs. Main/side microphone provenance and explicit tool-server IDs retained; helperV1 hash unchanged. Side-chat source fixture updated for current canSend/sending/recovering state. Stock call/VRM/STT/TTS hooks preserved.",
-+    "checks": "5 actual tool policy/side-send and3 helper cases; full staged/package Chromium still required"
++    "upstream_commit": "31a8c5442345cec0dc0778ff188324f66708d5eb",
++    "scope": "Current chat and sidebar updates keep microphone provenance by inputId, explicit tool IDs, speech identity and voice/avatar hooks. Terminal browser owner and resource binding retained."
 +  }
 +}
 diff --git a/.avx1/frontend_contract.py b/.avx1/frontend_contract.py
@@ -342,7 +341,7 @@ index 0000000000000000000000000000000000000000..70387d4f118d1e5c48144b62ec90089c
 + assert.strictEqual(resolve(null, {'ru-RU': explicit}, 'ru-RU', t), explicit);
 +});
 diff --git a/backend/open_webui/config.py b/backend/open_webui/config.py
-index b6c9d27683f2c0cfdaa500c5b2cd4abff0f22a68..86657b5571464bf4ee0e2af12d11454adba24cf9 100644
+index 6a10bd03fa97d9c9783a90252179e4e3b71a19f3..163477bc07abbb0c246dfb8a3a1fa989933982e4 100644
 --- a/backend/open_webui/config.py
 +++ b/backend/open_webui/config.py
 @@ -2097,6 +2097,16 @@ ENABLE_CALENDAR = os.getenv('ENABLE_CALENDAR', 'True').lower() == 'true'
@@ -362,7 +361,7 @@ index b6c9d27683f2c0cfdaa500c5b2cd4abff0f22a68..86657b5571464bf4ee0e2af12d11454a
  SUBAGENTS_BACKGROUND_ENABLED = os.getenv('SUBAGENTS_BACKGROUND_ENABLED', 'False').lower() == 'true'
  # Leave empty for unlimited.
  SUBAGENTS_MAX_CONCURRENT = os.getenv('SUBAGENTS_MAX_CONCURRENT', '')
-@@ -3274,6 +3284,7 @@ DEFAULT_CONFIG = {
+@@ -3276,6 +3286,7 @@ DEFAULT_CONFIG = {
      'calendar.enable': ENABLE_CALENDAR,
      'automations.enable': ENABLE_AUTOMATIONS,
      'subagents.enable': ENABLE_SUBAGENTS,
@@ -571,10 +570,10 @@ index 36d5bb07c79e2fd3f91cb9b3cd46e3a38759852f..f716f0a8f5f26fd835177c698e73a8c0
      headers = {
          'Content-Type': 'application/json',
 diff --git a/backend/open_webui/utils/middleware.py b/backend/open_webui/utils/middleware.py
-index ec0d0c3b9a1a43174d837d3e4627138e5a5e06de..7ae97fb12586c3ebc5db8dea15d83a2e48c75ef9 100644
+index da566f6403c4a67592e134765ae08ec620a4f066..49ddeab186e5213f69403e29507a39544506b317 100644
 --- a/backend/open_webui/utils/middleware.py
 +++ b/backend/open_webui/utils/middleware.py
-@@ -1924,13 +1924,17 @@ def strip_reasoning_details(output: list) -> list:
+@@ -1923,13 +1923,17 @@ def strip_reasoning_details(output: list) -> list:
  
  def strip_tool_images(output: list, model: dict) -> list:
      """Replace tool result images with a text note when the model has Vision turned off."""
@@ -647,7 +646,7 @@ index bb3e6c15e6155cc169fe84092769b8c36f43998a..d695380e35c06605ec653e82a7b0f1cf
  							openapi: openapi,
  							info: info,
 diff --git a/src/lib/components/chat/Chat.svelte b/src/lib/components/chat/Chat.svelte
-index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba4fdf5fc8 100644
+index ce21dadc0955a5affe862661e296d994b1d56415..6c5256954bd4501ed550f46a931d02d006344a60 100644
 --- a/src/lib/components/chat/Chat.svelte
 +++ b/src/lib/components/chat/Chat.svelte
 @@ -1,4 +1,7 @@
@@ -658,7 +657,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  	import { getTerminalServers } from '$lib/apis/terminal';
  	import { resolveToolApprovalMode } from '$lib/utils/toolPermissions';
  	import type { AppLayoutContext, TerminalContext } from '$lib/types';
-@@ -3944,7 +3947,8 @@
+@@ -3970,7 +3973,8 @@
  	const submitPrompt = async (
  		inputContent: string,
  		inputFiles: any[],
@@ -668,7 +667,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  	) => {
  		if (selectedModels.includes('')) throw new Error($i18n.t('Model not selected'));
  		const _files = structuredClone(inputFiles);
-@@ -3971,6 +3975,7 @@
+@@ -3997,6 +4001,7 @@
  			user: { id: $user?.id, name: $user?.name },
  			user_id: $user?.id,
  			content: inputContent,
@@ -676,7 +675,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  			files: _files.length > 0 ? _files : undefined,
  			timestamp: Math.floor(Date.now() / 1000), // Unix epoch
  			models: selectedModels
-@@ -4249,6 +4254,7 @@
+@@ -4278,6 +4283,7 @@
  			}
  		}
  		if (processing === 'uploading') return { status: 'deferred' };
@@ -684,7 +683,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  		emitTyping(false);
  		if (bridgeRequest && (selectedModelIds.length !== 1 || !bridgeRequest.modelId))
  			return { status: 'rejected' };
-@@ -4426,7 +4432,7 @@
+@@ -4455,7 +4461,7 @@
  		messageInput?.setText('');
  
  		return (
@@ -693,7 +692,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  				status: 'rejected'
  			}
  		);
-@@ -4783,12 +4789,7 @@
+@@ -4812,12 +4818,7 @@
  		for (const toolId of selectedToolIds) {
  			if (toolId.startsWith('direct_server:')) {
  				let serverId = toolId.replace('direct_server:', '');
@@ -707,7 +706,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  			} else {
  				toolIds.push(toolId);
  			}
-@@ -4810,12 +4811,12 @@
+@@ -4839,12 +4840,12 @@
  				stream: stream,
  				model: model.id,
  				...(messages.length > 0 ? { messages } : {}),
@@ -722,7 +721,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  
  				files: embedded
  					? [...(files ?? []), ...noteFiles]
-@@ -4838,7 +4839,7 @@
+@@ -4867,7 +4868,7 @@
  				tool_servers: $config?.features?.enable_tool_servers
  					? [
  							...($toolServers ?? []).filter(
@@ -731,7 +730,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  							),
  							// Direct terminal servers — always included when enabled (not routed through selectedToolIds)
  							...(terminalEnabled
-@@ -4851,7 +4852,7 @@
+@@ -4880,7 +4881,7 @@
  								: [])
  						]
  					: [],
@@ -741,7 +740,7 @@ index 486188db0ee1e8c22a8ae2f236d9017cf8dcd4ec..8cfddc1c4a91769f2a2baeadeca0baba
  					...getPromptVariables(
  						$user?.name,
 diff --git a/src/lib/components/chat/MessageInput.svelte b/src/lib/components/chat/MessageInput.svelte
-index 4339b9f367ac01a16a564e65871d48ddd0e3f75c..22aa6f20d4015f7fca524eaedbf782feff83cf79 100644
+index 6d4ac2c4dff66c66131a7650ce1140c796709430..da29612ba6c3a122dd44bd5c833e8d60cb23651e 100644
 --- a/src/lib/components/chat/MessageInput.svelte
 +++ b/src/lib/components/chat/MessageInput.svelte
 @@ -1,4 +1,5 @@
@@ -789,7 +788,7 @@ index 4339b9f367ac01a16a564e65871d48ddd0e3f75c..22aa6f20d4015f7fca524eaedbf782fe
  														prompt = content.md;
  														inputContent = content;
  														command = getCommand();
-@@ -2985,6 +2989,7 @@
+@@ -2986,6 +2990,7 @@
  											triggerClassName="items-center gap-1.5 rounded-lg pl-2 pr-1.5 py-1 text-[0.8125rem] font-normal text-gray-600 transition-colors duration-100 hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
  										/>
  									</div>
@@ -826,10 +825,10 @@ index cde719d200e034cd60ea31e6225c9b30cbf3562a..16fb8e7f358f87536ca70e2fffcbfb88
  
  			id = model.id;
 diff --git a/src/lib/stores/index.ts b/src/lib/stores/index.ts
-index 303d6a0f5408ba4aa9c65412c23871371114b2a0..f915a8589fddda3acf48cb0da3798651fa595f78 100644
+index 67758238a6d2019c161d872cab8bf64205981df2..cfd8ceb0657d057a9409e91f28e20154204554c1 100644
 --- a/src/lib/stores/index.ts
 +++ b/src/lib/stores/index.ts
-@@ -276,6 +276,7 @@ type OllamaModelDetails = {
+@@ -272,6 +272,7 @@ type OllamaModelDetails = {
  };
  
  type Settings = {

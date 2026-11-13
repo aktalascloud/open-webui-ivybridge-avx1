@@ -156,7 +156,7 @@ index 0000000000000000000000000000000000000000..c08ce8b6cabbd90f797e706467133345
 +    checked+=1
 +print('RUSSIAN_LOCALE_KEYS_AND_PARAMETERS_VERIFIED='+str(checked))
 diff --git a/src/lib/i18n/locales/en-US/translation.json b/src/lib/i18n/locales/en-US/translation.json
-index 983ea65c613869f5e02de77b83e833439efa3f19..581ccb98fcd59412c611e8cf8c3ca8c92f8a1c28 100644
+index 89f3935240ce13f1317e7df4f34d926e0454cfdf..498bba140d704ab009b84a76f876d2449094e181 100644
 --- a/src/lib/i18n/locales/en-US/translation.json
 +++ b/src/lib/i18n/locales/en-US/translation.json
 @@ -1956,7 +1956,7 @@
@@ -168,7 +168,7 @@ index 983ea65c613869f5e02de77b83e833439efa3f19..581ccb98fcd59412c611e8cf8c3ca8c9
  	"Modified": "",
  	"Mojeek": "",
  	"Mon": "",
-@@ -4679,5 +4679,90 @@
+@@ -4681,5 +4681,90 @@
  	"YouTube": "",
  	"YouTube video player": "",
  	"Zoom in": "",
@@ -261,7 +261,7 @@ index 983ea65c613869f5e02de77b83e833439efa3f19..581ccb98fcd59412c611e8cf8c3ca8c9
 +	"Drag to rotate; pinch or scroll to zoom. Double-tap to reset.": "Drag to rotate; pinch or scroll to zoom. Double-tap to reset."
  }
 diff --git a/src/lib/i18n/locales/ru-RU/translation.json b/src/lib/i18n/locales/ru-RU/translation.json
-index cfa4c575702c67385017db35314db90ba3fbfdee..792f16234a48ed5e7bbbc9fe96b308efe6f90334 100644
+index cfa4c575702c67385017db35314db90ba3fbfdee..ff3ffa08ef84e845cc43cff87de41c21abb642a6 100644
 --- a/src/lib/i18n/locales/ru-RU/translation.json
 +++ b/src/lib/i18n/locales/ru-RU/translation.json
 @@ -1,6 +1,6 @@
@@ -1609,7 +1609,7 @@ index cfa4c575702c67385017db35314db90ba3fbfdee..792f16234a48ed5e7bbbc9fe96b308ef
  	"You have more than 50 users, which often means this workspace is supporting organizational use. Open WebUI is free to use as-is, with no restrictions or hidden limits, and we want to keep it that way.": "У вас более 50 пользователей, что часто означает, что это рабочее пространство используется в организации. Open WebUI можно использовать бесплатно как есть, без ограничений или скрытых лимитов, и мы хотим сохранить это так.",
  	"You have no archived conversations.": "У вас нет архивированных бесед.",
  	"You have no shared conversations.": "У вас нет общих бесед.",
-@@ -4719,5 +4719,114 @@
+@@ -4719,5 +4719,116 @@
  	"YouTube": "YouTube",
  	"YouTube video player": "Видеоплеер YouTube",
  	"Zoom in": "Увеличить",
@@ -1723,7 +1723,9 @@ index cfa4c575702c67385017db35314db90ba3fbfdee..792f16234a48ed5e7bbbc9fe96b308ef
 +	"settings.admin.models.builtinTools.visualizations.label": "Визуализации",
 +	"settings.admin.models.builtinTools.visualizations.description": "Позволяет моделям создавать интерактивные визуализации.",
 +	"{{modelName}} mentioned you": "{{modelName}} упомянула вас",
-+	"Sub-agents": "Субагенты"
++	"Sub-agents": "Субагенты",
++	"settings.admin.interface.visualizationPrompt.label": "Промпт визуализации",
++	"settings.admin.interface.visualizationPrompt.description": "Описание встроенного инструмента визуализаций для модели. Определяет, когда и как строить визуализации. Оставьте поле пустым, чтобы использовать стандартное описание."
  }
 diff --git a/src/lib/utils/localizedContent.ts b/src/lib/utils/localizedContent.ts
 index abb70a3bb97b49b1df13e7242261cebf25cab458..349c01dc42e0df0dcc1caf524d6dd8dee2d31a6a 100644
