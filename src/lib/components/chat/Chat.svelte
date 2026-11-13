@@ -48,8 +48,6 @@
 		temporaryChatEnabled as _temporaryChatEnabled,
 		mobile,
 		chatTitle as _chatTitle,
-		showArtifacts as _showArtifacts,
-		artifactContents as _artifactContents,
 		tools,
 		skills,
 		terminalSkills,
@@ -179,9 +177,7 @@
 	const selectedFolder = embedded ? writable<FolderDetails | null>(null) : _selectedFolder;
 	const showTabs = embedded ? writable(get(_showTabs)) : _showTabs;
 	const showCallOverlay = embedded ? writable(false) : _showCallOverlay;
-	const showArtifacts = embedded ? writable(false) : _showArtifacts;
 	const showEmbeds = embedded ? writable(false) : _showEmbeds;
-	const artifactContents = embedded ? writable(null) : _artifactContents;
 	// A side chat uses the main chat's terminal and never changes it.
 	const selectedTerminalId = side
 		? { subscribe: _selectedTerminalId.subscribe, set: () => {} }
@@ -219,6 +215,10 @@
 	export let onDeleteEmbeddedChat: ((chatId: string) => void | Promise<void>) | null = null;
 	export let onEmbeddedChatTitle: ((chatId: string, title: string) => void | Promise<void>) | null =
 		null;
+	// The HTML and SVG found in this chat's answers. An embedded chat can open them only
+	// through onOpenArtifacts; the main chat opens them in its own tabs.
+	export let artifacts: Writable<{ type: string; content: string }[]> = writable([]);
+	export let onOpenArtifacts: ((code?: string) => void) | null = null;
 
 	let loading = true;
 	const instanceId = uuidv4();
@@ -484,6 +484,14 @@
 	let generationController = null;
 	const contextCompactions = writable<Record<string, 'in_progress' | { error: string }>>({});
 	setContext('contextCompactions', contextCompactions);
+	const openArtifacts = (code?: string) => {
+		// the list is rebuilt after a debounce, so it can lag behind the block being opened
+		getContents();
+		if (embedded) onOpenArtifacts?.(code);
+		else terminalTabs?.openArtifacts(code);
+	};
+	// a notes chat has nowhere to show them
+	$: canOpenArtifacts = !embedded || !!onOpenArtifacts;
 	let compactionChatId = '';
 	$: if (compactionChatId !== $chatId) {
 		contextCompactions.set({});
@@ -605,6 +613,16 @@
 		} else if ((await getChatId(history, attachments)) !== null) {
 			await submitPrompt(instruction, attachments);
 		}
+	};
+
+	// Adds text to the composer for the user to review, keeping any draft already there.
+	const draftPrompt = async (text: string) => {
+		if (fullWidthTabs) {
+			terminalTabs?.focusMainChat();
+			await tick();
+		}
+		messageInput?.setText(prompt.trim() ? `${prompt.trimEnd()}\n\n${text}` : text);
+		messageInput?.focus({ preventScroll: true });
 	};
 
 	let params = {};
@@ -1639,7 +1657,16 @@
 			});
 	};
 	$: syncChatRoom($socket, $chatId, $temporaryChatEnabled);
-	$: if (side && $chatId) openSideChatIds.update((ids) => new Set([...ids, $chatId]));
+	let openSideChatId: string = '';
+	$: if (embedded && $chatId !== openSideChatId) {
+		openSideChatIds.update((ids) => {
+			const next = new Set(ids);
+			next.delete(openSideChatId);
+			if ($chatId) next.add($chatId);
+			return next;
+		});
+		openSideChatId = $chatId;
+	}
 
 	const chatEventHandler = async (event, cb) => {
 		if (isTemporaryChatId(event.chat_id) && event.chat_id !== $chatId) return;
@@ -2157,11 +2184,6 @@
 			});
 		}
 
-		// the artifacts pane reads this list when it opens, which can be before the debounced rebuild
-		const showArtifactsSubscribe = showArtifacts.subscribe((value) => {
-			if (value) getContents();
-		});
-
 		const selectedFolderSubscribe = selectedFolder.subscribe(async (folder) => {
 			await tick();
 			// Navigation applies defaults in initNewChat; only explicit settings edits reach here.
@@ -2212,7 +2234,6 @@
 					updateLastReadAt(chatIdProp);
 				}
 				if (appLayout?.initNewChat === initNewChat) delete appLayout.initNewChat;
-				showArtifactsSubscribe();
 				selectedFolderSubscribe();
 
 				// Clear the selected chat when leaving the chat surface (e.g. navigating
@@ -2223,7 +2244,7 @@
 				if (joinedChatId && $socket?.connected)
 					$socket.emit('events:chat', { chat_id: joinedChatId, data: { type: 'leave' } });
 				joinedChatId = '';
-				if (side && $chatId) {
+				if (embedded && $chatId) {
 					if ($temporaryChatEnabled)
 						stopTasksByChatId(localStorage.token, $chatId).catch(console.error);
 					openSideChatIds.update((ids) => {
@@ -2494,7 +2515,7 @@
 				contentsRAF = null;
 			}, 0);
 		} else {
-			artifactContents.set([]);
+			artifacts.set([]);
 		}
 	};
 
@@ -2762,7 +2783,7 @@
 
 	const getContents = () => {
 		const messages = history ? createMessagesList(history, history.currentId) : [];
-		let contents = [];
+		let contents: { type: string; content: string }[] = [];
 		messages.forEach((message) => {
 			if (message?.role !== 'user') {
 				const messageContent =
@@ -2812,7 +2833,7 @@
 			}
 		});
 
-		artifactContents.set(contents);
+		artifacts.set(contents);
 	};
 
 	// Web functions
@@ -3014,7 +3035,6 @@
 			await showTabs.set(false);
 		}
 		await showCallOverlay.set(false);
-		await showArtifacts.set(false);
 
 		if (!embedded && !preserveTabs && $page.url.pathname.includes('/c/')) {
 			window.history.replaceState(window.history.state, '', `/`);
@@ -3283,7 +3303,10 @@
 				sanitizeHistory(history);
 
 				chatTitle.set(chatContent.title);
-				branchPointMessageId = parentChatId ? (chatContent.branchPointMessageId ?? null) : null;
+				branchPointMessageId =
+					chatContent.originalChatId === parentChatId
+						? (chatContent.branchPointMessageId ?? null)
+						: null;
 				if (side) await onEmbeddedChatTitle?.(id, chatContent.title);
 
 				params = structuredClone(chatContent?.params ?? {});
@@ -3370,12 +3393,15 @@
 					const restored = await restoreChatInput(
 						sessionStorage.getItem(getChatInputKey(chatIdProp))
 					);
+					const chatInputPrompt = restored ? prompt : null;
 					if (signal.aborted) return;
 					await setDefaults(restored);
 					if (signal.aborted) return;
 					loading = false;
 					await tick();
 					if (signal.aborted) return;
+					// Mounting the editor clears prompt, so apply the saved text afterward.
+					if (chatInputPrompt !== null) messageInput?.setText(chatInputPrompt);
 					if (embeddedDraft) {
 						({ prompt, files } = embeddedDraft);
 						messageInput?.setText(prompt);
@@ -4139,6 +4165,9 @@
 			if (result?.id) {
 				if (!embedded) {
 					await goto(`/c/${result.id}`);
+					await refreshChatList(localStorage.token, { refreshPinned: true });
+				} else if (side) {
+					await onSelectEmbeddedChat?.(result.id);
 					await refreshChatList(localStorage.token, { refreshPinned: true });
 				}
 				toast.success($i18n.t('Chat forked'), { id: toastId });
@@ -5618,6 +5647,7 @@
 		? '  md:max-w-[calc(100%-var(--sidebar-width))]'
 		: ' '} w-full max-w-full min-w-0 flex flex-col"
 	id={chatContainerId}
+	data-chat={embedded ? instanceId : 'main'}
 	role="presentation"
 	on:dragover|capture={(event) => terminalTabs?.dragOverChat(event)}
 	on:drop|capture={(event) => terminalTabs?.dropChat(event)}
@@ -5705,6 +5735,8 @@
 								}
 							}}
 							{history}
+							hasArtifacts={$artifacts.length > 0}
+							onOpenArtifacts={canOpenArtifacts ? openArtifacts : null}
 							title={$chatTitle}
 							shareEnabled={!!history.currentId}
 							{initNewChat}
@@ -5809,6 +5841,7 @@
 										bottomPadding={files.length > 0}
 										{onSelect}
 										{onInsertToNote}
+										onOpenArtifacts={canOpenArtifacts ? openArtifacts : null}
 									/>
 								</div>
 							</div>
@@ -6111,6 +6144,7 @@
 					bind:history
 					bind:files
 					chatId={$chatId}
+					mainArtifacts={artifacts}
 					bind:this={terminalTabs}
 					folderId={chat ? (chat.folder_id ?? null) : ($selectedFolder?.id ?? null)}
 					chatUser={chatOwner}
@@ -6119,6 +6153,7 @@
 					systemPrompt={params?.system || $settings.system || ''}
 					submitPrompt={submitHandler}
 					onAskFile={askFile}
+					onDraftPrompt={draftPrompt}
 					{stopResponse}
 					{bridge}
 					bind:callMode

@@ -9,10 +9,10 @@
   "helper_sha256": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
-    "src/lib/components/chat/MessageInput.svelte": "38309f4b358ebc9b6a5f5188362da94b29ff4a01757ab29fd7a15646afb1a4ba",
-    "src/lib/components/chat/Chat.svelte": "339550e252a6e396f091b455169d04d33bbeacfbfbd06daf21a576fb9fbb2987",
+    "src/lib/components/chat/MessageInput.svelte": "3f667cf82063c2d7b6f16574cb400cd703f18386711af976fb520124d0bc6b1b",
+    "src/lib/components/chat/Chat.svelte": "9cc45d1c24f9e9a26fa8bb153faa6a458ea3442c7dd567a7c4afa47adc0c95d3",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-    "src/lib/components/chat/Messages/ResponseMessage.svelte": "5719c357f0ebeca8ce641121ea297f56794a4dcec8401814b3a66014fbed05f5",
+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "ce328c1e16a630e7ddcec85b83eed8c183d77301603281de3e7fbd0ec04d1e00",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "39c5d885756c7b15b1c9ee5801cd13bbd7a832a8d366536ec7d36545c2671869"
   },
   "reviewed_upstream_change": {
@@ -21,8 +21,7 @@
   },
   "reviewed_local_change": "The shared Chat composer now handles main and side chats. Mic provenance selects the actual editor inputId; explicit direct tool IDs and voice wire V1 retained.",
   "reviewed_mainstream_change": {
-    "upstream_commit": "055bd98f3a223cadd8be381422238ca9410cc9db",
-    "scope": "Native sessions/agents and scoped tool permissions; persistent side chats and file/voice-note tabs. Main/side microphone provenance and explicit tool-server IDs retained; helperV1 hash unchanged. Side-chat source fixture updated for current canSend/sending/recovering state. Stock call/VRM/STT/TTS hooks preserved.",
-    "checks": "5 actual tool policy/side-send and3 helper cases; full staged/package Chromium still required"
+    "upstream_commit": "31a8c5442345cec0dc0778ff188324f66708d5eb",
+    "scope": "Current chat and sidebar updates keep microphone provenance by inputId, explicit tool IDs, speech identity and voice/avatar hooks. Terminal browser owner and resource binding retained."
   }
 }

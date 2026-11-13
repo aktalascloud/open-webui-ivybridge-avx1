@@ -4828,5 +4828,7 @@
 	"settings.admin.models.builtinTools.visualizations.label": "Визуализации",
 	"settings.admin.models.builtinTools.visualizations.description": "Позволяет моделям создавать интерактивные визуализации.",
 	"{{modelName}} mentioned you": "{{modelName}} упомянула вас",
-	"Sub-agents": "Субагенты"
+	"Sub-agents": "Субагенты",
+	"settings.admin.interface.visualizationPrompt.label": "Промпт визуализации",
+	"settings.admin.interface.visualizationPrompt.description": "Описание встроенного инструмента визуализаций для модели. Определяет, когда и как строить визуализации. Оставьте поле пустым, чтобы использовать стандартное описание."
 }

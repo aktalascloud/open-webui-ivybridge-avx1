@@ -151,7 +151,6 @@ from open_webui.utils.task import (
     rag_template,
     tools_function_calling_generation_template,
 )
-from open_webui.utils.tether import get_terminal_connections
 from open_webui.utils.terminals import filter_user_terminal_tools, upload_files_to_terminal
 from open_webui.utils.tool_approval import complete_tool_call, pending_tool_calls
 from open_webui.utils.tool_permissions import (
@@ -2775,10 +2774,10 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 tools_dict = {**tools_dict, **mcp_tools_dict}
 
         # Resolve terminal tools if terminal_id is set (outside tool_ids check
-        # so system terminals work even when no other tools are selected)
+        # so system terminals work even when no other tools are selected).
+        # get_terminal_tools does the access check, including a shared chat's owner pick.
         terminal_capability = (model.get('info', {}).get('meta', {}).get('capabilities') or {}).get('terminal', True)
-        terminal_connection_ids = {connection.get('id') for connection in await get_terminal_connections(user)}
-        if terminal_id and terminal_capability and terminal_id in terminal_connection_ids:
+        if terminal_id and terminal_capability:
             try:
                 terminal_result = await get_terminal_tools(
                     request,
@@ -3065,6 +3064,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             summary_content = f'[CONVERSATION SUMMARY]\n{context_summary}'
             form_data['messages'] = add_or_update_system_message(summary_content, form_data['messages'], append=True)
 
+    metadata['context_summary'] = context_summary
     return form_data, metadata, events, False
 
 
@@ -3900,7 +3900,7 @@ async def background_tasks_handler(ctx):
                         except Exception as e:
                             pass
 
-        if messages:
+        if messages and not is_temporary_chat_id(metadata.get('chat_id')):
             await review_memory_after_turn(
                 request=request,
                 user=user,

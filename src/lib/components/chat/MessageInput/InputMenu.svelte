@@ -31,6 +31,7 @@
 
 	const i18n: any = getContext('i18n');
 
+	export let chatId: string = '';
 	export let files = [];
 
 	export let selectedModels: string[] = [];
@@ -154,7 +155,7 @@
 	bind:show
 	{closeOnOutsideClick}
 	visualViewportAware
-	maxHeight="18rem"
+	maxHeight={hasInternalList ? '18rem' : undefined}
 	contentClass="flex flex-col overflow-hidden!"
 	onOpenChange={(state) => {
 		if (state === false) {
@@ -762,7 +763,7 @@
 						</div>
 					</button>
 
-					<Chats {onSelect} />
+					<Chats {chatId} {onSelect} />
 				</div>
 			{:else if tab === 'microsoft_onedrive'}
 				<div in:fly={{ x: 20, duration: 150 }}>

@@ -6,6 +6,7 @@
 	let fileGitHideWhitespace: Record<string, boolean> = {};
 	import { onMount, onDestroy, tick, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { get, readable, writable, type Readable, type Writable } from 'svelte/store';
 	import {
 		chatViewEntry,
 		loadChatView,
@@ -28,7 +29,6 @@
 	let pageViews: Record<string, Page> = {};
 	let pendingPageTab: { href: string; label: string } | null = null;
 	import {
-		artifactContents,
 		config,
 		embed,
 		temporaryChatEnabled,
@@ -39,7 +39,6 @@
 		showSidebar,
 		mobile,
 		showCallOverlay,
-		showArtifacts,
 		showEmbeds,
 		settings,
 		showFileNav,
@@ -133,6 +132,7 @@
 	export let folderId: string | null = null;
 	export let terminalContext: TerminalContext | null = null;
 	export let chatUser = null;
+	export let mainArtifacts: Readable<{ type: string; content: string }[]> = readable([]);
 
 	export let bridge: import('$lib/utils/realtime').RealtimeCall | undefined = undefined;
 	export let callMode = 'current';
@@ -141,6 +141,7 @@
 	export let onAskFile:
 		| ((instruction: string, file: import('$lib/apis/terminal').FilesystemFile) => Promise<void>)
 		| null = null;
+	export let onDraftPrompt: ((text: string) => void) | null = null;
 	export let stopResponse: Function = () => {};
 	export let showMessage: Function = () => {};
 	export let files: any[] = [];
@@ -185,6 +186,14 @@
 	let gitViews: Record<string, GitBar> = {};
 	let sideViews: Record<string, SideChat> = {};
 	let sideChatStreaming: Record<string, boolean> = {};
+	// Each side chat writes its artifacts here; its artifacts tab reads them.
+	const sideArtifacts: Record<string, Writable<{ type: string; content: string }[]>> = {};
+	const sideArtifactsFor = (id: string) => (sideArtifacts[id] ??= writable([]));
+	const artifactsOf = (sourceTabId = mainChatTabId) =>
+		sourceTabId === mainChatTabId ? mainArtifacts : sideArtifactsFor(sourceTabId);
+	// The code block each artifacts tab was last asked to show.
+	let artifactSelections: Record<string, { code: string }> = {};
+	let pendingArtifacts: { code?: string } | null = null;
 	let viewEntry: ReturnType<typeof chatViewEntry> | null = null;
 	let viewReady = false;
 	let viewError = '';
@@ -226,6 +235,7 @@
 		viewReady = false;
 		tabs = emptyTabs();
 		sideChatStreaming = {};
+		pendingArtifacts = null;
 		++switchVersion;
 		tabsChatId = undefined;
 	}
@@ -526,7 +536,7 @@
 			}
 		};
 	};
-	const openPanel = (tab: PanelTab, inSidePanel = false) => {
+	const openPanel = (tab: PanelTab, inSidePanel = false, besideId?: string) => {
 		if (!viewReady || !viewEntry) return;
 		hasOpenedTabs = true;
 		if (tab.terminalId) {
@@ -541,7 +551,7 @@
 				);
 			tab = { ...tab, target: target ?? undefined };
 		}
-		tabs = inSidePanel ? openTabInSidePanel(tabs, tab) : openTab(tabs, tab);
+		tabs = inSidePanel ? openTabInSidePanel(tabs, tab, besideId) : openTab(tabs, tab);
 		changeChatView(viewEntry, { ...viewEntry.state, panels: tabs });
 		showTabs.set(true);
 	};
@@ -699,11 +709,38 @@
 					: undefined
 		});
 	};
+	/** Opens the artifacts tab of the chat in `sourceTabId` beside that chat. */
+	export const openArtifacts = (
+		code?: string,
+		sourceTabId = mainChatTabId,
+		inSidePanel = true
+	) => {
+		if (!$visibleControls['chat.artifacts']) return;
+		if (sourceTabId === mainChatTabId && !viewReady) {
+			// the chat's messages can render before its tabs are restored
+			pendingArtifacts = { code };
+			return;
+		}
+		if (!get(artifactsOf(sourceTabId)).length) return;
+		const id = `artifacts:${sourceTabId}`;
+		if (code) artifactSelections = { ...artifactSelections, [id]: { code } };
+		openPanel(
+			{ id, kind: 'artifacts', label: $i18n.t('Artifacts'), sourceTabId },
+			inSidePanel,
+			sourceTabId
+		);
+	};
+	$: if (viewReady && pendingArtifacts) {
+		const { code } = pendingArtifacts;
+		pendingArtifacts = null;
+		openArtifacts(code);
+	}
 	const openFeature = (
 		kind: 'artifacts' | 'preview' | 'voice' | 'comments' | 'side',
 		inSidePanel = false
 	) => {
 		if (!availableViews.some((view) => view.kind === kind && view.available)) return;
+		if (kind === 'artifacts') return openArtifacts(undefined, mainChatTabId, inSidePanel);
 		const view = availableViews.find((view) => view.kind === kind)!;
 		if (kind === 'side') {
 			let sideChatNumber = 1;
@@ -1011,17 +1048,23 @@
 				bridge?.end();
 				showCallOverlay.set(false);
 			}
-			if (tab.kind === 'artifacts') showArtifacts.set(false);
 			if (tab.kind === 'preview') showEmbeds.set(false);
 			owner.drafts.delete(id);
 			const previousPanels = owner.state.panels;
-			const closedPanels = removeTab(previousPanels, id);
+			let closedPanels = removeTab(previousPanels, id);
+			// a side chat's artifacts have nothing to show once the chat is gone
+			if (tab.kind === 'side') closedPanels = removeTab(closedPanels, `artifacts:${id}`);
 			changeChatView(owner, { ...owner.state, panels: closedPanels });
 			if (owner === viewEntry) {
 				tabs = owner.state.panels;
 				delete dirtyFiles[id];
 				delete fileContexts[id];
 				delete sideChatStreaming[id];
+				delete artifactSelections[id];
+				if (tab.kind === 'side') {
+					delete sideArtifacts[id];
+					delete artifactSelections[`artifacts:${id}`];
+				}
 				if (!tabs.tabs.length || (!largeScreen && tabs.tabs.every((tab) => tab.kind === 'chat')))
 					showTabs.set(false);
 				await tick();
@@ -1144,7 +1187,7 @@
 			}
 		};
 	};
-	const navigateTabs = (event: KeyboardEvent) => {
+	const navigateTabs = async (event: KeyboardEvent) => {
 		if (!(event.target instanceof HTMLElement) || event.target.getAttribute('role') !== 'tab')
 			return;
 		const group = tabs.groups.find((group) => group.id === tabs.activeGroupId)!;
@@ -1153,6 +1196,8 @@
 			event.preventDefault();
 			const tabIndex = tabGroups[tabs.activeId].tabIds.indexOf(tabs.activeId);
 			tabs = moveTab(tabs, tabs.activeId, tabIndex + (event.key === 'ArrowLeft' ? -1 : 1));
+			await tick();
+			document.getElementById(domId(tabs.activeId))?.focus();
 			return;
 		}
 		let next = index;
@@ -1228,7 +1273,15 @@
 					...commentTarget
 				}
 			: null;
-	$: showArtifactsTab = ($artifactContents ?? []).length > 0 && $visibleControls['chat.artifacts'];
+	// A side chat's artifacts tab names the chat it belongs to.
+	$: tabLabel = (tab: PanelTab) => {
+		const source =
+			tab.kind === 'artifacts' && tab.sourceTabId !== mainChatTabId
+				? tabs.tabs.find((item) => item.id === tab.sourceTabId)
+				: null;
+		return source ? `${tab.label} · ${source.label}` : tab.label;
+	};
+	$: showArtifactsTab = $mainArtifacts.length > 0 && $visibleControls['chat.artifacts'];
 	$: showPreviewTab = !!$embed && $embed.chatId === chatId;
 	$: availableViews = [
 		{ kind: 'files', label: $i18n.t('Files'), available: showFilesTab },
@@ -1482,15 +1535,13 @@
 		commentTarget = typeof $showTabs === 'object' ? $showTabs : {};
 		openFeature('comments');
 	}
-	$: if (viewReady && $showArtifacts && showArtifactsTab) {
-		openFeature('artifacts', true);
-		showArtifacts.set(false);
-	}
 	$: if (viewReady && $showEmbeds && showPreviewTab) {
 		openFeature('preview');
 		showEmbeds.set(false);
 	}
 	$: if (viewReady && $showCallOverlay) openFeature('voice');
+	$: if (viewReady && !$showCallOverlay && tabs.tabs.some((tab) => tab.kind === 'voice'))
+		closeTab('voice');
 	$: if (viewReady && $showTabs === 'voice') openFeature('voice');
 	$: if (viewReady && $showFileNav) {
 		const request = $showFileNav;
@@ -1922,12 +1973,20 @@
 				{:else if tab.kind === 'preview'}
 					<Embeds overlay={dragged} />
 				{:else if tab.kind === 'artifacts'}
-					<Artifacts overlay={dragged} />
+					{@const source = tabs.tabs.find((item) => item.id === tab.sourceTabId)}
+					<Artifacts
+						overlay={dragged}
+						artifacts={artifactsOf(tab.sourceTabId)}
+						selection={artifactSelections[tab.id] ?? null}
+						chatId={(source?.kind === 'side' ? source.chatId : owner.chatId) ?? ''}
+					/>
 				{:else if tab.kind === 'side'}
 					<SideChat
 						standalone={!!tab.href}
 						bind:this={sideViews[tab.id]}
 						bind:streaming={sideChatStreaming[tab.id]}
+						artifacts={sideArtifactsFor(tab.id)}
+						onOpenArtifacts={(code) => openArtifacts(code, tab.id)}
 						initialView={owner.transient[`side:${tab.id}`]}
 						chatId={tab.chatId ?? ''}
 						onChatUpdate={(chat) =>
@@ -2131,6 +2190,7 @@
 									openFile(path, tab.terminalId!, null, fileTarget?.context.modelId)}
 								onOpenDirectory={(path) =>
 									openFiles(tab.terminalId, path, false, fileTarget?.context.modelId)}
+								{onDraftPrompt}
 							/>
 						{/if}
 					</div>
@@ -2201,7 +2261,7 @@
 							aria-controls={`${domId(tab.id)}-view`}
 							aria-selected={group.activeId === tab.id}
 							tabindex={group.activeId === tab.id ? 0 : -1}
-							title={tab.kind === 'chat' ? title : (tab.directory ?? tab.path ?? tab.label)}
+							title={tab.kind === 'chat' ? title : (tab.directory ?? tab.path ?? tabLabel(tab))}
 							aria-label={tab.kind === 'chat' ? title : undefined}
 							class="flex h-full items-center gap-1.5 min-w-0"
 						>
@@ -2219,7 +2279,7 @@
 							{/if}
 							{#if tab.kind !== 'chat' || !tabTitleEditor}
 								<span class="max-w-30 overflow-hidden text-ellipsis"
-									>{tab.kind === 'chat' ? title : tab.label}</span
+									>{tab.kind === 'chat' ? title : tabLabel(tab)}</span
 								>
 							{/if}
 							{#if tab.kind === 'comments' && commentCount}<span class="text-gray-400"
@@ -2244,7 +2304,7 @@
 									.join(' · ')}
 								aria-label={tab.kind === 'voice'
 									? $i18n.t('End call')
-									: `${$i18n.t('Close')} ${tab.label}`}
+									: `${$i18n.t('Close')} ${tabLabel(tab)}`}
 								on:click|stopPropagation={() => closeTab(tab.id)}
 								><Icon name="xmark" size={12} /></button
 							>{/if}

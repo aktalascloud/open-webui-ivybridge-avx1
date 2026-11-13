@@ -2125,7 +2125,7 @@
 								: `${inputId}-generate-message-pair-button`}
 							type="button"
 							aria-label={$i18n.t('Generate message pair')}
-							class="hidden"
+							class="hidden generate-message-pair-button"
 							on:click={() => createMessagePair(prompt)}
 						/>
 
@@ -2602,6 +2602,7 @@
 										bind:show={showInputMenu}
 										bind:tab={inputMenuTab}
 										closeOnOutsideClick={inputMenuCloseOnOutsideClick}
+										{chatId}
 										bind:files
 										selectedModels={selectedModelIds}
 										fileUploadCapableModels={getFilesystemUploadTerminal(
