@@ -336,10 +336,10 @@ index 0000000000000000000000000000000000000000..077d35fa7e7306641bbcdb6f1b7fcfd8
 +    unittest.main()
 diff --git a/.avx1/test_upstream_20261104.py b/.avx1/test_upstream_20261104.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..0908d58fef7e4f78ed4503ab7d7bd7e5475ecf76
+index 0000000000000000000000000000000000000000..6d191b046864802611c3dbcec37d0487f6261d76
 --- /dev/null
 +++ b/.avx1/test_upstream_20261104.py
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,85 @@
 +"""Synthetic gates for upstream compaction, OAuth and bounded file reads."""
 +import ast
 +import asyncio
@@ -393,10 +393,12 @@ index 0000000000000000000000000000000000000000..0908d58fef7e4f78ed4503ab7d7bd7e5
 +        ])
 +        async def identity(value, user):
 +            return value
++        converter = load('utils/misc.py', {'convert_output_to_messages'}, {})['convert_output_to_messages']
 +        scope = load('utils/context_compaction.py', {'_generate_summary', '_message_prefix', '_response_text'}, {
 +            'copy': copy, 'JSONCodec': json, 'JSONResponse': type('UnusedResponse', (), {}),
 +            'Config': NS(get_many=AsyncMock(return_value={})),
 +            'DEFAULT_CONTEXT_COMPACTION_PROMPT': 'Summarize',
++            'convert_output_to_messages': converter,
 +            'get_content_from_message': lambda m: m.get('content', ''),
 +            'get_last_user_message': lambda messages: 'question',
 +            'replace_prompt_variable': lambda text, _: text,
