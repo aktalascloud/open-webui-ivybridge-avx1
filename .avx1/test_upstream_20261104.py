@@ -51,10 +51,12 @@ class UpstreamChecks(unittest.IsolatedAsyncioTestCase):
         ])
         async def identity(value, user):
             return value
+        converter = load('utils/misc.py', {'convert_output_to_messages'}, {})['convert_output_to_messages']
         scope = load('utils/context_compaction.py', {'_generate_summary', '_message_prefix', '_response_text'}, {
             'copy': copy, 'JSONCodec': json, 'JSONResponse': type('UnusedResponse', (), {}),
             'Config': NS(get_many=AsyncMock(return_value={})),
             'DEFAULT_CONTEXT_COMPACTION_PROMPT': 'Summarize',
+            'convert_output_to_messages': converter,
             'get_content_from_message': lambda m: m.get('content', ''),
             'get_last_user_message': lambda messages: 'question',
             'replace_prompt_variable': lambda text, _: text,
