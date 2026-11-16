@@ -336,10 +336,10 @@ index 0000000000000000000000000000000000000000..077d35fa7e7306641bbcdb6f1b7fcfd8
 +    unittest.main()
 diff --git a/.avx1/test_upstream_20261104.py b/.avx1/test_upstream_20261104.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..6d191b046864802611c3dbcec37d0487f6261d76
+index 0000000000000000000000000000000000000000..fcf7ba9089dd647f0282a83f3956cf1224990d41
 --- /dev/null
 +++ b/.avx1/test_upstream_20261104.py
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,87 @@
 +"""Synthetic gates for upstream compaction, OAuth and bounded file reads."""
 +import ast
 +import asyncio
@@ -385,6 +385,8 @@ index 0000000000000000000000000000000000000000..6d191b046864802611c3dbcec37d0487
 +        await self.summary_case(True)
 +
 +    async def summary_case(self, fallback):
++        models_module = ModuleType('open_webui.utils.models')
++        models_module.add_tether_model = AsyncMock(side_effect=lambda request, user, model_id, models: models)
 +        module = ModuleType('open_webui.utils.chat')
 +        module.generate_chat_completion = AsyncMock(side_effect=[
 +            {'choices': [{'message': {'tool_calls': [{'id': 'unexpected'}]}}]} if fallback else
@@ -410,7 +412,7 @@ index 0000000000000000000000000000000000000000..6d191b046864802611c3dbcec37d0487
 +        messages = [{'role': 'user', 'content': 'old'}, {'role': 'user', 'content': 'unique recent'}]
 +        form = {'messages': messages, 'tools': [{'type': 'function', 'function': {'name': 'lookup'}}], 'tool_choice': 'required'}
 +        before = copy.deepcopy(form)
-+        with patch.dict(sys.modules, {'open_webui.utils.chat': module}):
++        with patch.dict(sys.modules, {'open_webui.utils.chat': module, 'open_webui.utils.models': models_module}):
 +            result = await scope['_generate_summary'](NS(state=NS()), form, NS(), 'm', {'m': {}}, messages[:1], messages[1:], None, 'summary', True)
 +        self.assertEqual(form, before)
 +        calls = module.generate_chat_completion.call_args_list
