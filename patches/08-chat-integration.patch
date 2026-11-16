@@ -1,6 +1,6 @@
 diff --git a/.avx1/frontend-contract.json b/.avx1/frontend-contract.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..7c82d66e6d3dabb1a333709241dc0e53995ba39a
+index 0000000000000000000000000000000000000000..27f42475cf46f059192b075dd934604a2065accb
 --- /dev/null
 +++ b/.avx1/frontend-contract.json
 @@ -0,0 +1,27 @@
@@ -15,10 +15,10 @@ index 0000000000000000000000000000000000000000..7c82d66e6d3dabb1a333709241dc0e53
 +  "helper_sha256": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
 +  "sources": {
 +    "src/lib/utils/assistantCompatibility.js": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
-+    "src/lib/components/chat/MessageInput.svelte": "3f667cf82063c2d7b6f16574cb400cd703f18386711af976fb520124d0bc6b1b",
-+    "src/lib/components/chat/Chat.svelte": "9cc45d1c24f9e9a26fa8bb153faa6a458ea3442c7dd567a7c4afa47adc0c95d3",
++    "src/lib/components/chat/MessageInput.svelte": "0e7731407b28981dab119dfce4b43275a54ad5163941d1db6b8d21148ffd9c00",
++    "src/lib/components/chat/Chat.svelte": "336b7c5f36e424ea801b645195acba211554264884137b8ab8f49fef393c2393",
 +    "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "ce328c1e16a630e7ddcec85b83eed8c183d77301603281de3e7fbd0ec04d1e00",
++    "src/lib/components/chat/Messages/ResponseMessage.svelte": "05504c8a6b58d4b80092fa2a252022eb109d0dc05b46450f4607c467dc77de32",
 +    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "39c5d885756c7b15b1c9ee5801cd13bbd7a832a8d366536ec7d36545c2671869"
 +  },
 +  "reviewed_upstream_change": {
@@ -341,10 +341,10 @@ index 0000000000000000000000000000000000000000..70387d4f118d1e5c48144b62ec90089c
 + assert.strictEqual(resolve(null, {'ru-RU': explicit}, 'ru-RU', t), explicit);
 +});
 diff --git a/backend/open_webui/config.py b/backend/open_webui/config.py
-index 6a10bd03fa97d9c9783a90252179e4e3b71a19f3..163477bc07abbb0c246dfb8a3a1fa989933982e4 100644
+index 7d3caf0d9fa56c1b739c87e0f52039fcecf0bfe9..bf2ccbcb34525bfb2fed84d8e20573a86c75b9a7 100644
 --- a/backend/open_webui/config.py
 +++ b/backend/open_webui/config.py
-@@ -2097,6 +2097,16 @@ ENABLE_CALENDAR = os.getenv('ENABLE_CALENDAR', 'True').lower() == 'true'
+@@ -2087,6 +2087,16 @@ ENABLE_CALENDAR = os.getenv('ENABLE_CALENDAR', 'True').lower() == 'true'
  ENABLE_AUTOMATIONS = os.getenv('ENABLE_AUTOMATIONS', 'True').lower() == 'true'
  
  ENABLE_SUBAGENTS = os.getenv('ENABLE_SUBAGENTS', 'False').lower() == 'true'
@@ -361,7 +361,7 @@ index 6a10bd03fa97d9c9783a90252179e4e3b71a19f3..163477bc07abbb0c246dfb8a3a1fa989
  SUBAGENTS_BACKGROUND_ENABLED = os.getenv('SUBAGENTS_BACKGROUND_ENABLED', 'False').lower() == 'true'
  # Leave empty for unlimited.
  SUBAGENTS_MAX_CONCURRENT = os.getenv('SUBAGENTS_MAX_CONCURRENT', '')
-@@ -3276,6 +3286,7 @@ DEFAULT_CONFIG = {
+@@ -3264,6 +3274,7 @@ DEFAULT_CONFIG = {
      'calendar.enable': ENABLE_CALENDAR,
      'automations.enable': ENABLE_AUTOMATIONS,
      'subagents.enable': ENABLE_SUBAGENTS,
@@ -370,10 +370,10 @@ index 6a10bd03fa97d9c9783a90252179e4e3b71a19f3..163477bc07abbb0c246dfb8a3a1fa989
      'subagents.max_concurrent': SUBAGENTS_MAX_CONCURRENT,
      'subagents.max_async': SUBAGENTS_MAX_ASYNC,
 diff --git a/backend/open_webui/routers/configs.py b/backend/open_webui/routers/configs.py
-index 7e5244ab3774907fb5eab11bd1fc01d8eba895e5..b6f6908b71a73ca3e1e9b9af966fad0921835d3a 100644
+index 0b848ac26bcc778d0f8d69fc65485475be7bcc0e..a28dde40fb62eb18a349cd2c4d8e044b06600f0b 100644
 --- a/backend/open_webui/routers/configs.py
 +++ b/backend/open_webui/routers/configs.py
-@@ -68,6 +68,7 @@ MODELS_CONFIG_KEYS = {
+@@ -66,6 +66,7 @@ MODELS_CONFIG_KEYS = {
  }
  SUBAGENTS_CONFIG_KEYS = {
      'ENABLE_SUBAGENTS': 'subagents.enable',
@@ -381,7 +381,7 @@ index 7e5244ab3774907fb5eab11bd1fc01d8eba895e5..b6f6908b71a73ca3e1e9b9af966fad09
      'SUBAGENTS_BACKGROUND_ENABLED': 'subagents.background_enabled',
      'SUBAGENTS_MAX_CONCURRENT': 'subagents.max_concurrent',
      'SUBAGENTS_MAX_ASYNC': 'subagents.max_async',
-@@ -641,6 +642,7 @@ async def set_models_config(request: Request, form_data: ModelsConfigForm, user=
+@@ -637,6 +638,7 @@ async def set_models_config(request: Request, form_data: ModelsConfigForm, user=
  
  class SubagentsConfigForm(BaseModel):
      ENABLE_SUBAGENTS: bool
@@ -389,7 +389,7 @@ index 7e5244ab3774907fb5eab11bd1fc01d8eba895e5..b6f6908b71a73ca3e1e9b9af966fad09
      SUBAGENTS_BACKGROUND_ENABLED: bool
      SUBAGENTS_MAX_CONCURRENT: int | None = Field(default=None, gt=0)
      SUBAGENTS_MAX_ASYNC: int | None = Field(default=None, gt=0)
-@@ -676,7 +678,7 @@ async def set_subagents_config(
+@@ -672,7 +674,7 @@ async def set_subagents_config(
      form_data: SubagentsConfigForm,
      user=Depends(get_admin_user),
  ):
@@ -399,7 +399,7 @@ index 7e5244ab3774907fb5eab11bd1fc01d8eba895e5..b6f6908b71a73ca3e1e9b9af966fad09
      await publish_event(
          request,
 diff --git a/backend/open_webui/routers/models.py b/backend/open_webui/routers/models.py
-index 91558b0c049d64b6dc3d62ff63e6a0d72373eebf..980ae1388452d096582d0153f63053edd40b5825 100644
+index 918700b290d0d6aab323c68e99ddb00bbd3f1ebe..cf46854f20069068581990bd71f4eade7290ba27 100644
 --- a/backend/open_webui/routers/models.py
 +++ b/backend/open_webui/routers/models.py
 @@ -42,6 +42,7 @@ from open_webui.models.models import (
@@ -432,7 +432,7 @@ index 91558b0c049d64b6dc3d62ff63e6a0d72373eebf..980ae1388452d096582d0153f63053ed
  
      form_data.access_grants = await filter_allowed_access_grants(
 diff --git a/backend/open_webui/routers/openai.py b/backend/open_webui/routers/openai.py
-index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140b463cc71 100644
+index 76a4507b49d79f2453214d6be2fb17a5e159fa1f..9c55cd64628052166f1b0480dac29c70ffed9831 100644
 --- a/backend/open_webui/routers/openai.py
 +++ b/backend/open_webui/routers/openai.py
 @@ -2,6 +2,8 @@ from __future__ import annotations
@@ -452,7 +452,7 @@ index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140
  from aiocache import cached
  from fastapi import APIRouter, Depends, HTTPException, Request, status
  from fastapi.responses import (
-@@ -45,6 +48,7 @@ from open_webui.utils.headers import get_headers_and_cookies, include_user_info_
+@@ -46,6 +49,7 @@ from open_webui.utils.headers import bearer_auth_header, get_headers_and_cookies
  from open_webui.utils.json_codec import JSONCodec
  from open_webui.utils.misc import convert_logit_bias_input_to_json, get_provider_function, merge_tool_call_batches
  from open_webui.utils.model_ids import strip_provider_model_prefix
@@ -460,7 +460,7 @@ index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140
  from open_webui.utils.payload import (
      apply_model_params_to_body_openai,
      apply_system_prompt_to_body,
-@@ -62,9 +66,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
+@@ -63,9 +67,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
  log = logging.getLogger(__name__)
  
  
@@ -474,7 +474,7 @@ index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140
  
  # Headers that become stale after aiohttp auto-decompresses the upstream
  # response body.  Forwarding them verbatim causes desktop / programmatic
-@@ -148,7 +156,11 @@ def openai_reasoning_model_handler(payload):
+@@ -149,7 +157,11 @@ def openai_reasoning_model_handler(payload):
      return payload
  
  
@@ -486,7 +486,7 @@ index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140
  
  router = APIRouter()
  
-@@ -389,6 +401,7 @@ async def get_anthropic_request_target(request: Request, form_data: dict, user:
+@@ -437,6 +449,7 @@ async def get_anthropic_request_target(request: Request, form_data: dict, user:
      url, key, api_config = await get_openai_connection(model['urlIdx'])
      prefix_id = api_config.get('prefix_id')
      payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
@@ -494,7 +494,7 @@ index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140
  
      headers, cookies = await get_headers_and_cookies(request, url, key, api_config, user=user)
  
-@@ -1411,7 +1424,10 @@ async def generate_chat_completion(
+@@ -1459,7 +1472,10 @@ async def generate_chat_completion(
      if not await Config.get('openai.enable'):
          raise HTTPException(status_code=503, detail='OpenAI API is disabled')
  
@@ -506,7 +506,7 @@ index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140
  
      # bypass_filter and bypass_system_prompt are read from request.state to prevent
      # external clients from setting them via query parameter. Only internal
-@@ -1474,6 +1490,12 @@ async def generate_chat_completion(
+@@ -1531,6 +1547,12 @@ async def generate_chat_completion(
  
      prefix_id = api_config.get('prefix_id', None)
      payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
@@ -519,7 +519,7 @@ index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140
  
      # Add user info to the payload if the model is a pipeline
      if 'pipeline' in model and model.get('pipeline'):
-@@ -1708,6 +1730,7 @@ async def embeddings(request: Request, form_data: dict, user):
+@@ -1765,6 +1787,7 @@ async def embeddings(request: Request, form_data: dict, user):
      url, key, api_config = await get_openai_connection(idx)
  
      form_data['model'] = strip_provider_model_prefix(form_data['model'], api_config.get('prefix_id'))
@@ -527,7 +527,7 @@ index e174ea71f11cf7f0c535ac5998ebf481667b5327..1afab53004ec439c41a80e77f73a8140
      # Prepare payload/body
      body = JSONCodec.dumps(form_data)
  
-@@ -1842,6 +1865,7 @@ async def responses(
+@@ -1899,6 +1922,7 @@ async def responses(
      url, key, api_config = await get_openai_connection(idx)
  
      payload['model'] = strip_provider_model_prefix(payload['model'], api_config.get('prefix_id'))
@@ -570,10 +570,10 @@ index 36d5bb07c79e2fd3f91cb9b3cd46e3a38759852f..f716f0a8f5f26fd835177c698e73a8c0
      headers = {
          'Content-Type': 'application/json',
 diff --git a/backend/open_webui/utils/middleware.py b/backend/open_webui/utils/middleware.py
-index da566f6403c4a67592e134765ae08ec620a4f066..49ddeab186e5213f69403e29507a39544506b317 100644
+index 82e7aef1c63160c2395dffceba72a08b488b76e2..caeb7c82e2041012531731639e7449dbda1a01b5 100644
 --- a/backend/open_webui/utils/middleware.py
 +++ b/backend/open_webui/utils/middleware.py
-@@ -1923,13 +1923,17 @@ def strip_reasoning_details(output: list) -> list:
+@@ -1918,13 +1918,17 @@ def strip_reasoning_details(output: list) -> list:
  
  def strip_tool_images(output: list, model: dict) -> list:
      """Replace tool result images with a text note when the model has Vision turned off."""
@@ -594,7 +594,7 @@ index da566f6403c4a67592e134765ae08ec620a4f066..49ddeab186e5213f69403e29507a3954
              ]
              item = {**item, 'output': parts}
 diff --git a/backend/open_webui/utils/models.py b/backend/open_webui/utils/models.py
-index fc2913dac1cf924f21c2e4dfe7de0e3ce043bda0..a440140d08827e0e40ead17b0b2a6bd3bc66fb84 100644
+index 3b6e07b1c219fe955bf900f4ed87a7ececc3cbaa..1c0fafb814211c804574374eaf8e786067e518a8 100644
 --- a/backend/open_webui/utils/models.py
 +++ b/backend/open_webui/utils/models.py
 @@ -391,7 +391,10 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
@@ -620,44 +620,18 @@ index 374b5b49045e33e6727b31a1f3ac41b9511d845d..28e3e7d766814cce91884e45df5745c4
  from uuid import uuid4
  
  from open_webui.utils.json_codec import JSONCodec
-diff --git a/src/lib/apis/index.ts b/src/lib/apis/index.ts
-index bb3e6c15e6155cc169fe84092769b8c36f43998a..d695380e35c06605ec653e82a7b0f1cf39ab67a3 100644
---- a/src/lib/apis/index.ts
-+++ b/src/lib/apis/index.ts
-@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
- import { config, selectedTerminalId, selectedFolder, chatId } from '$lib/stores';
- import { WEBUI_BASE_URL } from '$lib/constants';
- import { convertOpenApiToToolPayload, resolveSchema } from '$lib/utils';
-+import { filterToolServerSpecs } from '$lib/utils/toolServerPolicy.js';
- import { normalizeTags } from '$lib/utils/tags';
- import { getOpenAIModelsDirect } from './openai';
- 
-@@ -520,10 +521,11 @@ export const getToolServersData = async (servers: object[]) => {
- 						const { openapi, info, specs } = {
- 							openapi: res,
- 							info: res.info,
--							specs: convertOpenApiToToolPayload(res)
-+                            specs: filterToolServerSpecs(convertOpenApiToToolPayload(res), server?.config?.function_name_filter_list)
- 						};
- 
- 						const result: Record<string, any> = {
-+                            ...(server?.id != null ? { id: server.id } : {}),
- 							url: server?.url,
- 							openapi: openapi,
- 							info: info,
 diff --git a/src/lib/components/chat/Chat.svelte b/src/lib/components/chat/Chat.svelte
-index ce21dadc0955a5affe862661e296d994b1d56415..6c5256954bd4501ed550f46a931d02d006344a60 100644
+index 2349f84f957c9b702869fb8a59d17bc094a92193..1d0c6aab3fae3efa919fdcef507e1a294a39900b 100644
 --- a/src/lib/components/chat/Chat.svelte
 +++ b/src/lib/components/chat/Chat.svelte
-@@ -1,4 +1,7 @@
+@@ -1,4 +1,6 @@
  <script lang="ts">
 +	import { __assistantMicOrigin } from '$lib/utils/assistantCompatibility.js';
-+	import { isSelectedDirectToolServer } from '$lib/utils/toolServerPolicy.js';
 +	import { applyStrataReasoning } from '$lib/utils/strataReasoning';
  	import { getTerminalServers } from '$lib/apis/terminal';
  	import { resolveToolApprovalMode } from '$lib/utils/toolPermissions';
  	import type { AppLayoutContext, TerminalContext } from '$lib/types';
-@@ -3970,7 +3973,8 @@
+@@ -3990,7 +3992,8 @@
  	const submitPrompt = async (
  		inputContent: string,
  		inputFiles: any[],
@@ -667,7 +641,7 @@ index ce21dadc0955a5affe862661e296d994b1d56415..6c5256954bd4501ed550f46a931d02d0
  	) => {
  		if (selectedModels.includes('')) throw new Error($i18n.t('Model not selected'));
  		const _files = structuredClone(inputFiles);
-@@ -3997,6 +4001,7 @@
+@@ -4017,6 +4020,7 @@
  			user: { id: $user?.id, name: $user?.name },
  			user_id: $user?.id,
  			content: inputContent,
@@ -675,7 +649,7 @@ index ce21dadc0955a5affe862661e296d994b1d56415..6c5256954bd4501ed550f46a931d02d0
  			files: _files.length > 0 ? _files : undefined,
  			timestamp: Math.floor(Date.now() / 1000), // Unix epoch
  			models: selectedModels
-@@ -4278,6 +4283,7 @@
+@@ -4407,6 +4411,7 @@
  			}
  		}
  		if (processing === 'uploading') return { status: 'deferred' };
@@ -683,7 +657,7 @@ index ce21dadc0955a5affe862661e296d994b1d56415..6c5256954bd4501ed550f46a931d02d0
  		emitTyping(false);
  		if (bridgeRequest && (selectedModelIds.length !== 1 || !bridgeRequest.modelId))
  			return { status: 'rejected' };
-@@ -4455,7 +4461,7 @@
+@@ -4582,7 +4587,7 @@
  		messageInput?.setText('');
  
  		return (
@@ -692,21 +666,7 @@ index ce21dadc0955a5affe862661e296d994b1d56415..6c5256954bd4501ed550f46a931d02d0
  				status: 'rejected'
  			}
  		);
-@@ -4812,12 +4818,7 @@
- 		for (const toolId of selectedToolIds) {
- 			if (toolId.startsWith('direct_server:')) {
- 				let serverId = toolId.replace('direct_server:', '');
--				// Check if serverId is a number
--				if (!isNaN(parseInt(serverId))) {
--					toolServerIds.push(parseInt(serverId));
--				} else {
--					toolServerIds.push(serverId);
--				}
-+				toolServerIds.push(serverId);
- 			} else {
- 				toolIds.push(toolId);
- 			}
-@@ -4839,12 +4840,12 @@
+@@ -4951,12 +4956,12 @@
  				stream: stream,
  				model: model.id,
  				...(messages.length > 0 ? { messages } : {}),
@@ -721,26 +681,17 @@ index ce21dadc0955a5affe862661e296d994b1d56415..6c5256954bd4501ed550f46a931d02d0
  
  				files: embedded
  					? [...(files ?? []), ...noteFiles]
-@@ -4867,7 +4868,7 @@
- 				tool_servers: $config?.features?.enable_tool_servers
- 					? [
- 							...($toolServers ?? []).filter(
--								(server, idx) => toolServerIds.includes(idx) || toolServerIds.includes(server?.id)
-+								(server, idx) => isSelectedDirectToolServer(server, idx, toolServerIds)
- 							),
- 							// Direct terminal servers — always included when enabled (not routed through selectedToolIds)
- 							...(terminalEnabled
-@@ -4880,7 +4881,7 @@
- 								: [])
- 						]
- 					: [],
+@@ -4976,7 +4981,7 @@
+ 				skill_ids: skillIds.length > 0 ? skillIds : undefined,
+ 				terminal_id: terminalEnabled && requestTerminalId ? requestTerminalId : null,
+ 				terminal_cwd: !_chatId ? requestTerminalCwd : undefined,
 -				features: getFeatures(),
 +				features: {...getFeatures(), dictation: !!(userMessage?.meta?.input_source === "microphone")},
  				variables: {
  					...getPromptVariables(
  						$user?.name,
 diff --git a/src/lib/components/chat/MessageInput.svelte b/src/lib/components/chat/MessageInput.svelte
-index 6d4ac2c4dff66c66131a7650ce1140c796709430..da29612ba6c3a122dd44bd5c833e8d60cb23651e 100644
+index bcd7e84a9653d3ca817ca5de4417fbd9fc698850..9c208e6dc4304b0350504a766fd33965da0ef835 100644
 --- a/src/lib/components/chat/MessageInput.svelte
 +++ b/src/lib/components/chat/MessageInput.svelte
 @@ -1,4 +1,5 @@
@@ -749,7 +700,7 @@ index 6d4ac2c4dff66c66131a7650ce1140c796709430..da29612ba6c3a122dd44bd5c833e8d60
  	import { resolveTerminalTarget } from '$lib/apis/terminal';
  	import type { TerminalContext } from '$lib/types';
  	import {
-@@ -93,6 +94,7 @@
+@@ -92,6 +93,7 @@
  	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
  	import ModelSelector from './ModelSelector.svelte';
  	import ModelControls from './MessageInput/ModelControls.svelte';
@@ -757,9 +708,9 @@ index 6d4ac2c4dff66c66131a7650ce1140c796709430..da29612ba6c3a122dd44bd5c833e8d60
  
  	import ToolServersModal from './ToolServersModal.svelte';
  	import SkillsModal from './SkillsModal.svelte';
-@@ -1084,11 +1086,11 @@
- 						{ chatId: sessionId, modelId: selectedModels[0] ?? null }
- 					)
+@@ -1070,11 +1072,11 @@
+ 						modelId: selectedModels[0] ?? null
+ 					})
  				: null;
 -			if (!terminal) throw new Error('The attached file’s terminal is unavailable.');
 +			if (!terminal) throw new Error($i18n.t('The attached file’s terminal is unavailable.'));
@@ -772,7 +723,7 @@ index 6d4ac2c4dff66c66131a7650ce1140c796709430..da29612ba6c3a122dd44bd5c833e8d60
  
  			const cwd =
  				(terminalContext?.terminalId === fileItem.terminal_id
-@@ -2101,6 +2103,7 @@
+@@ -2083,6 +2085,7 @@
  
  								await tick();
  								await insertTextAtCursor(`${text}`);
@@ -780,7 +731,7 @@ index 6d4ac2c4dff66c66131a7650ce1140c796709430..da29612ba6c3a122dd44bd5c833e8d60
  								await tick();
  								focus({ preventScroll: true });
  
-@@ -2416,6 +2419,7 @@
+@@ -2398,6 +2401,7 @@
  													id={inputId}
  													editable={!showInputModal}
  													onChange={(content) => {
@@ -788,7 +739,7 @@ index 6d4ac2c4dff66c66131a7650ce1140c796709430..da29612ba6c3a122dd44bd5c833e8d60
  														prompt = content.md;
  														inputContent = content;
  														command = getCommand();
-@@ -2986,6 +2990,7 @@
+@@ -2970,6 +2974,7 @@
  											triggerClassName="items-center gap-1.5 rounded-lg pl-2 pr-1.5 py-1 text-[0.8125rem] font-normal text-gray-600 transition-colors duration-100 hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
  										/>
  									</div>
@@ -797,7 +748,7 @@ index 6d4ac2c4dff66c66131a7650ce1140c796709430..da29612ba6c3a122dd44bd5c833e8d60
  										selectedModels={selectedModelIds}
  										bind:chatFiles
 diff --git a/src/lib/components/workspace/Models/ModelEditor.svelte b/src/lib/components/workspace/Models/ModelEditor.svelte
-index cde719d200e034cd60ea31e6225c9b30cbf3562a..16fb8e7f358f87536ca70e2fffcbfb88d5eda22b 100644
+index ab391c130486380766342f0e1fbde5fb61c024c1..e4bb47adfc792f16d7b5b38f288e146320c5347c 100644
 --- a/src/lib/components/workspace/Models/ModelEditor.svelte
 +++ b/src/lib/components/workspace/Models/ModelEditor.svelte
 @@ -70,6 +70,7 @@
@@ -808,7 +759,7 @@ index cde719d200e034cd60ea31e6225c9b30cbf3562a..16fb8e7f358f87536ca70e2fffcbfb88
  		type AnimationFiles,
  		type VoiceAvatarConfig
  	} from '$lib/utils/voice-avatar';
-@@ -683,6 +684,7 @@
+@@ -682,6 +683,7 @@
  	const loadModel = async (value: any) => {
  		customPromptDraft = null;
  		model = value ? structuredClone(value) : null;
@@ -816,7 +767,7 @@ index cde719d200e034cd60ea31e6225c9b30cbf3562a..16fb8e7f358f87536ca70e2fffcbfb88
  		backgroundFile = null;
  		avatarFile = null;
  		animationFiles = {};
-@@ -692,7 +694,6 @@
+@@ -691,7 +693,6 @@
  		if (model) {
  			model.meta ??= {};
  			name = model.name;
@@ -825,17 +776,17 @@ index cde719d200e034cd60ea31e6225c9b30cbf3562a..16fb8e7f358f87536ca70e2fffcbfb88
  
  			id = model.id;
 diff --git a/src/lib/stores/index.ts b/src/lib/stores/index.ts
-index 67758238a6d2019c161d872cab8bf64205981df2..cfd8ceb0657d057a9409e91f28e20154204554c1 100644
+index 31ee4bcbefbefcb96a5934c1bf161db42d3505c1..73ad774bbac7a5d4b5f6f677af756b81e26c10a1 100644
 --- a/src/lib/stores/index.ts
 +++ b/src/lib/stores/index.ts
-@@ -272,6 +272,7 @@ type OllamaModelDetails = {
+@@ -274,6 +274,7 @@ type OllamaModelDetails = {
  };
  
  type Settings = {
 +  strataReasoningEfforts?: Record<string, string>;
  	pinnedModels?: string[];
- 	toolServers?: never[];
  	detectArtifacts?: boolean;
+ 	showUpdateToast?: boolean;
 diff --git a/src/lib/utils/assistantCompatibility.js b/src/lib/utils/assistantCompatibility.js
 new file mode 100644
 index 0000000000000000000000000000000000000000..29f683ba56a2519dc34418ac11f5715480523393

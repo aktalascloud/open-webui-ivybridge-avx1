@@ -958,7 +958,7 @@ index 0000000000000000000000000000000000000000..fcee49980febac5dc96994b1ab6e52af
 +FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 +OTHER DEALINGS IN THE FONT SOFTWARE.
 diff --git a/backend/open_webui/routers/terminals.py b/backend/open_webui/routers/terminals.py
-index 753a1316db68ae762ee92dc8ea0b43abca8d3c29..0eed0770c834a6496ee78c34ec6d4b1bb3e008dc 100644
+index c3b603514acbaa52d51a76a7b07a1cb4252524d5..d89d9bca15d776a360a25db845cfa8a7c05d02f3 100644
 --- a/backend/open_webui/routers/terminals.py
 +++ b/backend/open_webui/routers/terminals.py
 @@ -25,7 +25,7 @@ from open_webui.models.groups import Groups
@@ -987,8 +987,8 @@ index 753a1316db68ae762ee92dc8ea0b43abca8d3c29..0eed0770c834a6496ee78c34ec6d4b1b
 +            raise HTTPException(403, 'Browser mode unavailable')
          path = f'browser/view/{sid}/{data["capability"]}/{path}'
      return await _proxy_terminal(
-         server_id, path, request, user,
-@@ -205,7 +207,7 @@ async def relay_to_browser(ws, upstream):
+         server_id,
+@@ -209,7 +211,7 @@ async def relay_to_browser(ws, upstream):
  async def watch_access(server_id, sid, browser_token, request):
      while True:
          await asyncio.sleep(10)
@@ -997,7 +997,7 @@ index 753a1316db68ae762ee92dc8ea0b43abca8d3c29..0eed0770c834a6496ee78c34ec6d4b1b
          current = await find_terminal_connection(current_user, server_id, browser_context(data), request=request)
          if not current:
              return
-@@ -214,11 +216,12 @@ async def watch_access(server_id, sid, browser_token, request):
+@@ -218,11 +220,12 @@ async def watch_access(server_id, sid, browser_token, request):
  @router.websocket('/{server_id}/browser/view/{sid}/{browser_token}/{kind}')
  async def browser_ws(ws: WebSocket, server_id: str, sid: str, browser_token: str, kind: str):
      try:
@@ -1011,19 +1011,25 @@ index 753a1316db68ae762ee92dc8ea0b43abca8d3c29..0eed0770c834a6496ee78c34ec6d4b1b
              or not ENABLE_TOOL_SERVERS
              or not connection
          ):
-@@ -386,9 +389,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
+@@ -398,14 +401,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
          headers['Content-Type'] = content_type
  
      if connection.get('template_id') and safe_path == 'files/preview' and request.method == 'POST':
 -        browser_token = create_browser_token(
+-            server_id,
+-            user.id,
+-            session_id or '',
+-            {'id': 'files', 'token': ''},
+-            headers,
+-            cookies,
+-            resource='files',
 +        browser_token = browser_ticket(
-             server_id, user.id, session_id or '', {'id': 'files', 'token': ''},
--            headers, cookies, resource='files',
++            server_id, user.id, session_id or '', {'id': 'files', 'token': ''},
 +            headers, cookies, resource='files', owner_token=request.state.token.credentials,
          )
          base = request.url.path.removesuffix('/files/preview')
          return {'url': f'{base}/browser/view/files/{quote(browser_token, safe="")}/'}
-@@ -462,8 +465,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
+@@ -481,8 +479,9 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
          ):
              browser_session = json.loads(response_body)
              if isinstance(browser_session, dict) and browser_session.get('id') and browser_session.get('token'):

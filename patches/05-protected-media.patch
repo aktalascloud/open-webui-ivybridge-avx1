@@ -71,10 +71,10 @@ index 784244ad319eba5fd4bd40b2071dadee76c52eac..56490411c1567657a16bbf8abc78055e
  			{token.text}
  		{/if}
 diff --git a/src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte b/src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte
-index 4c2732cf41635f30d5f081c0859dc60e71336406..35c74626d208f5802b25a73431336a5d28f4b86f 100644
+index 2f6825960cd9306b4e47f056dbb8bf956225d6aa..551183a54d4abb6a549d5d393ea2d8c7b0ddd2cd 100644
 --- a/src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte
 +++ b/src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte
-@@ -22,6 +22,7 @@
+@@ -24,6 +24,7 @@
  	import { WEBUI_BASE_URL } from '$lib/constants';
  	import { skills, terminalSkills } from '$lib/stores';
  	import { copyToClipboard, safeLinkUrl, unescapeHtml } from '$lib/utils';
@@ -82,7 +82,7 @@ index 4c2732cf41635f30d5f081c0859dc60e71336406..35c74626d208f5802b25a73431336a5d
  
  	import Image from '$lib/components/common/Image.svelte';
  	import KatexRenderer from './KatexRenderer.svelte';
-@@ -76,6 +77,14 @@
+@@ -78,6 +79,14 @@
  	 * Handle link clicks - intercept same-origin app URLs for in-app navigation
  	 */
  	const handleLinkClick = (e: MouseEvent, href: string) => {
@@ -98,10 +98,10 @@ index 4c2732cf41635f30d5f081c0859dc60e71336406..35c74626d208f5802b25a73431336a5d
  			const url = new URL(href, window.location.origin);
  			// Check if same origin and an in-app route
 diff --git a/src/lib/components/chat/Messages/ResponseMessage.svelte b/src/lib/components/chat/Messages/ResponseMessage.svelte
-index 5c5b1f893dc56278b3e6113fd6d9eba52f918dc5..e9db8e511c96fb12d86cd817f97064d1c618ccc0 100644
+index 10e9c119845630c211fe328ffbed20543f9170dc..dfcb0e48166760f3b194679ba5320c15dca97ee6 100644
 --- a/src/lib/components/chat/Messages/ResponseMessage.svelte
 +++ b/src/lib/components/chat/Messages/ResponseMessage.svelte
-@@ -324,10 +324,8 @@
+@@ -323,10 +323,8 @@
  			};
  
  			loadingSpeech = true;
@@ -114,7 +114,7 @@ index 5c5b1f893dc56278b3e6113fd6d9eba52f918dc5..e9db8e511c96fb12d86cd817f97064d1
  
  			if (!messageContentParts.length) {
  				toast.info($i18n.t('No content to speak'));
-@@ -375,7 +373,9 @@
+@@ -374,7 +372,9 @@
  					if (signal.aborted) return;
  					if (!speaking) break;
  

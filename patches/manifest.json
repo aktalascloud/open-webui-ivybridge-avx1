@@ -3,9 +3,9 @@
   "grouping_version": 3,
   "ownership": "applied-downstream-only",
   "project": "webui",
-  "upstream": "31a8c5442345cec0dc0778ff188324f66708d5eb",
-  "snapshot_source": "88a025dc9b7de4c93d6b704d6c6da59690a1373b",
-  "downstream_tree_without_patches": "b653d60c783789808fef67f120414c34ed482c61",
+  "upstream": "8b11a2018c1ec899bd4df1f921fc4dd1dbc4e82f",
+  "snapshot_source": "2589e2d6b55d22602fb644c643e7e303fc10d60e",
+  "downstream_tree_without_patches": "ae69f2651be40ad5364158c0a17486e3a71023af",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -26,7 +26,7 @@
         "pyproject.toml",
         "uv.lock"
       ],
-      "sha256": "f0ca6b399123d505320771a1822147d63cffe4f5db905614418e7d4a11527825"
+      "sha256": "a5521803e68044feab8d649b17de8428488586c5c3d25cb716a9c1d3961aeba1"
     },
     {
       "patch": "02-free-llm.patch",
@@ -41,7 +41,7 @@
         "src/lib/components/admin/Settings/Connections.svelte",
         "src/lib/utils/freeLlm.js"
       ],
-      "sha256": "34a315385a9d8b37cdd09e4aaedf39378086186317aee41d3a60c1ea11fff179"
+      "sha256": "2a30f565191110c4f701d6ecea2d90c6e4a4286755ecc9fe3751968baa9abb6e"
     },
     {
       "patch": "03-strata-reasoning.patch",
@@ -90,7 +90,7 @@
         "src/lib/utils/protectedFiles.test.ts",
         "src/lib/utils/protectedFiles.ts"
       ],
-      "sha256": "0a111d222d68e93df05c3c1add2d3b8f20809763115a807595ee7d18d12d90b1"
+      "sha256": "5f7dcb15241d1aa4c5a3c4d27b4e853178f039c4ccae6305532f721049d04ec2"
     },
     {
       "patch": "06-terminal-browser-access.patch",
@@ -102,7 +102,7 @@
         "backend/open_webui/routers/terminals.py",
         "backend/open_webui/utils/browser.py"
       ],
-      "sha256": "8b973ff1fbbb858defa482dc4991abdeb1ae737e33867e9352691a5ec17eee7f"
+      "sha256": "b89b27f1ee071a0173978bb8ec7d2f07062cffd7bbc2783df38cdc37bddc2e93"
     },
     {
       "patch": "07-tools-and-subagents.patch",
@@ -115,10 +115,9 @@
         "backend/open_webui/utils/subagents.py",
         "backend/open_webui/utils/tools.py",
         "src/lib/components/admin/Settings/Subagents.svelte",
-        "src/lib/components/chat/MessageInput/IntegrationsMenu.svelte",
         "src/lib/utils/toolServerPolicy.js"
       ],
-      "sha256": "8794956e1fe452235460a6e4566e6d4245584dce0a5849b00b40ba61177659a5"
+      "sha256": "c05e679fcde65a2d856a5c8c0e6033c00cc129c47cdb8e1ff75d05127e84bfb5"
     },
     {
       "patch": "08-chat-integration.patch",
@@ -140,14 +139,13 @@
         "backend/open_webui/utils/middleware.py",
         "backend/open_webui/utils/models.py",
         "backend/open_webui/utils/response.py",
-        "src/lib/apis/index.ts",
         "src/lib/components/chat/Chat.svelte",
         "src/lib/components/chat/MessageInput.svelte",
         "src/lib/components/workspace/Models/ModelEditor.svelte",
         "src/lib/stores/index.ts",
         "src/lib/utils/assistantCompatibility.js"
       ],
-      "sha256": "53ecaedc386d46dbe5c6a984e15389950c344f002bfccd5cd204a2f1045c6e74"
+      "sha256": "ceebdb4fc6ec1b8df0103adb94b0343b5c55dfa7bd7b63a86b849a78c7ada6d9"
     },
     {
       "patch": "09-localization.patch",
@@ -159,7 +157,7 @@
         "src/lib/i18n/locales/ru-RU/translation.json",
         "src/lib/utils/localizedContent.ts"
       ],
-      "sha256": "094a26477889dc6e7fa30c9ae427011130a05f59f75f706d431bfe5f987913a4"
+      "sha256": "ca4c30db3eb82ae44985b2a321c5dae20d256227c496413ce3511bb048ee5ace"
     },
     {
       "patch": "10-native-json.patch",
@@ -217,7 +215,7 @@
         ".github/workflows/avx1-build.yml",
         ".gitignore"
       ],
-      "sha256": "a252046c64d93c6418b8047b7474b2b410fdcce2d9ca7e31ccde1de7c5cb5f82"
+      "sha256": "dcc4ac6b1846ee35bcf82298588fe9c11834f09aadbea2956159f852baf4acd0"
     },
     {
       "patch": "14-upstream-regressions.patch",
@@ -254,24 +252,24 @@
     }
   ],
   "files": {
-    "01-dependencies.patch": "f0ca6b399123d505320771a1822147d63cffe4f5db905614418e7d4a11527825",
-    "02-free-llm.patch": "34a315385a9d8b37cdd09e4aaedf39378086186317aee41d3a60c1ea11fff179",
+    "01-dependencies.patch": "a5521803e68044feab8d649b17de8428488586c5c3d25cb716a9c1d3961aeba1",
+    "02-free-llm.patch": "2a30f565191110c4f701d6ecea2d90c6e4a4286755ecc9fe3751968baa9abb6e",
     "03-strata-reasoning.patch": "0a18b93a488faabd2b41ab4827aa4468d5793c5e59a928784ba7030e07d92492",
     "04-voice-avatars.patch": "176deca91ce8a90ca2e291dadcc42c91562d9d63a15e9524fb0411ba1d2357a5",
-    "05-protected-media.patch": "0a111d222d68e93df05c3c1add2d3b8f20809763115a807595ee7d18d12d90b1",
-    "06-terminal-browser-access.patch": "8b973ff1fbbb858defa482dc4991abdeb1ae737e33867e9352691a5ec17eee7f",
-    "07-tools-and-subagents.patch": "8794956e1fe452235460a6e4566e6d4245584dce0a5849b00b40ba61177659a5",
-    "08-chat-integration.patch": "53ecaedc386d46dbe5c6a984e15389950c344f002bfccd5cd204a2f1045c6e74",
-    "09-localization.patch": "094a26477889dc6e7fa30c9ae427011130a05f59f75f706d431bfe5f987913a4",
+    "05-protected-media.patch": "5f7dcb15241d1aa4c5a3c4d27b4e853178f039c4ccae6305532f721049d04ec2",
+    "06-terminal-browser-access.patch": "b89b27f1ee071a0173978bb8ec7d2f07062cffd7bbc2783df38cdc37bddc2e93",
+    "07-tools-and-subagents.patch": "c05e679fcde65a2d856a5c8c0e6033c00cc129c47cdb8e1ff75d05127e84bfb5",
+    "08-chat-integration.patch": "ceebdb4fc6ec1b8df0103adb94b0343b5c55dfa7bd7b63a86b849a78c7ada6d9",
+    "09-localization.patch": "ca4c30db3eb82ae44985b2a321c5dae20d256227c496413ce3511bb048ee5ace",
     "10-native-json.patch": "25910fe5c82c97e3b77a0092295e61f4192c3ddafc665730548f6591adf4bd57",
     "11-package-assets.patch": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac",
     "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
-    "13-ci-build.patch": "a252046c64d93c6418b8047b7474b2b410fdcce2d9ca7e31ccde1de7c5cb5f82",
+    "13-ci-build.patch": "dcc4ac6b1846ee35bcf82298588fe9c11834f09aadbea2956159f852baf4acd0",
     "14-upstream-regressions.patch": "b15f8d0ef7dcb06135395a2627516e6ce442b14dede05a3f515979351701ddc9",
     "15-project-docs.patch": "c25c22758154576587dd5ed61a51921b2ffc580729f9a7971c6f7427a5d2a501",
     "16-fork-records.patch": "83885d10769e75d26c0c118975c20f10f70a66d35a26d342af58bf1b7cccee7d",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "d75c171ec990d68d24aebae9f7cd6aaf9d21c97a3b3dbc2da7d393f6c24fec76",
-    "README.md": "4bdb3077d695d6c747e4df6d0a37f8d7ce47b66f30a2c784a980df0562f1749b"
+    "README.md": "d10af70907bf99c6b21dc9270693e4ddd90e1b2312467fbde8dc84ecccba7779"
   }
 }

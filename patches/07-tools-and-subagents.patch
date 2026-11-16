@@ -256,14 +256,13 @@ index 0000000000000000000000000000000000000000..4b77458338c8c51c8f40f8d17ecaeb15
 +if __name__=='__main__':unittest.main()
 diff --git a/.avx1/test_tool_server_policy.mjs b/.avx1/test_tool_server_policy.mjs
 new file mode 100644
-index 0000000000000000000000000000000000000000..96f7f9784cf0898a6e98f45b37cf237b7e5831e3
+index 0000000000000000000000000000000000000000..7d4ea070bf24208f10830ec340de720ba2d58e77
 --- /dev/null
 +++ b/.avx1/test_tool_server_policy.mjs
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,41 @@
 +import {test} from 'node:test';
 +import assert from 'node:assert/strict';
 +import fs from 'node:fs';
-+import {stripTypeScriptTypes} from 'node:module';
 +import {filterToolServerSpecs, directToolServerKey, isSelectedDirectToolServer} from '../src/lib/utils/toolServerPolicy.js';
 +import {__assistantMicOrigin as mic} from '../src/lib/utils/assistantCompatibility.js';
 +
@@ -288,31 +287,12 @@ index 0000000000000000000000000000000000000000..96f7f9784cf0898a6e98f45b37cf237b
 +  assert.equal(isSelectedDirectToolServer({id:'01'},3,['01']),true);
 +  assert.equal(isSelectedDirectToolServer({},3,['3']),true);
 +});
-+test('actual discovery function filters advertised tools and preserves connection identity',async()=>{
-+  const source=fs.readFileSync(new URL('../src/lib/apis/index.ts',import.meta.url),'utf8');
-+  const start=source.indexOf('export const getToolServersData =');
-+  const end=source.indexOf('export const executeToolServer =',start);
-+  assert.ok(start>=0&&end>start);
-+  const body=stripTypeScriptTypes(source.slice(start,end).replace('export const','const'));
-+  const discover=new Function('get','config','getToolServerData','convertOpenApiToToolPayload',
-+    'filterToolServerSpecs','fetch','TOOL_SERVER_FETCH_TIMEOUT','localStorage',
-+    body+';return getToolServersData;')(
-+      ()=>({features:{enable_tool_servers:true}}),{},async()=>({paths:{},info:{title:'Fixture'}}),
-+      ()=>specs,filterToolServerSpecs,async()=>({ok:false}),1000,{token:'fixture'});
-+  const result=await discover([{id:'123abc',url:'https://fixture.invalid',path:'/openapi.json',auth_type:'none',
-+    config:{enable:true,function_name_filter_list:'search'}}]);
-+  assert.equal(result.length,1);
-+  assert.equal(result[0].id,'123abc');assert.deepEqual(result[0].specs,[specs[0]]);
-+});
-+
-+test('shared side-chat composer preserves mic provenance and exact tool IDs', () => {
++test('shared side-chat composer preserves mic provenance', () => {
 +  const source = fs.readFileSync(new URL('../src/lib/components/chat/Chat.svelte', import.meta.url), 'utf8');
-+  const side = fs.readFileSync(new URL('../src/lib/components/chat/Tabs/SideChat.svelte', import.meta.url), 'utf8');
-+  assert.match(side, /side=\{true\}/);
++  const side = fs.readFileSync(new URL('../src/lib/components/chat/Tabs.svelte', import.meta.url), 'utf8');
++  assert.match(side, /parentChatId=\{tab.parentChatId /);
 +  const micExpression = source.match(/const microphoneMeta = (.*);/)[1];
-+  const select = source.match(/\.filter\(\s*\(server, idx\) => isSelectedDirectToolServer\(server, idx, toolServerIds\)\s*\)/)[0];
 +  const provenance = new Function('__assistantMicOrigin', 'userPrompt', 'inputId', 'return ' + micExpression);
-+  const filtered = new Function('servers', 'isSelectedDirectToolServer', 'toolServerIds', 'return servers' + select);
 +  const nodes = new Map(['chat-input', 'side-fixture'].map(id => [id, {textContent:'same', addEventListener(){}}]));
 +  globalThis.document = {getElementById:id => nodes.get(id)};
 +  mic.mark('same', 'chat-input');
@@ -320,7 +300,6 @@ index 0000000000000000000000000000000000000000..96f7f9784cf0898a6e98f45b37cf237b
 +  mic.mark('same', 'side-fixture');
 +  assert.deepEqual(provenance(mic, 'same', 'side-fixture'), {input_source:'microphone'});
 +  assert.deepEqual(provenance(mic, 'same', 'chat-input'), {input_source:'microphone'});
-+  assert.deepEqual(filtered([{id:'wrong',url:'https://wrong.invalid'}, {id:'kept',url:'https://kept.invalid'}], isSelectedDirectToolServer, ['kept','0']), [{id:'kept',url:'https://kept.invalid'}]);
 +});
 diff --git a/backend/open_webui/tools/builtin.py b/backend/open_webui/tools/builtin.py
 index ec79e105b950dd2ad5f222460fd9d592966e3e70..bc1f498dbb3162fe7b6047e2d7e1d4c92c2cb68b 100644
@@ -366,7 +345,7 @@ index cc57a76101c187c575dd674c344a931f95e7d0a4..d44d0bf83cb079864212f1f7775952bf
  
      if not access_grants:
 diff --git a/backend/open_webui/utils/subagents.py b/backend/open_webui/utils/subagents.py
-index e447424f9cfbf97cdde1e87f31bcc970e894612a..73dd320136f94517b5ddbe75a804c24a320a8984 100644
+index 688177d3ac589a1e6b5406c8e5b8901123b9d59c..29ed1f43b1df85753ff4e1db9ae32df13da7603c 100644
 --- a/backend/open_webui/utils/subagents.py
 +++ b/backend/open_webui/utils/subagents.py
 @@ -18,7 +18,7 @@ from open_webui.tasks import create_task, has_active_tasks
@@ -436,9 +415,9 @@ index e447424f9cfbf97cdde1e87f31bcc970e894612a..73dd320136f94517b5ddbe75a804c24a
  async def process_pending_internal_messages(
      source_request: Request,
      parent_chat_id: str,
-@@ -374,12 +386,12 @@ async def delegate(
-     if run.get('direct'):
-         return 'Error: sub-agents are unavailable for direct connections.'
+@@ -370,12 +382,12 @@ async def delegate(
+     if not run.get('model_id'):
+         return 'Error: model context is required.'
      if model_id:
 -        available_models = await get_subagent_models(request, UserModel(**user_data), metadata.get('model') or {})
 -        available_ids = [model['id'] for model in available_models]
@@ -453,7 +432,7 @@ index e447424f9cfbf97cdde1e87f31bcc970e894612a..73dd320136f94517b5ddbe75a804c24a
                  'Omit model_id to use the current model.'
              )
      model_id = model_id or run['model_id']
-@@ -513,7 +525,7 @@ async def delegate(
+@@ -509,7 +521,7 @@ async def delegate(
              )
              form_data = {
                  'model': model_id,
@@ -463,10 +442,10 @@ index e447424f9cfbf97cdde1e87f31bcc970e894612a..73dd320136f94517b5ddbe75a804c24a
                      subagent_system_prompt,
                      [*chat_context.get('messages', []), {'role': 'user', 'content': prompt}],
 diff --git a/backend/open_webui/utils/tools.py b/backend/open_webui/utils/tools.py
-index 80bdcc5402c226b01109a2f8ea49c53220fde8df..bddb5928b8f3f791d3ee93cf0683f332c26f5880 100644
+index 728dfc44dc48b2679992ecb752d73dd2515f4f3e..249558482ef7ee0c2478e054916113ab46b81309 100644
 --- a/backend/open_webui/utils/tools.py
 +++ b/backend/open_webui/utils/tools.py
-@@ -972,7 +972,7 @@ async def get_builtin_tools(
+@@ -978,7 +978,7 @@ async def get_builtin_tools(
  
              subagent_models = await get_subagent_models(request, UserModel(**user), model) if user else []
              if subagent_models:
@@ -601,28 +580,6 @@ index 574d82351b1d8898d660d52a92c9efb76714d3dc..5af1d68f4d6254484af7bbaacc2975d5
  					<div>
  						<label class="text-xs text-gray-600 dark:text-gray-400" for="sa-concurrent">
  							{$i18n.t('settings.admin.subagents.maxConcurrent.label')}
-diff --git a/src/lib/components/chat/MessageInput/IntegrationsMenu.svelte b/src/lib/components/chat/MessageInput/IntegrationsMenu.svelte
-index 2c7c6e2660f74f1aa34ba78ddb117a0382123543..bde1e4964b3028bb6ed35a9ad5b031b9d067b2c8 100644
---- a/src/lib/components/chat/MessageInput/IntegrationsMenu.svelte
-+++ b/src/lib/components/chat/MessageInput/IntegrationsMenu.svelte
-@@ -1,4 +1,5 @@
- <script lang="ts">
-+	import { directToolServerKey } from '$lib/utils/toolServerPolicy.js';
- 	import { resolveLocalizedResource, resolveLocalizedFunction } from '$lib/utils/localizedContent';
- 	import { functions as localizedFunctions } from '$lib/stores';
- 	import { getContext, onDestroy, onMount, tick } from 'svelte';
-@@ -170,8 +171,9 @@
- 					continue;
- 				}
- 
--				items[`direct_server:${serverIdx}`] = {
--					id: `direct_server:${serverIdx}`,
-+				const selectionKey = directToolServerKey(server, serverIdx);
-+				items[selectionKey] = {
-+					id: selectionKey,
- 					name,
- 					description: server.info.description ?? ''
- 				};
 diff --git a/src/lib/utils/toolServerPolicy.js b/src/lib/utils/toolServerPolicy.js
 new file mode 100644
 index 0000000000000000000000000000000000000000..ae012d10cbc8cf8c59cd4e33dc504dc768d8a585

@@ -5,7 +5,7 @@ Only currently applied maintainer differences from the exact official baseline a
 Mainstream-only commits, rejected proposals and reverted experiments are excluded.
 Коммиты самого mainstream, неприменённые предложения и отменённые эксперименты исключены.
 
-Official baseline: `31a8c5442345cec0dc0778ff188324f66708d5eb`. Downstream snapshot: `88a025dc9b7de4c93d6b704d6c6da59690a1373b`.
+Official baseline: `8b11a2018c1ec899bd4df1f921fc4dd1dbc4e82f`. Downstream snapshot: `2589e2d6b55d22602fb644c643e7e303fc10d60e`.
 Patches are already applied in this fork. Apply `series` only to a clean checkout of that exact baseline.
 В этом форке патчи уже применены. `series` предназначен только для чистого checkout указанной базы.
 Apply the numbered patches in the order listed in `series`. Each row describes one topic.
@@ -22,8 +22,8 @@ Assistant microphone/voice/VRM hooks, Strata/FreeLLM controls, scoped tool polic
 | 4 | [04-voice-avatars.patch](04-voice-avatars.patch) | Render model VRMs with bounded textures and wire voice call and avatar controls / Отображает VRM моделей с лимитами текстур и подключает настройки звонков и аватаров. | 11 |
 | 5 | [05-protected-media.patch](05-protected-media.patch) | Load and download protected audio, video and files through authenticated requests / Загружает защищённые аудио, видео и файлы с авторизацией. | 8 |
 | 6 | [06-terminal-browser-access.patch](06-terminal-browser-access.patch) | Bind browser and watch tickets to the terminal owner, token and chat scope / Привязывает браузерные и файловые билеты к владельцу терминала, токену и чату. | 5 |
-| 7 | [07-tools-and-subagents.patch](07-tools-and-subagents.patch) | Scope tool discovery to selected IDs and resolve subagents under the caller’s access rights / Ограничивает инструменты выбранными ID и проверяет права вызывающего для субагентов. | 9 |
-| 8 | [08-chat-integration.patch](08-chat-integration.patch) | Wire mic origin, voice budget, tool selection and model routing into shared chat and request handlers / Подключает источник микрофона, бюджет голоса, выбор инструментов и маршрутизацию моделей в общих обработчиках. | 22 |
+| 7 | [07-tools-and-subagents.patch](07-tools-and-subagents.patch) | Scope tool discovery to selected IDs and resolve subagents under the caller’s access rights / Ограничивает инструменты выбранными ID и проверяет права вызывающего для субагентов. | 8 |
+| 8 | [08-chat-integration.patch](08-chat-integration.patch) | Wire mic origin, voice budget, tool selection and model routing into shared chat and request handlers / Подключает источник микрофона, бюджет голоса, выбор инструментов и маршрутизацию моделей в общих обработчиках. | 21 |
 | 9 | [09-localization.patch](09-localization.patch) | Translate fork controls and localize generated UI content / Переводит настройки форка и локализует содержимое интерфейса. | 5 |
 | 10 | [10-native-json.patch](10-native-json.patch) | Qualify AVX1 orjson builds and native cache reuse, with stock JSON as default / Проверяет AVX1-сборки orjson и переиспользование кэша, оставляя штатный JSON по умолчанию. | 11 |
 | 11 | [11-package-assets.patch](11-package-assets.patch) | Adjust WebUI package hooks, Vite build and bundled browser assets / Адаптирует упаковку WebUI, сборку Vite и ресурсы браузера. | 5 |

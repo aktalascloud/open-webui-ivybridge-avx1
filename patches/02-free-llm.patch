@@ -183,7 +183,7 @@ index 0000000000000000000000000000000000000000..eeedd80cffe80307478f85efd476133d
 +
 +Ежедневно проверяются каталог и указанные источники, PR/issues/форки. По одному сильному проверенному варианту от каждого из трёх вендоров; неизменный список не требует пересборки. Платные каналы, обязательные аккаунты/ключи и неподтверждённые модели исключаются. DSW2API и браузерная интеграция не возвращаются; локальные сервисы, история и ACL сохранены.
 diff --git a/src/lib/components/AddConnectionModal.svelte b/src/lib/components/AddConnectionModal.svelte
-index 6ce4058589af35562cb9a078469f7ca2ae180301..c095d40c69d09bbee8e3efb1d5fba15a45a80fc0 100644
+index f3d8da26d4079832b8b42d7bf6534a5efe30f014..5389f5167b39398f938a18ad9a5e393cbeb1e622 100644
 --- a/src/lib/components/AddConnectionModal.svelte
 +++ b/src/lib/components/AddConnectionModal.svelte
 @@ -1,5 +1,6 @@
@@ -193,10 +193,10 @@ index 6ce4058589af35562cb9a078469f7ca2ae180301..c095d40c69d09bbee8e3efb1d5fba15a
  	import { getContext, onMount } from 'svelte';
  	const i18n = getContext<any>('i18n');
  
-@@ -53,6 +54,14 @@
- 	let availableModelIds: string[] = [];
+@@ -37,6 +38,15 @@
  
- 	let loading = false;
+ 	let connectionType = 'external';
+ 	let provider = '';
 +	const providerChanged = () => {
 +		if (provider !== 'freellm') return;
 +		const preset = freeLlmPreset();
@@ -205,80 +205,36 @@ index 6ce4058589af35562cb9a078469f7ca2ae180301..c095d40c69d09bbee8e3efb1d5fba15a
 +		availableModelIds = [...preset.model_ids]; connectionType = 'external';
 +		headers = ''; forwardCookies = false; apiType = ''; apiVersion = '';
 +	};
- 	let showDeleteConfirmDialog = false;
- 	let showAdvanced = false;
- 
-@@ -356,6 +365,35 @@
- 					}}
- 				>
- 					<div class="px-1">
-+							{#if !ollama && !direct}
-+								<div class="flex flex-row justify-between items-center w-full mt-2">
-+									<label
-+										for="provider-select"
-+										class={`mb-0.5 text-xs text-gray-500
-+								`}>{$i18n.t('Provider')}</label
-+									>
 +
-+									<div>
-+										<select
-+											id="provider-select"
-+											bind:value={provider}
+ 	let prefixId = '';
+ 	let enable = true;
+ 	let apiVersion = '';
+@@ -656,14 +666,20 @@
+ 										<select
+ 											id="provider-select"
+ 											bind:value={provider}
 +											on:change={providerChanged}
-+											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
-+										>
-+											<option value="">{$i18n.t('Default')}</option>
-+											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
-+											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
-+											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
+ 											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
+ 										>
+ 											<option value="">{$i18n.t('Default')}</option>
+ 											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
+ 											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
+ 											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
 +											<option value="freellm">FreeLLM</option>
-+											<option value="litellm">{$i18n.t('LiteLLM')}</option>
-+										</select>
-+									</div>
-+								</div>
-+							{/if}
+ 											<option value="litellm">{$i18n.t('LiteLLM')}</option>
+ 										</select>
 +                            {#if provider === 'freellm'}
 +                                <p data-freellm-connection class="mb-3 rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-600 dark:bg-gray-850 dark:text-gray-300">{$i18n.t('FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.')}</p>
 +                            {/if}
 +
- 						{#if !direct}
- 							<div class="flex gap-2">
- 								<div class="flex w-full justify-between items-center">
-@@ -656,29 +694,7 @@
+ 									</div>
  								</div>
- 							</div>
- 
--							{#if !ollama && !direct}
--								<div class="flex flex-row justify-between items-center w-full mt-2">
--									<label
--										for="provider-select"
--										class={`mb-0.5 text-xs text-gray-500
--								`}>{$i18n.t('Provider')}</label
--									>
- 
--									<div>
--										<select
--											id="provider-select"
--											bind:value={provider}
--											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
--										>
--											<option value="">{$i18n.t('Default')}</option>
--											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
--											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
--											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
--											<option value="litellm">{$i18n.t('LiteLLM')}</option>
--										</select>
--									</div>
--								</div>
--							{/if}
- 
- 							{#if azure}
- 								<div class="flex gap-2 mt-2">
+ 							{/if}
 diff --git a/src/lib/components/admin/Settings/Connections.svelte b/src/lib/components/admin/Settings/Connections.svelte
-index bd8fbaeb9ef59f11d4937321443baa9a71b0c4f6..7c6f6ebf10c09cbfcfc3b995176a8f4ec7f9114c 100644
+index b85e4ac35c5aa13d61f3f75049b4d0a3e06873dc..50bd073a54375458f5c545c9fd8cbd97493741e1 100644
 --- a/src/lib/components/admin/Settings/Connections.svelte
 +++ b/src/lib/components/admin/Settings/Connections.svelte
-@@ -264,6 +264,7 @@
+@@ -259,6 +259,7 @@
  									on:click={() => {
  										showAddOpenAIConnectionModal = true;
  									}}
