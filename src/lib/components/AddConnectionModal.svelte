@@ -38,8 +38,8 @@
 
 	let connectionType = 'external';
 	let provider = '';
-	const providerChanged = () => {
-		if (provider !== 'freellm') return;
+	const providerChanged = (event: Event) => {
+		if ((event.currentTarget as HTMLSelectElement).value !== 'freellm') return;
 		const preset = freeLlmPreset();
 		url = preset.url; key = ''; auth_type = preset.auth_type;
 		prefixId = preset.prefix_id; modelIds = preset.model_ids;

@@ -117,6 +117,7 @@ def check_strata_reasoning(browser, base, work, provider):
     page.set_viewport_size({'width':1280,'height':900})
     page.goto(base+'/admin/settings/connections',wait_until='domcontentloaded')
     page.locator('[data-add-openai-connection]').click(timeout=45000)
+    page.get_by_role('button',name='Advanced',exact=True).click()
     selector=page.locator('#provider-select')
     selector.wait_for(state='visible')
     selector.select_option('freellm')
