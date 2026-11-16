@@ -43,6 +43,8 @@ class UpstreamChecks(unittest.IsolatedAsyncioTestCase):
         await self.summary_case(True)
 
     async def summary_case(self, fallback):
+        models_module = ModuleType('open_webui.utils.models')
+        models_module.add_tether_model = AsyncMock(side_effect=lambda request, user, model_id, models: models)
         module = ModuleType('open_webui.utils.chat')
         module.generate_chat_completion = AsyncMock(side_effect=[
             {'choices': [{'message': {'tool_calls': [{'id': 'unexpected'}]}}]} if fallback else
@@ -68,7 +70,7 @@ class UpstreamChecks(unittest.IsolatedAsyncioTestCase):
         messages = [{'role': 'user', 'content': 'old'}, {'role': 'user', 'content': 'unique recent'}]
         form = {'messages': messages, 'tools': [{'type': 'function', 'function': {'name': 'lookup'}}], 'tool_choice': 'required'}
         before = copy.deepcopy(form)
-        with patch.dict(sys.modules, {'open_webui.utils.chat': module}):
+        with patch.dict(sys.modules, {'open_webui.utils.chat': module, 'open_webui.utils.models': models_module}):
             result = await scope['_generate_summary'](NS(state=NS()), form, NS(), 'm', {'m': {}}, messages[:1], messages[1:], None, 'summary', True)
         self.assertEqual(form, before)
         calls = module.generate_chat_completion.call_args_list
