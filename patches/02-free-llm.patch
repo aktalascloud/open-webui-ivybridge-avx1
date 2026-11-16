@@ -183,7 +183,7 @@ index 0000000000000000000000000000000000000000..eeedd80cffe80307478f85efd476133d
 +
 +Ежедневно проверяются каталог и указанные источники, PR/issues/форки. По одному сильному проверенному варианту от каждого из трёх вендоров; неизменный список не требует пересборки. Платные каналы, обязательные аккаунты/ключи и неподтверждённые модели исключаются. DSW2API и браузерная интеграция не возвращаются; локальные сервисы, история и ACL сохранены.
 diff --git a/src/lib/components/AddConnectionModal.svelte b/src/lib/components/AddConnectionModal.svelte
-index f3d8da26d4079832b8b42d7bf6534a5efe30f014..5389f5167b39398f938a18ad9a5e393cbeb1e622 100644
+index f3d8da26d4079832b8b42d7bf6534a5efe30f014..33363d0d1c8f56c80af7cadd227f1a76a0578386 100644
 --- a/src/lib/components/AddConnectionModal.svelte
 +++ b/src/lib/components/AddConnectionModal.svelte
 @@ -1,5 +1,6 @@
@@ -197,8 +197,8 @@ index f3d8da26d4079832b8b42d7bf6534a5efe30f014..5389f5167b39398f938a18ad9a5e393c
  
  	let connectionType = 'external';
  	let provider = '';
-+	const providerChanged = () => {
-+		if (provider !== 'freellm') return;
++	const providerChanged = (event: Event) => {
++		if ((event.currentTarget as HTMLSelectElement).value !== 'freellm') return;
 +		const preset = freeLlmPreset();
 +		url = preset.url; key = ''; auth_type = preset.auth_type;
 +		prefixId = preset.prefix_id; modelIds = preset.model_ids;

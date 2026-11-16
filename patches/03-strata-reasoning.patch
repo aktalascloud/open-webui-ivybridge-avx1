@@ -23,10 +23,10 @@ index 0000000000000000000000000000000000000000..c3ea936a3cd614ca55c8047d5382f59c
 +}
 diff --git a/.avx1/strata_reasoning_browser.py b/.avx1/strata_reasoning_browser.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..531ee7f9dd49e39f2594a59eabe8edfb94b9d102
+index 0000000000000000000000000000000000000000..b742393a3a69a3b35d9a0f17e08c3874d9fea097
 --- /dev/null
 +++ b/.avx1/strata_reasoning_browser.py
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,134 @@
 +"""Exercise the packaged picker with a disposable user and mocked model transport."""
 +import json
 +import time
@@ -146,6 +146,7 @@ index 0000000000000000000000000000000000000000..531ee7f9dd49e39f2594a59eabe8edfb
 +    page.set_viewport_size({'width':1280,'height':900})
 +    page.goto(base+'/admin/settings/connections',wait_until='domcontentloaded')
 +    page.locator('[data-add-openai-connection]').click(timeout=45000)
++    page.get_by_role('button',name='Advanced',exact=True).click()
 +    selector=page.locator('#provider-select')
 +    selector.wait_for(state='visible')
 +    selector.select_option('freellm')
