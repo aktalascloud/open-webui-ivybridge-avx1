@@ -35,6 +35,7 @@
 		allLoaded,
 		loadNextChatListPage,
 		refreshChatList,
+		refreshFolderChatLists,
 		refreshSidebar,
 		registerFolderRefreshHandler,
 		setAllChatsRead,
@@ -948,6 +949,9 @@
 		if (event.data?.type === 'chat:active') {
 			updateFolderChatLists({ id: event.chat_id, active: event.data.data?.active ?? false, pending_approval: event.data.data?.pending_approval ?? false });
 			const eventData = event.data.data ?? {};
+			if (eventData.folder_unread_counts) {
+				applyFolderUnreadCounts(eventData.folder_unread_counts);
+			}
 			const active = eventData.active ?? false;
 			const pendingApproval = eventData.pending_approval ?? false;
 			const found = setChatActive(event.chat_id, active, pendingApproval);
@@ -1750,7 +1754,8 @@
 										const res = await toggleChatPinnedStatusById(localStorage.token, chat.id);
 									}
 
-									initChatList();
+									await initChatList();
+									void refreshFolderChatLists();
 								}
 							} else if (type === 'folder') {
 								if (folders[id].parent_id === null) {
@@ -1855,7 +1860,8 @@
 														);
 													}
 
-													initChatList();
+													await initChatList();
+													void refreshFolderChatLists();
 												}
 											}
 										}}

@@ -28,7 +28,6 @@
 	export let edit = false;
 
 	export let ollama = false;
-	export let direct = false;
 
 	export let connection: any = null;
 
@@ -39,6 +38,15 @@
 
 	let connectionType = 'external';
 	let provider = '';
+	const providerChanged = () => {
+		if (provider !== 'freellm') return;
+		const preset = freeLlmPreset();
+		url = preset.url; key = ''; auth_type = preset.auth_type;
+		prefixId = preset.prefix_id; modelIds = preset.model_ids;
+		availableModelIds = [...preset.model_ids]; connectionType = 'external';
+		headers = ''; forwardCookies = false; apiType = ''; apiVersion = '';
+	};
+
 	let prefixId = '';
 	let enable = true;
 	let apiVersion = '';
@@ -54,14 +62,6 @@
 	let availableModelIds: string[] = [];
 
 	let loading = false;
-	const providerChanged = () => {
-		if (provider !== 'freellm') return;
-		const preset = freeLlmPreset();
-		url = preset.url; key = ''; auth_type = preset.auth_type;
-		prefixId = preset.prefix_id; modelIds = preset.model_ids;
-		availableModelIds = [...preset.model_ids]; connectionType = 'external';
-		headers = ''; forwardCookies = false; apiType = ''; apiVersion = '';
-	};
 	let showDeleteConfirmDialog = false;
 	let showAdvanced = false;
 
@@ -133,23 +133,19 @@
 			}
 		}
 
-		const res = await verifyOpenAIConnection(
-			localStorage.token,
-			{
-				url,
-				key,
-				config: {
-					auth_type,
-					...(!direct && !ollama ? { forward_cookies: forwardCookies } : {}),
-					...(provider ? { provider } : {}),
-					...(azure ? { azure: true } : {}),
-					api_version: apiVersion,
-					passthrough_params: parsePassthroughParams(passthroughParams),
-					...(_headers ? { headers: _headers } : {})
-				}
-			},
-			direct
-		).catch((error) => {
+		const res = await verifyOpenAIConnection(localStorage.token, {
+			url,
+			key,
+			config: {
+				auth_type,
+				...(!ollama ? { forward_cookies: forwardCookies } : {}),
+				...(provider ? { provider } : {}),
+				...(azure ? { azure: true } : {}),
+				api_version: apiVersion,
+				passthrough_params: parsePassthroughParams(passthroughParams),
+				...(_headers ? { headers: _headers } : {})
+			}
+		}).catch((error) => {
 			toast.error(`${error}`);
 		});
 
@@ -251,7 +247,7 @@
 				model_ids: modelIds,
 				connection_type: connectionType,
 				auth_type,
-				...(!direct && !ollama ? { forward_cookies: forwardCookies } : {}),
+				...(!ollama ? { forward_cookies: forwardCookies } : {}),
 				headers: headers ? JSON.parse(headers) : undefined,
 				passthrough_params: parsePassthroughParams(passthroughParams),
 				...(provider ? { provider } : {}),
@@ -321,7 +317,6 @@
 	$: azure =
 		provider === 'azure' ||
 		((url.includes('azure.') || url.includes('cognitive.microsoft.com')) &&
-			!direct &&
 			provider === '' &&
 			!/\/openai\/v1(\/|$)/.test(url));
 
@@ -365,58 +360,27 @@
 					}}
 				>
 					<div class="px-1">
-							{#if !ollama && !direct}
-								<div class="flex flex-row justify-between items-center w-full mt-2">
-									<label
-										for="provider-select"
-										class={`mb-0.5 text-xs text-gray-500
-								`}>{$i18n.t('Provider')}</label
+						<div class="flex gap-2">
+							<div class="flex w-full justify-between items-center">
+								<div class=" text-xs text-gray-500">{$i18n.t('Connection Type')}</div>
+
+								<div class="">
+									<button
+										on:click={() => {
+											connectionType = connectionType === 'local' ? 'external' : 'local';
+										}}
+										type="button"
+										class=" text-xs text-gray-700 dark:text-gray-300"
 									>
-
-									<div>
-										<select
-											id="provider-select"
-											bind:value={provider}
-											on:change={providerChanged}
-											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
-										>
-											<option value="">{$i18n.t('Default')}</option>
-											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
-											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
-											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
-											<option value="freellm">FreeLLM</option>
-											<option value="litellm">{$i18n.t('LiteLLM')}</option>
-										</select>
-									</div>
-								</div>
-							{/if}
-                            {#if provider === 'freellm'}
-                                <p data-freellm-connection class="mb-3 rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-600 dark:bg-gray-850 dark:text-gray-300">{$i18n.t('FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.')}</p>
-                            {/if}
-
-						{#if !direct}
-							<div class="flex gap-2">
-								<div class="flex w-full justify-between items-center">
-									<div class=" text-xs text-gray-500">{$i18n.t('Connection Type')}</div>
-
-									<div class="">
-										<button
-											on:click={() => {
-												connectionType = connectionType === 'local' ? 'external' : 'local';
-											}}
-											type="button"
-											class=" text-xs text-gray-700 dark:text-gray-300"
-										>
-											{#if connectionType === 'local'}
-												{$i18n.t('Local')}
-											{:else}
-												{$i18n.t('External')}
-											{/if}
-										</button>
-									</div>
+										{#if connectionType === 'local'}
+											{$i18n.t('Local')}
+										{:else}
+											{$i18n.t('External')}
+										{/if}
+									</button>
 								</div>
 							</div>
-						{/if}
+						</div>
 
 						<div class="flex gap-2 mt-1.5">
 							<div class="flex flex-col w-full">
@@ -505,10 +469,8 @@
 
 											{#if !ollama}
 												<option value="session">{$i18n.t('Session')}</option>
-												{#if !direct}
-													<option value="system_oauth">{$i18n.t('OAuth')}</option>
-													<option value="microsoft_entra_id">{$i18n.t('Entra ID')}</option>
-												{/if}
+												<option value="system_oauth">{$i18n.t('OAuth')}</option>
+												<option value="microsoft_entra_id">{$i18n.t('Entra ID')}</option>
 											{/if}
 										</select>
 									</div>
@@ -542,7 +504,7 @@
 							</div>
 						</div>
 
-						{#if !ollama && !direct}
+						{#if !ollama}
 							<div class="flex flex-row justify-between items-center w-full mt-1">
 								<label
 									for="api-type-toggle"
@@ -592,7 +554,7 @@
 						</div>
 
 						{#if showAdvanced}
-							{#if !direct && !ollama}
+							{#if !ollama}
 								<div class="flex items-center justify-between gap-3 mt-2">
 									<div>
 										<label for="forward-cookies" class="text-xs text-gray-500">
@@ -610,35 +572,33 @@
 								</div>
 							{/if}
 
-							{#if !direct}
-								<div class="flex gap-2 mt-2">
-									<div class="flex flex-col w-full">
-										<label
-											for="headers-input"
-											class={`mb-0.5 text-xs text-gray-500
-								`}>{$i18n.t('Headers')}</label
-										>
+							<div class="flex gap-2 mt-2">
+								<div class="flex flex-col w-full">
+									<label
+										for="headers-input"
+										class={`mb-0.5 text-xs text-gray-500
+							`}>{$i18n.t('Headers')}</label
+									>
 
-										<div class="flex-1">
-											<Tooltip
-												content={$i18n.t(
-													'Enter additional headers in JSON format (e.g. {"X-Custom-Header": "value"}'
-												)}
-											>
-												<Textarea
-													className="w-full text-sm outline-hidden"
-													bind:value={headers}
-													placeholder={$i18n.t('Enter additional headers in JSON format')}
-													required={false}
-													minSize={30}
-												/>
-											</Tooltip>
-										</div>
+									<div class="flex-1">
+										<Tooltip
+											content={$i18n.t(
+												'Enter additional headers in JSON format (e.g. {"X-Custom-Header": "value"}'
+											)}
+										>
+											<Textarea
+												className="w-full text-sm outline-hidden"
+												bind:value={headers}
+												placeholder={$i18n.t('Enter additional headers in JSON format')}
+												required={false}
+												minSize={30}
+											/>
+										</Tooltip>
 									</div>
 								</div>
-							{/if}
+							</div>
 
-							{#if !ollama && !direct}
+							{#if !ollama}
 								<div class="flex gap-2 mt-2">
 									<div class="flex flex-col w-full">
 										<label
@@ -694,7 +654,35 @@
 								</div>
 							</div>
 
+							{#if !ollama}
+								<div class="flex flex-row justify-between items-center w-full mt-2">
+									<label
+										for="provider-select"
+										class={`mb-0.5 text-xs text-gray-500
+								`}>{$i18n.t('Provider')}</label
+									>
 
+									<div>
+										<select
+											id="provider-select"
+											bind:value={provider}
+											on:change={providerChanged}
+											class="text-xs text-gray-700 dark:text-gray-300 bg-transparent pr-5 outline-hidden"
+										>
+											<option value="">{$i18n.t('Default')}</option>
+											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
+											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
+											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
+											<option value="freellm">FreeLLM</option>
+											<option value="litellm">{$i18n.t('LiteLLM')}</option>
+										</select>
+                            {#if provider === 'freellm'}
+                                <p data-freellm-connection class="mb-3 rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-600 dark:bg-gray-850 dark:text-gray-300">{$i18n.t('FreeLLM: no account or API key. Shared limit: 200 requests/hour/IP. Providers may store prompts; avoid confidential data.')}</p>
+                            {/if}
+
+									</div>
+								</div>
+							{/if}
 
 							{#if azure}
 								<div class="flex gap-2 mt-2">

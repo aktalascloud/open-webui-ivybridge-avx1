@@ -176,8 +176,12 @@ async def browser_http(request: Request, server_id: str, sid: str, browser_token
             raise HTTPException(403, 'Browser mode unavailable')
         path = f'browser/view/{sid}/{data["capability"]}/{path}'
     return await _proxy_terminal(
-        server_id, path, request, user,
-        context=browser_context(data), browser_auth=data['relay'],
+        server_id,
+        path,
+        request,
+        user,
+        context=browser_context(data),
+        browser_auth=data['relay'],
     )
 
 
@@ -239,7 +243,11 @@ async def browser_ws(ws: WebSocket, server_id: str, sid: str, browser_token: str
     tasks = []
     try:
         async with get_terminal_client(
-            base, connection.get('instance_user_id', user.id), cookies=data['relay'].get('cookies', {}), trust_env=True
+            base,
+            connection.get('instance_user_id', user.id),
+            service=connection.get('service', 'open_terminal'),
+            cookies=data['relay'].get('cookies', {}),
+            trust_env=True,
         ) as client:
             async with client.ws_connect(
                 url,
@@ -284,7 +292,8 @@ async def list_terminal_servers(request: Request, user=Depends(get_verified_user
             'config': {'chat_uploads': terminal_chat_uploads(connection)},
         }
         for connection in connections
-        if connection.get('enabled', True) and (connection.get('template_id') or await has_connection_access(user, connection, user_group_ids))
+        if connection.get('enabled', True)
+        and (connection.get('template_id') or await has_connection_access(user, connection, user_group_ids))
     ]
 
 
@@ -301,7 +310,10 @@ async def proxy_terminal(
     user=Depends(get_verified_user),
 ):
     return await _proxy_terminal(
-        server_id, path, request, user,
+        server_id,
+        path,
+        request,
+        user,
         context={
             'chat_id': request.path_params.get('chat_id') or request.headers.get('x-session-id'),
             'model_id': request.headers.get('x-terminal-model-id'),
@@ -399,12 +411,14 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
     session = get_terminal_client(
         base_url,
         connection.get('instance_user_id', user.id),
+        service=connection.get('service', 'open_terminal'),
         timeout=aiohttp.ClientTimeout(total=300, connect=10),
         trust_env=True,
     )
 
     try:
-        body = request.stream()
+        has_body = 'content-length' in request.headers or 'transfer-encoding' in request.headers
+        body = request.stream() if has_body else None
 
         upstream_response = await session.request(
             method=request.method,
@@ -644,7 +658,9 @@ async def _proxy_terminal_websocket(
 
     request = Request({**ws.scope, 'type': 'http', 'method': 'GET'})
     opened = False
-    session = get_terminal_client(base_url, connection.get('instance_user_id', user.id))
+    session = get_terminal_client(
+        base_url, connection.get('instance_user_id', user.id), service=connection.get('service', 'open_terminal')
+    )
     try:
         async with session.ws_connect(
             upstream_url,
