@@ -302,10 +302,10 @@ index 0000000000000000000000000000000000000000..7d4ea070bf24208f10830ec340de720b
 +  assert.deepEqual(provenance(mic, 'same', 'chat-input'), {input_source:'microphone'});
 +});
 diff --git a/backend/open_webui/tools/builtin.py b/backend/open_webui/tools/builtin.py
-index ec79e105b950dd2ad5f222460fd9d592966e3e70..bc1f498dbb3162fe7b6047e2d7e1d4c92c2cb68b 100644
+index 0dfa235e18bdea2623e29b8c8cbf08dee756e3b8..301007b219b2c3e7f66a06fe773a36461c60bf8a 100644
 --- a/backend/open_webui/tools/builtin.py
 +++ b/backend/open_webui/tools/builtin.py
-@@ -1852,7 +1852,7 @@ async def delegate_task(
+@@ -1957,7 +1957,7 @@ async def delegate_task(
      :param file_ids: Attached file IDs the sub-agent needs. Use this for images or files;
          do not put file IDs only in context.
      :param background: Return immediately and continue this chat when the sub-agent finishes
@@ -345,7 +345,7 @@ index cc57a76101c187c575dd674c344a931f95e7d0a4..d44d0bf83cb079864212f1f7775952bf
  
      if not access_grants:
 diff --git a/backend/open_webui/utils/subagents.py b/backend/open_webui/utils/subagents.py
-index 688177d3ac589a1e6b5406c8e5b8901123b9d59c..29ed1f43b1df85753ff4e1db9ae32df13da7603c 100644
+index 3baa6938c23d89c02ffaabc1d4c8034967719f76..4160e683d98ebe04091359b60e796b5e97bc169a 100644
 --- a/backend/open_webui/utils/subagents.py
 +++ b/backend/open_webui/utils/subagents.py
 @@ -18,7 +18,7 @@ from open_webui.tasks import create_task, has_active_tasks
@@ -380,7 +380,7 @@ index 688177d3ac589a1e6b5406c8e5b8901123b9d59c..29ed1f43b1df85753ff4e1db9ae32df1
  async def _build_request(source: Request, user_id: str, *, internal: bool) -> Request:
      scope = {
          'type': 'http',
-@@ -91,6 +75,34 @@ async def _build_request(source: Request, user_id: str, *, internal: bool) -> Re
+@@ -91,6 +75,33 @@ async def _build_request(source: Request, user_id: str, *, internal: bool) -> Re
      return request
  
  
@@ -411,11 +411,10 @@ index 688177d3ac589a1e6b5406c8e5b8901123b9d59c..29ed1f43b1df85753ff4e1db9ae32df1
 +    # from the parent. Never mutate the main chat's controls.
 +    return dict(params or {}) if child_model_id == parent_model_id else {}
 +
-+
- async def process_pending_internal_messages(
-     source_request: Request,
-     parent_chat_id: str,
-@@ -370,12 +382,12 @@ async def delegate(
+ async def queue_user_message(
+     request: Request, chat_id: str, user: UserModel, user_message: dict, parent_id: str
+ ) -> bool:
+@@ -476,12 +487,12 @@ async def delegate(
      if not run.get('model_id'):
          return 'Error: model context is required.'
      if model_id:
@@ -432,7 +431,7 @@ index 688177d3ac589a1e6b5406c8e5b8901123b9d59c..29ed1f43b1df85753ff4e1db9ae32df1
                  'Omit model_id to use the current model.'
              )
      model_id = model_id or run['model_id']
-@@ -509,7 +521,7 @@ async def delegate(
+@@ -615,7 +626,7 @@ async def delegate(
              )
              form_data = {
                  'model': model_id,
@@ -442,10 +441,10 @@ index 688177d3ac589a1e6b5406c8e5b8901123b9d59c..29ed1f43b1df85753ff4e1db9ae32df1
                      subagent_system_prompt,
                      [*chat_context.get('messages', []), {'role': 'user', 'content': prompt}],
 diff --git a/backend/open_webui/utils/tools.py b/backend/open_webui/utils/tools.py
-index 728dfc44dc48b2679992ecb752d73dd2515f4f3e..249558482ef7ee0c2478e054916113ab46b81309 100644
+index 999f77b16ab69ffe85ef491426c3ac8002fa4931..5e4ae829e3b8b624d95f1d5917681343497451d6 100644
 --- a/backend/open_webui/utils/tools.py
 +++ b/backend/open_webui/utils/tools.py
-@@ -978,7 +978,7 @@ async def get_builtin_tools(
+@@ -1014,7 +1014,7 @@ async def get_builtin_tools(
  
              subagent_models = await get_subagent_models(request, UserModel(**user), model) if user else []
              if subagent_models:
@@ -455,10 +454,10 @@ index 728dfc44dc48b2679992ecb752d73dd2515f4f3e..249558482ef7ee0c2478e054916113ab
              else:
                  properties.pop('model_id', None)
 diff --git a/src/lib/components/admin/Settings/Subagents.svelte b/src/lib/components/admin/Settings/Subagents.svelte
-index 574d82351b1d8898d660d52a92c9efb76714d3dc..5af1d68f4d6254484af7bbaacc2975d541f9beef 100644
+index 976240ce559118a753508f33c152a45ad07339da..857d90dde765bcedb1a3776e17e7b8cef97d8a68 100644
 --- a/src/lib/components/admin/Settings/Subagents.svelte
 +++ b/src/lib/components/admin/Settings/Subagents.svelte
-@@ -4,16 +4,22 @@
+@@ -5,16 +5,22 @@
  	import { toast } from 'svelte-sonner';
  
  	import { config as appConfig } from '$lib/stores';
@@ -482,7 +481,7 @@ index 574d82351b1d8898d660d52a92c9efb76714d3dc..5af1d68f4d6254484af7bbaacc2975d5
  	let backgroundEnabled = false;
  	let maxConcurrent: number | null = null;
  	let maxAsync: number | null = null;
-@@ -25,12 +31,14 @@
+@@ -48,12 +54,14 @@
  		try {
  			const config = await getSubagentsConfig(localStorage.token);
  			enabled = config?.ENABLE_SUBAGENTS ?? false;
@@ -497,7 +496,7 @@ index 574d82351b1d8898d660d52a92c9efb76714d3dc..5af1d68f4d6254484af7bbaacc2975d5
  		} catch (error) {
  			toast.error(`${error}`);
  		} finally {
-@@ -43,6 +51,7 @@
+@@ -69,6 +77,7 @@
  		try {
  			await setSubagentsConfig(localStorage.token, {
  				ENABLE_SUBAGENTS: enabled,
@@ -505,7 +504,7 @@ index 574d82351b1d8898d660d52a92c9efb76714d3dc..5af1d68f4d6254484af7bbaacc2975d5
  				SUBAGENTS_BACKGROUND_ENABLED: backgroundEnabled,
  				SUBAGENTS_MAX_CONCURRENT: maxConcurrent ?? null,
  				SUBAGENTS_MAX_ASYNC: maxAsync ?? null,
-@@ -83,6 +92,74 @@
+@@ -110,6 +119,74 @@
  				</p>
  
  				{#if enabled}

@@ -147,16 +147,16 @@ index d7376b9aaff255f8a91bdc9153aebf05ebf661b8..c5a84b4e0d24909637c2f8b216e3c3da
  	})
  		.then(async (res) => {
 diff --git a/src/lib/components/chat/MessageInput/CallOverlay.svelte b/src/lib/components/chat/MessageInput/CallOverlay.svelte
-index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504eed1f02e 100644
+index f6cdfd101546884a528a1bce4e80552c7c51b167..7d059085855165668ee5ed4864e3378ea13e757b 100644
 --- a/src/lib/components/chat/MessageInput/CallOverlay.svelte
 +++ b/src/lib/components/chat/MessageInput/CallOverlay.svelte
 @@ -1,4 +1,5 @@
  <script lang="ts">
 +	import { __assistantVoiceBudget } from '$lib/utils/assistantCompatibility.js';
- 	import { config, models, settings, showCallOverlay, TTSWorker } from '$lib/stores';
+ 	import { config, settings, voiceCall, TTSWorker } from '$lib/stores';
  	import { onMount, tick, getContext, onDestroy, createEventDispatcher } from 'svelte';
  
-@@ -611,19 +612,14 @@
+@@ -614,19 +615,14 @@
  	const audioCache = new Map();
  	const emojiCache = new Map();
  
@@ -178,7 +178,7 @@ index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504
  					if (emoji) {
  						emojiCache.set(content, emoji);
  					}
-@@ -644,7 +640,7 @@
+@@ -647,7 +643,7 @@
  						audioCache.set(content, new Audio(url));
  					}
  				} else if ($config.audio.tts.engine !== '') {
@@ -187,7 +187,7 @@ index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504
  						(error) => {
  							console.error(error);
  							if (!failedMessages[id]) {
-@@ -739,6 +735,7 @@
+@@ -742,6 +738,7 @@
  
  			void stopAllAudio(false);
  			currentMessageId = id;
@@ -195,7 +195,7 @@ index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504
  			interrupted = false;
  			audioAbortController = new AbortController();
  
-@@ -753,6 +750,7 @@
+@@ -756,6 +753,7 @@
  		// Collect assistant sentences only for the active message ID.
  
  		if (currentMessageId === id) {
@@ -203,7 +203,7 @@ index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504
  			console.log(`Received chat event for message ID ${id}: ${content}`);
  
  			try {
-@@ -774,6 +772,11 @@
+@@ -777,6 +775,11 @@
  	const chatFinishHandler = async (e) => {
  		const { id, content } = e.detail;
  		// "content" here is the entire message from the assistant
@@ -215,7 +215,7 @@ index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504
  		finishedMessages[id] = true;
  
  		chatStreaming = false;
-@@ -994,14 +997,14 @@
+@@ -997,14 +1000,14 @@
  
  		<div class="flex justify-center items-center flex-1 h-full w-full max-h-full">
  			{#if !camera}
@@ -234,7 +234,7 @@ index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504
  							stopAllAudio();
  						}
  					}}
-@@ -1014,6 +1017,9 @@
+@@ -1017,6 +1020,9 @@
  								class:invisible={readyAvatar !== selectedAvatar.file_id}
  							>
  								<VoiceAvatar
@@ -244,7 +244,7 @@ index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504
  									bind:this={avatarView}
  									config={selectedAvatar}
  									speaking={avatarSpeaking}
-@@ -1099,7 +1105,7 @@
+@@ -1102,7 +1108,7 @@
  							/>
  						{/if}
  					{/if}
@@ -254,10 +254,10 @@ index 466e917e2a165e3345f69ee076b0a595f3a80cfa..3acdc27fde994c320162a1488ec23504
  				<div class="relative flex video-container w-full max-h-full pt-2 pb-4 md:py-6 px-2 h-full">
  					<!-- svelte-ignore a11y-media-has-caption -->
 diff --git a/src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte b/src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte
-index ab31ea9f6a15ab842932ca32995945086359d691..d1102632696f2edb8b3e4d579400637138d0db07 100644
+index 70975f37daca5e10291f6fe51bec317d093afc5e..d59208fcc60f70bc632cc0c85c8c077c6095bab3 100644
 --- a/src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte
 +++ b/src/lib/components/chat/MessageInput/CallOverlay/BridgeCallOverlay.svelte
-@@ -61,13 +61,13 @@
+@@ -64,13 +64,13 @@
  
  <section class="bridge-call" class:avatar-call={showAvatar} aria-label={$i18n.t('Voice call')}>
  	<div class="call-stage">
@@ -276,7 +276,7 @@ index ab31ea9f6a15ab842932ca32995945086359d691..d1102632696f2edb8b3e4d5794006371
  		>
  			{#if showAvatar && avatar}
  				{@const selectedAvatar = avatar}
-@@ -78,6 +78,9 @@
+@@ -81,6 +81,9 @@
  						class:loading-avatar={readyAvatar !== selectedAvatar.file_id}
  					>
  						<VoiceAvatar
@@ -286,7 +286,7 @@ index ab31ea9f6a15ab842932ca32995945086359d691..d1102632696f2edb8b3e4d5794006371
  							bind:this={avatarView}
  							interruption={bridge.animationInterruption}
  							config={selectedAvatar}
-@@ -113,7 +116,7 @@
+@@ -116,7 +119,7 @@
  					muted={unavailable || (bridge.muted && !bridge.speaking)}
  				/>
  			{/if}
@@ -295,7 +295,7 @@ index ab31ea9f6a15ab842932ca32995945086359d691..d1102632696f2edb8b3e4d5794006371
  
  		<div class="call-status" role="status" aria-live="polite" aria-atomic="true">
  			<p class="status-label">
-@@ -122,7 +125,7 @@
+@@ -125,7 +128,7 @@
  			</p>
  			<p class="status-hint">
  				{#if bridge.speaking}

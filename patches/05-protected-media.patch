@@ -71,10 +71,10 @@ index 784244ad319eba5fd4bd40b2071dadee76c52eac..56490411c1567657a16bbf8abc78055e
  			{token.text}
  		{/if}
 diff --git a/src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte b/src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte
-index 2f6825960cd9306b4e47f056dbb8bf956225d6aa..551183a54d4abb6a549d5d393ea2d8c7b0ddd2cd 100644
+index fb21f819d77ecc09aa8afe23a8fc3616b47d75c9..84bde741249879c25f37b2d3717f6fdf3e6353ae 100644
 --- a/src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte
 +++ b/src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte
-@@ -24,6 +24,7 @@
+@@ -25,6 +25,7 @@
  	import { WEBUI_BASE_URL } from '$lib/constants';
  	import { skills, terminalSkills } from '$lib/stores';
  	import { copyToClipboard, safeLinkUrl, unescapeHtml } from '$lib/utils';
@@ -82,10 +82,10 @@ index 2f6825960cd9306b4e47f056dbb8bf956225d6aa..551183a54d4abb6a549d5d393ea2d8c7
  
  	import Image from '$lib/components/common/Image.svelte';
  	import KatexRenderer from './KatexRenderer.svelte';
-@@ -78,6 +79,14 @@
- 	 * Handle link clicks - intercept same-origin app URLs for in-app navigation
+@@ -80,6 +81,14 @@
  	 */
  	const handleLinkClick = (e: MouseEvent, href: string) => {
+ 		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 +		const file = protectedFileUrl(href, window.location.origin);
 +		if (file) {
 +			e.preventDefault();
@@ -96,12 +96,12 @@ index 2f6825960cd9306b4e47f056dbb8bf956225d6aa..551183a54d4abb6a549d5d393ea2d8c7
 +		}
  		try {
  			const url = new URL(href, window.location.origin);
- 			// Check if same origin and an in-app route
+ 			const folderId = url.pathname.match(/^\/folders\/([^/]+)\/?$/)?.[1];
 diff --git a/src/lib/components/chat/Messages/ResponseMessage.svelte b/src/lib/components/chat/Messages/ResponseMessage.svelte
-index 10e9c119845630c211fe328ffbed20543f9170dc..dfcb0e48166760f3b194679ba5320c15dca97ee6 100644
+index 5f33b917fe2b69f72d1454a5590c04791132f750..d61ffe23d04d53a3a3683dc6be65786a68d41a0a 100644
 --- a/src/lib/components/chat/Messages/ResponseMessage.svelte
 +++ b/src/lib/components/chat/Messages/ResponseMessage.svelte
-@@ -323,10 +323,8 @@
+@@ -322,10 +322,8 @@
  			};
  
  			loadingSpeech = true;
@@ -114,7 +114,7 @@ index 10e9c119845630c211fe328ffbed20543f9170dc..dfcb0e48166760f3b194679ba5320c15
  
  			if (!messageContentParts.length) {
  				toast.info($i18n.t('No content to speak'));
-@@ -374,7 +372,9 @@
+@@ -373,7 +371,9 @@
  					if (signal.aborted) return;
  					if (!speaking) break;
  

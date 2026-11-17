@@ -1,6 +1,6 @@
 diff --git a/.avx1/frontend-contract.json b/.avx1/frontend-contract.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..27f42475cf46f059192b075dd934604a2065accb
+index 0000000000000000000000000000000000000000..bf2faead414073db8c3fb2b599129ca89cbe0a1d
 --- /dev/null
 +++ b/.avx1/frontend-contract.json
 @@ -0,0 +1,27 @@
@@ -15,11 +15,11 @@ index 0000000000000000000000000000000000000000..27f42475cf46f059192b075dd934604a
 +  "helper_sha256": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
 +  "sources": {
 +    "src/lib/utils/assistantCompatibility.js": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
-+    "src/lib/components/chat/MessageInput.svelte": "0e7731407b28981dab119dfce4b43275a54ad5163941d1db6b8d21148ffd9c00",
-+    "src/lib/components/chat/Chat.svelte": "336b7c5f36e424ea801b645195acba211554264884137b8ab8f49fef393c2393",
++    "src/lib/components/chat/MessageInput.svelte": "02bc019854a7ec7df73a8e02024f4b959a4159986befb1bbf0e9f8ac2eedb841",
++    "src/lib/components/chat/Chat.svelte": "822aa8bfb47a1d63925f946efbcf95f585041568dae962bfccb708e6c3fd92b8",
 +    "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "05504c8a6b58d4b80092fa2a252022eb109d0dc05b46450f4607c467dc77de32",
-+    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "39c5d885756c7b15b1c9ee5801cd13bbd7a832a8d366536ec7d36545c2671869"
++    "src/lib/components/chat/Messages/ResponseMessage.svelte": "9d86d161b82b66fc989bdd5b4b64ec115668c454a0e99e5b720389fce68cffd3",
++    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "ed3a64f4a3a9f30873084850b55d6ce193556585c01756c605cc5160e3e324b3"
 +  },
 +  "reviewed_upstream_change": {
 +    "upstream_commit": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
@@ -27,8 +27,8 @@ index 0000000000000000000000000000000000000000..27f42475cf46f059192b075dd934604a
 +  },
 +  "reviewed_local_change": "The shared Chat composer now handles main and side chats. Mic provenance selects the actual editor inputId; explicit direct tool IDs and voice wire V1 retained.",
 +  "reviewed_mainstream_change": {
-+    "upstream_commit": "31a8c5442345cec0dc0778ff188324f66708d5eb",
-+    "scope": "Current chat and sidebar updates keep microphone provenance by inputId, explicit tool IDs, speech identity and voice/avatar hooks. Terminal browser owner and resource binding retained."
++    "upstream_commit": "c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d",
++    "scope": "Current voiceCall/store and settings changes; retain exact inputId mic tagging, assistant voice budget and authenticated Markdown media. Browser view tickets bind the owner credential and terminal instance."
 +  }
 +}
 diff --git a/.avx1/frontend_contract.py b/.avx1/frontend_contract.py
@@ -341,10 +341,10 @@ index 0000000000000000000000000000000000000000..70387d4f118d1e5c48144b62ec90089c
 + assert.strictEqual(resolve(null, {'ru-RU': explicit}, 'ru-RU', t), explicit);
 +});
 diff --git a/backend/open_webui/config.py b/backend/open_webui/config.py
-index 7d3caf0d9fa56c1b739c87e0f52039fcecf0bfe9..bf2ccbcb34525bfb2fed84d8e20573a86c75b9a7 100644
+index 0b6ae4b2497ce88633d0c9289f9afd7b20f65fb4..11f8cb7797a382a3084d6858077b98213fb639f0 100644
 --- a/backend/open_webui/config.py
 +++ b/backend/open_webui/config.py
-@@ -2087,6 +2087,16 @@ ENABLE_CALENDAR = os.getenv('ENABLE_CALENDAR', 'True').lower() == 'true'
+@@ -2101,6 +2101,16 @@ ENABLE_CALENDAR = os.getenv('ENABLE_CALENDAR', 'True').lower() == 'true'
  ENABLE_AUTOMATIONS = os.getenv('ENABLE_AUTOMATIONS', 'True').lower() == 'true'
  
  ENABLE_SUBAGENTS = os.getenv('ENABLE_SUBAGENTS', 'False').lower() == 'true'
@@ -361,7 +361,7 @@ index 7d3caf0d9fa56c1b739c87e0f52039fcecf0bfe9..bf2ccbcb34525bfb2fed84d8e20573a8
  SUBAGENTS_BACKGROUND_ENABLED = os.getenv('SUBAGENTS_BACKGROUND_ENABLED', 'False').lower() == 'true'
  # Leave empty for unlimited.
  SUBAGENTS_MAX_CONCURRENT = os.getenv('SUBAGENTS_MAX_CONCURRENT', '')
-@@ -3264,6 +3274,7 @@ DEFAULT_CONFIG = {
+@@ -3282,6 +3292,7 @@ DEFAULT_CONFIG = {
      'calendar.enable': ENABLE_CALENDAR,
      'automations.enable': ENABLE_AUTOMATIONS,
      'subagents.enable': ENABLE_SUBAGENTS,
@@ -370,10 +370,10 @@ index 7d3caf0d9fa56c1b739c87e0f52039fcecf0bfe9..bf2ccbcb34525bfb2fed84d8e20573a8
      'subagents.max_concurrent': SUBAGENTS_MAX_CONCURRENT,
      'subagents.max_async': SUBAGENTS_MAX_ASYNC,
 diff --git a/backend/open_webui/routers/configs.py b/backend/open_webui/routers/configs.py
-index 0b848ac26bcc778d0f8d69fc65485475be7bcc0e..a28dde40fb62eb18a349cd2c4d8e044b06600f0b 100644
+index 4c30d6caf435d97d479bd4c230bb6c68b1bf9af0..33413284974bb71209aa5be5eaf891ec012ae4eb 100644
 --- a/backend/open_webui/routers/configs.py
 +++ b/backend/open_webui/routers/configs.py
-@@ -66,6 +66,7 @@ MODELS_CONFIG_KEYS = {
+@@ -67,6 +67,7 @@ MODELS_CONFIG_KEYS = {
  }
  SUBAGENTS_CONFIG_KEYS = {
      'ENABLE_SUBAGENTS': 'subagents.enable',
@@ -381,7 +381,7 @@ index 0b848ac26bcc778d0f8d69fc65485475be7bcc0e..a28dde40fb62eb18a349cd2c4d8e044b
      'SUBAGENTS_BACKGROUND_ENABLED': 'subagents.background_enabled',
      'SUBAGENTS_MAX_CONCURRENT': 'subagents.max_concurrent',
      'SUBAGENTS_MAX_ASYNC': 'subagents.max_async',
-@@ -637,6 +638,7 @@ async def set_models_config(request: Request, form_data: ModelsConfigForm, user=
+@@ -639,6 +640,7 @@ async def set_models_config(request: Request, form_data: ModelsConfigForm, user=
  
  class SubagentsConfigForm(BaseModel):
      ENABLE_SUBAGENTS: bool
@@ -389,7 +389,7 @@ index 0b848ac26bcc778d0f8d69fc65485475be7bcc0e..a28dde40fb62eb18a349cd2c4d8e044b
      SUBAGENTS_BACKGROUND_ENABLED: bool
      SUBAGENTS_MAX_CONCURRENT: int | None = Field(default=None, gt=0)
      SUBAGENTS_MAX_ASYNC: int | None = Field(default=None, gt=0)
-@@ -672,7 +674,7 @@ async def set_subagents_config(
+@@ -674,7 +676,7 @@ async def set_subagents_config(
      form_data: SubagentsConfigForm,
      user=Depends(get_admin_user),
  ):
@@ -399,7 +399,7 @@ index 0b848ac26bcc778d0f8d69fc65485475be7bcc0e..a28dde40fb62eb18a349cd2c4d8e044b
      await publish_event(
          request,
 diff --git a/backend/open_webui/routers/models.py b/backend/open_webui/routers/models.py
-index 918700b290d0d6aab323c68e99ddb00bbd3f1ebe..cf46854f20069068581990bd71f4eade7290ba27 100644
+index 2ce450eab2aa1d8c5db8eb2eda74a9dc5582da96..bcfe0ad06ef3db4816aaea6859aa0b050b2a8a0e 100644
 --- a/backend/open_webui/routers/models.py
 +++ b/backend/open_webui/routers/models.py
 @@ -42,6 +42,7 @@ from open_webui.models.models import (
@@ -570,10 +570,10 @@ index 36d5bb07c79e2fd3f91cb9b3cd46e3a38759852f..f716f0a8f5f26fd835177c698e73a8c0
      headers = {
          'Content-Type': 'application/json',
 diff --git a/backend/open_webui/utils/middleware.py b/backend/open_webui/utils/middleware.py
-index 82e7aef1c63160c2395dffceba72a08b488b76e2..caeb7c82e2041012531731639e7449dbda1a01b5 100644
+index e3656d42a122fda3fb6cfa8e99aa13b3ad35b2e8..2fc432d7833f82f31a0670c1f07def8753502397 100644
 --- a/backend/open_webui/utils/middleware.py
 +++ b/backend/open_webui/utils/middleware.py
-@@ -1918,13 +1918,17 @@ def strip_reasoning_details(output: list) -> list:
+@@ -1926,13 +1926,17 @@ def strip_reasoning_details(output: list) -> list:
  
  def strip_tool_images(output: list, model: dict) -> list:
      """Replace tool result images with a text note when the model has Vision turned off."""
@@ -594,7 +594,7 @@ index 82e7aef1c63160c2395dffceba72a08b488b76e2..caeb7c82e2041012531731639e7449db
              ]
              item = {**item, 'output': parts}
 diff --git a/backend/open_webui/utils/models.py b/backend/open_webui/utils/models.py
-index 3b6e07b1c219fe955bf900f4ed87a7ececc3cbaa..1c0fafb814211c804574374eaf8e786067e518a8 100644
+index 2a59e80184bd9cbe463ff8558b6746d2f1e2cb53..3f7c5eea0812678d11253530a75787ef0b4808fb 100644
 --- a/backend/open_webui/utils/models.py
 +++ b/backend/open_webui/utils/models.py
 @@ -391,7 +391,10 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
@@ -621,7 +621,7 @@ index 374b5b49045e33e6727b31a1f3ac41b9511d845d..28e3e7d766814cce91884e45df5745c4
  
  from open_webui.utils.json_codec import JSONCodec
 diff --git a/src/lib/components/chat/Chat.svelte b/src/lib/components/chat/Chat.svelte
-index 2349f84f957c9b702869fb8a59d17bc094a92193..1d0c6aab3fae3efa919fdcef507e1a294a39900b 100644
+index 5cacdf70823db2c47d70448706d7f5d196e49283..85f09a269e767010197daa6e6b51da6405fd4d1b 100644
 --- a/src/lib/components/chat/Chat.svelte
 +++ b/src/lib/components/chat/Chat.svelte
 @@ -1,4 +1,6 @@
@@ -631,7 +631,7 @@ index 2349f84f957c9b702869fb8a59d17bc094a92193..1d0c6aab3fae3efa919fdcef507e1a29
  	import { getTerminalServers } from '$lib/apis/terminal';
  	import { resolveToolApprovalMode } from '$lib/utils/toolPermissions';
  	import type { AppLayoutContext, TerminalContext } from '$lib/types';
-@@ -3990,7 +3992,8 @@
+@@ -4124,7 +4126,8 @@
  	const submitPrompt = async (
  		inputContent: string,
  		inputFiles: any[],
@@ -641,15 +641,15 @@ index 2349f84f957c9b702869fb8a59d17bc094a92193..1d0c6aab3fae3efa919fdcef507e1a29
  	) => {
  		if (selectedModels.includes('')) throw new Error($i18n.t('Model not selected'));
  		const _files = structuredClone(inputFiles);
-@@ -4017,6 +4020,7 @@
+@@ -4158,6 +4161,7 @@
  			user: { id: $user?.id, name: $user?.name },
  			user_id: $user?.id,
  			content: inputContent,
 +			meta: microphoneMeta,
  			files: _files.length > 0 ? _files : undefined,
  			timestamp: Math.floor(Date.now() / 1000), // Unix epoch
- 			models: selectedModels
-@@ -4407,6 +4411,7 @@
+ 			models: selectedModels,
+@@ -4564,6 +4568,7 @@
  			}
  		}
  		if (processing === 'uploading') return { status: 'deferred' };
@@ -657,7 +657,7 @@ index 2349f84f957c9b702869fb8a59d17bc094a92193..1d0c6aab3fae3efa919fdcef507e1a29
  		emitTyping(false);
  		if (bridgeRequest && (selectedModelIds.length !== 1 || !bridgeRequest.modelId))
  			return { status: 'rejected' };
-@@ -4582,7 +4587,7 @@
+@@ -4742,7 +4747,7 @@
  		messageInput?.setText('');
  
  		return (
@@ -666,7 +666,7 @@ index 2349f84f957c9b702869fb8a59d17bc094a92193..1d0c6aab3fae3efa919fdcef507e1a29
  				status: 'rejected'
  			}
  		);
-@@ -4951,12 +4956,12 @@
+@@ -5127,12 +5132,12 @@
  				stream: stream,
  				model: model.id,
  				...(messages.length > 0 ? { messages } : {}),
@@ -681,7 +681,7 @@ index 2349f84f957c9b702869fb8a59d17bc094a92193..1d0c6aab3fae3efa919fdcef507e1a29
  
  				files: embedded
  					? [...(files ?? []), ...noteFiles]
-@@ -4976,7 +4981,7 @@
+@@ -5152,7 +5157,7 @@
  				skill_ids: skillIds.length > 0 ? skillIds : undefined,
  				terminal_id: terminalEnabled && requestTerminalId ? requestTerminalId : null,
  				terminal_cwd: !_chatId ? requestTerminalCwd : undefined,
@@ -691,7 +691,7 @@ index 2349f84f957c9b702869fb8a59d17bc094a92193..1d0c6aab3fae3efa919fdcef507e1a29
  					...getPromptVariables(
  						$user?.name,
 diff --git a/src/lib/components/chat/MessageInput.svelte b/src/lib/components/chat/MessageInput.svelte
-index bcd7e84a9653d3ca817ca5de4417fbd9fc698850..9c208e6dc4304b0350504a766fd33965da0ef835 100644
+index c9bc35fa3401738a792c8fe1b327ba31b6cc4b13..1e25bb60bdcef917a365bb9930fbe93b7a09847e 100644
 --- a/src/lib/components/chat/MessageInput.svelte
 +++ b/src/lib/components/chat/MessageInput.svelte
 @@ -1,4 +1,5 @@
@@ -700,7 +700,7 @@ index bcd7e84a9653d3ca817ca5de4417fbd9fc698850..9c208e6dc4304b0350504a766fd33965
  	import { resolveTerminalTarget } from '$lib/apis/terminal';
  	import type { TerminalContext } from '$lib/types';
  	import {
-@@ -92,6 +93,7 @@
+@@ -97,6 +98,7 @@
  	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
  	import ModelSelector from './ModelSelector.svelte';
  	import ModelControls from './MessageInput/ModelControls.svelte';
@@ -708,7 +708,7 @@ index bcd7e84a9653d3ca817ca5de4417fbd9fc698850..9c208e6dc4304b0350504a766fd33965
  
  	import ToolServersModal from './ToolServersModal.svelte';
  	import SkillsModal from './SkillsModal.svelte';
-@@ -1070,11 +1072,11 @@
+@@ -1087,11 +1089,11 @@
  						modelId: selectedModels[0] ?? null
  					})
  				: null;
@@ -722,8 +722,8 @@ index bcd7e84a9653d3ca817ca5de4417fbd9fc698850..9c208e6dc4304b0350504a766fd33965
 +				throw new Error($i18n.t('A saved chat is required for this terminal'));
  
  			const cwd =
- 				(terminalContext?.terminalId === fileItem.terminal_id
-@@ -2083,6 +2085,7 @@
+ 				getCurrentDirectory?.(fileItem.terminal_id) ||
+@@ -2104,6 +2106,7 @@
  
  								await tick();
  								await insertTextAtCursor(`${text}`);
@@ -731,7 +731,7 @@ index bcd7e84a9653d3ca817ca5de4417fbd9fc698850..9c208e6dc4304b0350504a766fd33965
  								await tick();
  								focus({ preventScroll: true });
  
-@@ -2398,6 +2401,7 @@
+@@ -2419,6 +2422,7 @@
  													id={inputId}
  													editable={!showInputModal}
  													onChange={(content) => {
@@ -739,7 +739,7 @@ index bcd7e84a9653d3ca817ca5de4417fbd9fc698850..9c208e6dc4304b0350504a766fd33965
  														prompt = content.md;
  														inputContent = content;
  														command = getCommand();
-@@ -2970,6 +2974,7 @@
+@@ -3021,6 +3025,7 @@
  											triggerClassName="items-center gap-1.5 rounded-lg pl-2 pr-1.5 py-1 text-[0.8125rem] font-normal text-gray-600 transition-colors duration-100 hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
  										/>
  									</div>
@@ -748,10 +748,10 @@ index bcd7e84a9653d3ca817ca5de4417fbd9fc698850..9c208e6dc4304b0350504a766fd33965
  										selectedModels={selectedModelIds}
  										bind:chatFiles
 diff --git a/src/lib/components/workspace/Models/ModelEditor.svelte b/src/lib/components/workspace/Models/ModelEditor.svelte
-index ab391c130486380766342f0e1fbde5fb61c024c1..e4bb47adfc792f16d7b5b38f288e146320c5347c 100644
+index 82041609d0b2393783d37e45d1d6a73dfad163cc..2f1768a6060657e143bb2f4f6b621d0694e7c528 100644
 --- a/src/lib/components/workspace/Models/ModelEditor.svelte
 +++ b/src/lib/components/workspace/Models/ModelEditor.svelte
-@@ -70,6 +70,7 @@
+@@ -72,6 +72,7 @@
  	import Photo from '$lib/components/icons/Photo.svelte';
  	import {
  		avatarAssetIds,
@@ -759,7 +759,7 @@ index ab391c130486380766342f0e1fbde5fb61c024c1..e4bb47adfc792f16d7b5b38f288e1463
  		type AnimationFiles,
  		type VoiceAvatarConfig
  	} from '$lib/utils/voice-avatar';
-@@ -682,6 +683,7 @@
+@@ -698,6 +699,7 @@
  	const loadModel = async (value: any) => {
  		customPromptDraft = null;
  		model = value ? structuredClone(value) : null;
@@ -767,7 +767,7 @@ index ab391c130486380766342f0e1fbde5fb61c024c1..e4bb47adfc792f16d7b5b38f288e1463
  		backgroundFile = null;
  		avatarFile = null;
  		animationFiles = {};
-@@ -691,7 +693,6 @@
+@@ -707,7 +709,6 @@
  		if (model) {
  			model.meta ??= {};
  			name = model.name;
@@ -776,17 +776,17 @@ index ab391c130486380766342f0e1fbde5fb61c024c1..e4bb47adfc792f16d7b5b38f288e1463
  
  			id = model.id;
 diff --git a/src/lib/stores/index.ts b/src/lib/stores/index.ts
-index 31ee4bcbefbefcb96a5934c1bf161db42d3505c1..73ad774bbac7a5d4b5f6f677af756b81e26c10a1 100644
+index 748f1e71c1dfaf9a67b2fd190602c7f1e1db05a7..208f0a9864ba76e06266ca8daca942177caf8cd2 100644
 --- a/src/lib/stores/index.ts
 +++ b/src/lib/stores/index.ts
-@@ -274,6 +274,7 @@ type OllamaModelDetails = {
+@@ -296,6 +296,7 @@ type OllamaModelDetails = {
  };
  
  type Settings = {
 +  strataReasoningEfforts?: Record<string, string>;
  	pinnedModels?: string[];
+ 	temporaryChatByDefault?: boolean;
  	detectArtifacts?: boolean;
- 	showUpdateToast?: boolean;
 diff --git a/src/lib/utils/assistantCompatibility.js b/src/lib/utils/assistantCompatibility.js
 new file mode 100644
 index 0000000000000000000000000000000000000000..29f683ba56a2519dc34418ac11f5715480523393
