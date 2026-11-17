@@ -14,7 +14,7 @@
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import { flyAndScale } from '$lib/utils/transitions';
 
-	import { onMount, getContext, tick } from 'svelte';
+	import { getContext, tick } from 'svelte';
 
 	import { deleteModel, getOllamaVersion, pullModel } from '$lib/apis/ollama';
 	import { deleteModelById } from '$lib/apis/models';
@@ -30,8 +30,6 @@
 		user,
 		MODEL_DOWNLOAD_POOL,
 		mobile,
-		models as _models,
-		temporaryChatEnabled,
 		settings,
 		config,
 		showSettings,
@@ -56,8 +54,9 @@
 	import TagSelector from '$lib/components/workspace/common/TagSelector.svelte';
 
 	import ModelItem from './ModelItem.svelte';
+	import { getChatContext } from '$lib/components/chat/context';
 
-	const models = getContext<typeof _models>('chatModels') ?? _models;
+	const { models, temporary } = getChatContext();
 
 	const i18n: any = getContext('i18n');
 
@@ -207,7 +206,14 @@
 		}
 	};
 
-	let tags = [];
+	$: tags = Array.from(
+		new Set(
+			(items ?? [])
+				.filter((item) => includeHidden || !(item.model?.info?.meta?.hidden ?? false))
+				.flatMap((item) => item.model?.tags ?? [])
+				.map((tag) => tag.name.toLowerCase())
+		)
+	).sort((a, b) => a.localeCompare(b));
 
 	let selectedModel = '';
 	$: selectedValues = values ?? (value ? [value] : []);
@@ -372,6 +378,17 @@
 		: selectedTag
 			? `tag:${selectedTag}`
 			: '';
+
+	$: if (selectedTag && !modelFilterItems.some((item) => item.value === `tag:${selectedTag}`)) {
+		selectedTag = '';
+	}
+
+	$: if (
+		selectedConnectionType &&
+		!modelFilterItems.some((item) => item.value === `connection:${selectedConnectionType}`)
+	) {
+		selectedConnectionType = '';
+	}
 
 	const setModelFilter = (filterValue: string) => {
 		if (!filterValue) {
@@ -740,17 +757,6 @@
 					.filter((connection) => MANAGEMENT_PROVIDERS.has(connection.provider))
 			: [];
 	};
-
-	onMount(() => {
-		if (items) {
-			tags = items
-				.filter((item) => includeHidden || !(item.model?.info?.meta?.hidden ?? false))
-				.flatMap((item) => item.model?.tags ?? [])
-				.map((tag) => tag.name.toLowerCase());
-			// Remove duplicates and sort
-			tags = Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b));
-		}
-	});
 
 	const cancelModelPullHandler = async (model: string) => {
 		const { reader, abortController, providerLabel } = $MODEL_DOWNLOAD_POOL[model];

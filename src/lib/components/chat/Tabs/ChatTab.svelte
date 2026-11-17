@@ -8,10 +8,16 @@
 	let chatView: Chat | undefined;
 	export const startRename = () => chatView?.startRename();
 	export let tabTitleEditor: import('svelte').Snippet | undefined = undefined;
+	export let tabActions: import('svelte').Snippet | undefined = undefined;
 
 	export let initialPrompt = '';
 	export let initialView: any = null;
-	export const captureView = () => ({ draft, files, context });
+	export const captureView = () => ({
+		draft,
+		files,
+		context,
+		temporary: chatView?.isTemporary() ?? false
+	});
 	export let chatId = '';
 	export let streaming = false;
 	export let artifacts: Writable<{ type: string; content: string }[]> = writable([]);
@@ -89,11 +95,7 @@
 			: {},
 		history: convertMessagesToHistory(context),
 		chatFiles: contextFiles(),
-		temporary:
-			!chatId &&
-			$user?.role !== 'admin' &&
-			($user?.permissions?.chat?.temporary ?? true) &&
-			($user?.permissions?.chat?.temporary_enforced ?? false),
+		temporary: initialView?.temporary ?? false,
 		prompt: draft,
 		files
 	};
@@ -106,6 +108,7 @@
 	<Chat
 		bind:this={chatView}
 		bind:tabTitleEditor
+		bind:tabActions
 		embedded={true}
 		tabbed={true}
 		{parentChatId}

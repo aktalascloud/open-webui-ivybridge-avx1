@@ -36,9 +36,8 @@
 		type Model,
 		mobile,
 		settings,
-		models as _models,
 		config,
-		showCallOverlay,
+		voiceCall,
 		tools,
 		skills,
 		terminalServers,
@@ -47,9 +46,10 @@
 		showSettings,
 		showFileNavDir,
 		TTSWorker,
-		temporaryChatEnabled,
 		chatTabRequest,
-		visibleControls
+		visibleControls,
+		imageModels,
+		videoModels
 	} from '$lib/stores';
 
 	import {
@@ -73,7 +73,12 @@
 		isRasterImageContentType
 	} from '$lib/utils';
 	import { uploadFile } from '$lib/apis/files';
-	import { filesystemFile, getCwd, uploadNewFileToTerminal } from '$lib/apis/terminal';
+	import {
+		filesystemFile,
+		getCwd,
+		templatesApi,
+		uploadNewFileToTerminal
+	} from '$lib/apis/terminal';
 	import { isSavedChatId } from '$lib/utils/chatId';
 	import { generateAutoCompletion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
@@ -107,6 +112,7 @@
 	import XMark from '../icons/XMark.svelte';
 	import GlobeAlt from '../icons/GlobeAlt.svelte';
 	import Photo from '../icons/Photo.svelte';
+	import VideoCamera from '../icons/VideoCamera.svelte';
 	import Wrench from '../icons/Wrench.svelte';
 	import ArrowUpLeft from '../icons/ArrowUpLeft.svelte';
 	import Cube from '../icons/Cube.svelte';
@@ -133,8 +139,9 @@
 	import Expand from '../icons/Expand.svelte';
 	import QueuedMessageItem from './MessageInput/QueuedMessageItem.svelte';
 	import TaskList from './Messages/ResponseMessage/TaskList.svelte';
+	import { getChatContext } from '$lib/components/chat/context';
 
-	const models = getContext<typeof _models>('chatModels') ?? _models;
+	const { models, temporary, getCurrentDirectory } = getChatContext();
 
 	const i18n: any = getContext('i18n');
 	export let selectedTerminalId: Pick<Writable<string | null>, 'subscribe' | 'set'>;
@@ -168,9 +175,7 @@
 	export let chatId = '';
 	export let inputId = 'chat-input';
 	export let messagesContainerId = 'messages-container';
-	export let temporary: boolean | undefined = undefined;
 	export let onTemporaryChange: ((value: boolean) => void) | null = null;
-	$: isTemporary = temporary ?? $temporaryChatEnabled;
 	export let terminalContext: TerminalContext | null = null;
 	export let terminalSelectionEnabled = true;
 	export let contextUsage = null;
@@ -228,7 +233,7 @@
 		$config?.features?.enable_comments &&
 		$_user &&
 		isSavedChatId(chatId) &&
-		!isTemporary
+		!$temporary
 	);
 	export const openComments = () => {
 		if (canComments) showTabs.set('comments');
@@ -255,6 +260,9 @@
 	export let selectedFilterIds: string[] = [];
 
 	export let imageGenerationEnabled = false;
+	export let selectedImageModelId = '';
+	export let videoGenerationEnabled = false;
+	export let selectedVideoModelId = '';
 	export let webSearchEnabled = false;
 	export let codeInterpreterEnabled = false;
 	export let toolApprovalMode = 'full';
@@ -354,6 +362,9 @@
 		selectedSkillIds,
 		selectedFilterIds,
 		imageGenerationEnabled,
+		selectedImageModelId,
+		videoGenerationEnabled,
+		selectedVideoModelId,
 		webSearchEnabled,
 		codeInterpreterEnabled
 	};
@@ -531,7 +542,7 @@
 
 	export const setText = (text: string = '') => {
 		chatInputElement?.setText(text);
-		if (!$showCallOverlay) {
+		if (!$mobile && !$voiceCall) {
 			focus();
 		}
 	};
@@ -662,28 +673,8 @@
 		chatInputElement?.replaceCommandWithText(text);
 	};
 
-	const temporaryHandler = async () => {
-		if (!canToggleTemporary) return;
-		if (onTemporaryChange) {
-			onTemporaryChange(!isTemporary);
-			return;
-		}
-
-		if (($settings?.temporaryChatByDefault ?? false) && isTemporary) {
-			await temporaryChatEnabled.set(null);
-		} else {
-			await temporaryChatEnabled.set(!isTemporary);
-		}
-
-		if (location.pathname !== '/' && !location.pathname.startsWith('/folders/')) {
-			await goto('/');
-		}
-
-		if (isTemporary) {
-			window.history.replaceState(window.history.state, '', '?temporary-chat=true');
-		} else {
-			window.history.replaceState(window.history.state, '', location.pathname);
-		}
+	const temporaryHandler = () => {
+		if (canToggleTemporary) onTemporaryChange?.(!$temporary);
 	};
 
 	const createSkillHandler = async () => {
@@ -879,6 +870,7 @@
 		| 'file_upload'
 		| 'web_search'
 		| 'image_generation'
+		| 'video_generation'
 		| 'code_interpreter'
 		| 'terminal'
 		| 'builtin_tools';
@@ -925,6 +917,13 @@
 		modelCapabilitiesById
 	);
 
+	let videoGenerationCapableModels = [];
+	$: videoGenerationCapableModels = getCapableModelIds(
+		selectedModelIds,
+		'video_generation',
+		modelCapabilitiesById
+	);
+
 	let codeInterpreterCapableModels = [];
 	$: codeInterpreterCapableModels = getCapableModelIds(
 		selectedModelIds,
@@ -932,9 +931,19 @@
 		modelCapabilitiesById
 	);
 
+	// With no terminal yet, the menu still shows when the user may create one: it holds New terminal.
+	let canCreateTerminal = false;
+	$: if (
+		$config?.features?.enable_tool_servers &&
+		$terminalServers &&
+		!$terminalServers.some((t) => t.id)
+	)
+		templatesApi('/connections')
+			.then((rows) => (canCreateTerminal = rows.length > 0))
+			.catch(() => (canCreateTerminal = false));
 	$: showTerminalSelector =
 		$config?.features?.enable_tool_servers &&
-		($terminalServers ?? []).some((t) => t.id);
+		(($terminalServers ?? []).some((t) => t.id) || canCreateTerminal);
 
 	let canCreateSkill: boolean = false;
 	$: canCreateSkill = selectedModelIds.every(
@@ -970,6 +979,12 @@
 		$config?.features?.enable_image_generation &&
 		($_user.role === 'admin' || $_user?.permissions?.features?.image_generation);
 
+	let showVideoGenerationButton = false;
+	$: showVideoGenerationButton =
+		selectedModelIds.length === videoGenerationCapableModels.length &&
+		$config?.features?.enable_video_generation &&
+		($_user.role === 'admin' || $_user?.permissions?.features?.video_generation);
+
 	let showCodeInterpreterButton = false;
 	$: showCodeInterpreterButton =
 		!$selectedTerminalId &&
@@ -988,6 +1003,8 @@
 	$: if (webSearchCapableModels.length < selectedModelIds.length) webSearchEnabled = false;
 	$: if (imageGenerationCapableModels.length < selectedModelIds.length)
 		imageGenerationEnabled = false;
+	$: if (videoGenerationCapableModels.length < selectedModelIds.length)
+		videoGenerationEnabled = false;
 	$: if (codeInterpreterCapableModels.length < selectedModelIds.length)
 		codeInterpreterEnabled = false;
 	$: {
@@ -1079,9 +1096,11 @@
 				throw new Error($i18n.t('A saved chat is required for this terminal'));
 
 			const cwd =
+				getCurrentDirectory?.(fileItem.terminal_id) ||
 				(terminalContext?.terminalId === fileItem.terminal_id
 					? terminalContext?.currentDirectory
-					: null) || (await getCwd(terminal))?.cwd;
+					: null) ||
+				(await getCwd(terminal))?.cwd;
 			if (!cwd) throw new Error($i18n.t('Could not determine the upload folder.'));
 			const uploadedFile = await uploadNewFileToTerminal(terminal, cwd, fileItem.file);
 			if (!uploadedFile) throw new Error($i18n.t('Failed to upload file.'));
@@ -1177,7 +1196,7 @@
 			return;
 		}
 
-		if (!isTemporary) {
+		if (!$temporary) {
 			try {
 				// If the file is an audio file, provide the language for STT.
 				let metadata = null;
@@ -1353,7 +1372,7 @@
 					// Compress the image if settings or config require it
 					imageUrl = await compressImageHandler(imageUrl, $settings, $config);
 
-					if (isTemporary) {
+					if ($temporary) {
 						files = [
 							...files,
 							{
@@ -1397,6 +1416,8 @@
 
 	const isAttachmentDrop = (event: DragEvent) => {
 		if (!(event.target instanceof Element)) return false;
+		// Areas with their own file drop, like a folder's Knowledge list, keep what lands on them.
+		if (event.target.closest('[data-file-drop-target]')) return false;
 		const composer = event.target.closest('[data-composer-id]');
 		if (composer) return composer.getAttribute('data-composer-id') === inputId;
 		// Files can land anywhere in this chat's dropzone. Sidebar items still target
@@ -1742,13 +1763,13 @@
 					canSide: () => canSide,
 					canFork: () =>
 						!!history?.currentId &&
-						!isTemporary &&
+						!$temporary &&
 						($_user?.role === 'admin' || ($_user?.permissions?.chat?.import ?? true)),
 					forkDisabled: () => isActive,
 					canTemporary: () => canToggleTemporary,
 					hasChatContent: hasChatContent,
 					canCreateSkill: () => canCreateSkill,
-					temporaryEnabled: () => isTemporary === true,
+					temporaryEnabled: () => $temporary === true,
 					contextUsage: () => statusContextUsage,
 					onCompact: compactHandler,
 					onStatus: statusHandler,
@@ -1884,7 +1905,7 @@
 		loaded = true;
 
 		window.setTimeout(() => {
-			if (!$showCallOverlay) {
+			if (!$mobile && !$voiceCall) {
 				const chatInput = document.getElementById(inputId);
 				chatInput?.focus();
 			}
@@ -1990,7 +2011,7 @@
 	<div class="w-full">
 		<div class=" mx-auto inset-x-0 bg-transparent flex justify-center">
 			<div
-				class="flex flex-col px-3 {$settings?.widescreenMode ?? null
+				class="flex flex-col px-3 {($settings?.widescreenMode ?? null)
 					? 'max-w-full'
 					: 'max-w-[58rem]'} w-full"
 			>
@@ -2043,7 +2064,7 @@
 
 		<div class="bg-transparent">
 			<div
-				class="{$settings?.widescreenMode ?? null
+				class="{($settings?.widescreenMode ?? null)
 					? 'max-w-full'
 					: 'max-w-[58rem]'} px-2 mx-auto inset-x-0"
 			>
@@ -2238,12 +2259,12 @@
 						<div
 							id={inputId === 'chat-input' ? 'message-input-container' : `${inputId}-wrapper`}
 							data-composer-id={inputId}
-							class="flex-1 flex flex-col relative w-full shadow-[0_6px_24px_-4px_rgba(0,0,0,0.1)] rounded-3xl border {isTemporary
+							class="flex-1 flex flex-col relative w-full shadow-[0_6px_24px_-4px_rgba(0,0,0,0.1)] rounded-3xl border {$temporary
 								? 'border-dashed border-gray-300/70 dark:border-gray-700/70'
-								: ' border-gray-200 dark:border-gray-850'} {($settings?.highContrastMode ??
+								: ' border-gray-200/60 dark:border-gray-800/40'} {($settings?.highContrastMode ??
 							false)
 								? 'focus-within:outline focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-500 [&_.ProseMirror:focus-visible]:outline-none!'
-								: ''}  transition px-0.5 bg-white/5 dark:bg-gray-500/5 backdrop-blur-sm dark:text-gray-100"
+								: ''}  transition px-0.5 bg-white/80 dark:bg-[oklch(0.24_0_0)]/90 backdrop-blur-md dark:text-gray-100"
 							dir={$settings?.chatDirection ?? 'auto'}
 						>
 							{#if atSelectedModel !== undefined}
@@ -2532,6 +2553,7 @@
 
 															webSearchEnabled = false;
 															imageGenerationEnabled = false;
+															videoGenerationEnabled = false;
 															codeInterpreterEnabled = false;
 														}
 													}}
@@ -2674,7 +2696,7 @@
 
 										<!-- Retired menu label: keep its translation. {$i18n.t('Integrations')} -->
 										<svelte:fragment slot="integrations">
-											{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
+											{#if showWebSearchButton || showImageGenerationButton || showVideoGenerationButton || showCodeInterpreterButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
 												<IntegrationsMenu
 													{selectedTerminalId}
 													{terminalSkills}
@@ -2684,12 +2706,16 @@
 													{toggleFilters}
 													{showWebSearchButton}
 													{showImageGenerationButton}
+													{showVideoGenerationButton}
 													{showCodeInterpreterButton}
 													bind:selectedToolIds
 													bind:selectedSkillIds
 													bind:selectedFilterIds
 													bind:webSearchEnabled
 													bind:imageGenerationEnabled
+													bind:selectedImageModelId
+													bind:videoGenerationEnabled
+													bind:selectedVideoModelId
 													bind:codeInterpreterEnabled
 													oauthRedirectHandler={(tool: {
 														id: string;
@@ -2891,7 +2917,11 @@
 										{/if}
 
 										{#if showInputSelections && imageGenerationEnabled && showImageGenerationButton && $visibleControls['chat.selected_image_generation']}
-											<Tooltip content={$i18n.t('Image')} placement="top">
+											<Tooltip
+												content={$imageModels?.find((model) => model.id === selectedImageModelId)
+													?.name ?? $i18n.t('Image')}
+												placement="top"
+											>
 												<button
 													aria-label={$i18n.t('Image')}
 													aria-pressed={imageGenerationEnabled}
@@ -2903,6 +2933,27 @@
 														: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
 												>
 													<Photo className="size-4" strokeWidth="1.75" />
+												</button>
+											</Tooltip>
+										{/if}
+
+										{#if showInputSelections && videoGenerationEnabled && showVideoGenerationButton && $visibleControls['chat.selected_video_generation']}
+											<Tooltip
+												content={$videoModels?.find((model) => model.id === selectedVideoModelId)
+													?.name ?? $i18n.t('Video')}
+												placement="top"
+											>
+												<button
+													aria-label={$i18n.t('Video')}
+													aria-pressed={videoGenerationEnabled}
+													on:click|preventDefault={() =>
+														(videoGenerationEnabled = !videoGenerationEnabled)}
+													type="button"
+													class="group p-[0.375rem] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {videoGenerationEnabled
+														? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-700/10 border border-sky-200/40 dark:border-sky-500/20'
+														: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
+												>
+													<VideoCamera className="size-4" strokeWidth="1.75" />
 												</button>
 											</Tooltip>
 										{/if}
@@ -3064,7 +3115,7 @@
 														type="button"
 														on:click={async () => {
 															if (callActive) {
-																showCallOverlay.set(true);
+																voiceCall.set(true);
 																showTabs.set('voice');
 																return;
 															}
@@ -3075,7 +3126,7 @@
 															}
 
 															if ($config?.audio?.realtime?.enabled) {
-																showCallOverlay.set(true);
+																voiceCall.set(true);
 																showTabs.set(true);
 																return;
 															}
@@ -3107,7 +3158,7 @@
 																	}
 																}
 
-																showCallOverlay.set(true);
+																voiceCall.set(true);
 																showTabs.set(true);
 															} catch (err) {
 																// If the user denies the permission or an error occurs, show an error message

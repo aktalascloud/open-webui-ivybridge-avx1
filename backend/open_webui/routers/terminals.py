@@ -315,6 +315,7 @@ async def proxy_terminal(
         request,
         user,
         context={
+            'instance_user_id': request.headers.get('x-terminal-user-id'),
             'chat_id': request.path_params.get('chat_id') or request.headers.get('x-session-id'),
             'model_id': request.headers.get('x-terminal-model-id'),
         },
@@ -403,7 +404,7 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
     if connection.get('template_id') and safe_path == 'files/preview' and request.method == 'POST':
         browser_token = browser_ticket(
             server_id, user.id, session_id or '', {'id': 'files', 'token': ''},
-            headers, cookies, resource='files', owner_token=request.state.token.credentials,
+            headers, cookies, instance_user_id=context.get('instance_user_id'), resource='files', owner_token=request.state.token.credentials,
         )
         base = request.url.path.removesuffix('/files/preview')
         return {'url': f'{base}/browser/view/files/{quote(browser_token, safe="")}/'}
@@ -480,7 +481,7 @@ async def _proxy_terminal(server_id, path, request, user, *, context, browser_au
             browser_session = json.loads(response_body)
             if isinstance(browser_session, dict) and browser_session.get('id') and browser_session.get('token'):
                 browser_session['token'] = browser_ticket(
-                    server_id, user.id, session_id or '', browser_session, headers, cookies,
+                    server_id, user.id, session_id or '', browser_session, headers, cookies, instance_user_id=context.get('instance_user_id'),
                     owner_token=request.state.token.credentials,
                 )
                 response_body = json.dumps(browser_session).encode()
@@ -772,9 +773,13 @@ async def _proxy_terminal_websocket(
 
 
 def browser_context(data):
-    return {'chat_id': data.get('chat'), 'model_id': data.get('model')}
+    return {'instance_user_id': data.get('instance_user'), 'chat_id': data.get('chat'), 'model_id': data.get('model')}
 
 
 def socket_metadata(ws):
     auth = getattr(ws.state, 'auth', {})
-    return {'chat_id': auth.get('chat_id'), 'model_id': auth.get('model_id')}
+    return {
+        'instance_user_id': auth.get('instance_user_id'),
+        'chat_id': auth.get('chat_id'),
+        'model_id': auth.get('model_id'),
+    }

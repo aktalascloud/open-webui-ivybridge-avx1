@@ -5,11 +5,7 @@
 	import { WebLinksAddon } from '@xterm/addon-web-links';
 	import { WebglAddon } from '@xterm/addon-webgl';
 	import '@xterm/xterm/css/xterm.css';
-	import {
-		terminalRequest,
-		TerminalRequestError,
-		type TerminalTarget
-	} from '$lib/apis/terminal';
+	import { terminalRequest, TerminalRequestError, type TerminalTarget } from '$lib/apis/terminal';
 	import { assignTerminalChat, openTerminalSocket } from '$lib/apis/terminal/socket';
 
 	export let target: TerminalTarget;
@@ -102,7 +98,7 @@
 					selectionBackground: '#444444'
 				}
 			: {
-					background: '#ffffff',
+					background: '#ffffff00',
 					foreground: '#171717',
 					cursor: '#171717',
 					cursorAccent: '#ffffff',
@@ -114,10 +110,7 @@
 		connecting = true;
 		try {
 			if (!sessionId) throw new Error('Session no longer available');
-			await terminalRequest(
-				target,
-				`/api/terminals/${encodeURIComponent(sessionId)}`
-			);
+			await terminalRequest(target, `/api/terminals/${encodeURIComponent(sessionId)}`);
 			if (destroyed) return;
 			ws = openTerminalSocket(
 				target,
@@ -309,7 +302,7 @@
 	});
 </script>
 
-<div class="terminal-view h-full min-h-0 relative bg-white dark:bg-transparent">
+<div class="terminal-view h-full min-h-0 relative bg-transparent">
 	{#if reconnecting}
 		<div
 			class="absolute top-1 right-2 z-10 rounded bg-white/90 px-2 py-1 text-xs text-gray-600 dark:bg-gray-900/90 dark:text-gray-300"

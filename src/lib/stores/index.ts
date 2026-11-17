@@ -92,6 +92,26 @@ export const skills: Writable<null | any[]> = writable(null);
 export const terminalSkills: Writable<any[]> = writable([]);
 export const functions = writable(null);
 
+export type ImageModel = {
+	id: string;
+	name: string;
+	model: string;
+	connection_id: string;
+	connection_name: string;
+	image_generation: boolean;
+	image_edit: boolean;
+};
+export const imageModels: Writable<null | ImageModel[]> = writable(null);
+
+export type VideoModel = {
+	id: string;
+	name: string;
+	model: string;
+	connection_id: string;
+	connection_name: string;
+};
+export const videoModels: Writable<null | VideoModel[]> = writable(null);
+
 export type WorkspaceSection = 'models' | 'knowledge' | 'prompts' | 'skills' | 'tools';
 export type WorkspaceAction = {
 	id: string;
@@ -178,8 +198,8 @@ export const showTabs = writable<
 	| (CommentTarget & { tab: 'comments'; comment_id?: string })
 >(false);
 export const showEmbeds = writable(false);
-export const showOverview = writable(false);
-export const showCallOverlay = writable(false);
+/** A voice call is open in the main chat's voice tab. */
+export const voiceCall = writable(false);
 export const showFileNav = writable<{
 	terminalId: string;
 	directory: string;
@@ -192,7 +212,8 @@ export const selectedTerminalId: Writable<string | null> = writable(null);
 
 export const embed = writable(null);
 
-export const temporaryChatEnabled = writable(false);
+/** Whether the main chat is temporary, or for a new chat, whether it starts as one. */
+export const temporaryChat = writable(false);
 export const openEmbeddedChatIds = writable<Set<string>>(new Set());
 export const chatTabRequest = writable<{ parentChatId: string; prompt: string } | null>(null);
 
@@ -217,7 +238,8 @@ export interface AgentModel extends BaseModel {
 	owned_by: 'terminal';
 	agent: {
 		terminal_id: string;
-		provider: 'codex' | 'claude-code' | 'cursor' | 'grok' | 'opencode' | 'cline' | 'gemini' | 'pi';
+		// Built-in ids such as 'codex' or 'claude-code', or 'acp-<id>' for agents configured in Open Terminal.
+		provider: string;
 		model: string;
 	};
 }
@@ -276,6 +298,7 @@ type OllamaModelDetails = {
 type Settings = {
   strataReasoningEfforts?: Record<string, string>;
 	pinnedModels?: string[];
+	temporaryChatByDefault?: boolean;
 	detectArtifacts?: boolean;
 	showUpdateToast?: boolean;
 	showChangelog?: boolean;
@@ -424,6 +447,7 @@ type Config = {
 		enable_google_drive_integration: boolean;
 		enable_onedrive_integration: boolean;
 		enable_image_generation: boolean;
+		enable_video_generation: boolean;
 		enable_code_interpreter: boolean;
 		enable_admin_export: boolean;
 		enable_admin_chat_access: boolean;

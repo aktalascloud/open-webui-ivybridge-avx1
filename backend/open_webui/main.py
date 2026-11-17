@@ -184,6 +184,7 @@ from open_webui.routers import (
     tools,
     users,
     utils,
+    videos,
 )
 from open_webui.routers.retrieval import (
     get_ef,
@@ -249,6 +250,7 @@ from open_webui.utils.chat_variables import (
 )
 from open_webui.utils.embeddings import generate_embeddings
 from open_webui.utils.headers import get_headers_and_cookies
+from open_webui.utils.images.connections import migrate_legacy_image_config
 from open_webui.utils.json_codec import JSONCodec
 from open_webui.utils.json_response import apply_orjson_http_json
 from open_webui.utils.logger import start_logger
@@ -367,8 +369,6 @@ https://github.com/open-webui/open-webui
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Store reference to main event loop for sync->async calls (e.g., embedding generation)
-    # This allows sync functions to schedule work on the main loop without blocking health checks
     app.state.main_loop = asyncio.get_running_loop()
 
     if THREAD_POOL_SIZE and THREAD_POOL_SIZE > 0:
@@ -395,6 +395,7 @@ async def lifespan(app: FastAPI):
     await validate_mfa_configuration()
     await initialize_runtime_config(app)
     await migrate_legacy_webhook_config()
+    await migrate_legacy_image_config()
     request = Request(
         {
             'type': 'http',
@@ -818,6 +819,7 @@ app.include_router(openai.router, prefix='/openai', tags=['openai'])
 app.include_router(pipelines.router, prefix='/api/v1/pipelines', tags=['pipelines'])
 app.include_router(tasks.router, prefix='/api/v1/tasks', tags=['tasks'])
 app.include_router(images.router, prefix='/api/v1/images', tags=['images'])
+app.include_router(videos.router, prefix='/api/v1/videos', tags=['videos'])
 
 app.include_router(audio.router, prefix='/api/v1/audio', tags=['audio'])
 app.include_router(retrieval.router, prefix='/api/v1/retrieval', tags=['retrieval'])
@@ -1549,6 +1551,14 @@ async def chat_completion(
 
                     user_message = metadata.get('user_message') or {}
                     assistant_message_id = metadata.get('assistant_message_id')
+                    if parent_id and not (
+                        assistant_message_id or metadata.get('regeneration_message_id') or metadata['internal']
+                    ):
+                        from open_webui.utils.subagents import queue_user_message
+
+                        # A reply in this chat is still running: it takes this message at its next step.
+                        if await queue_user_message(request, chat_id, user, user_message, parent_id):
+                            return {'status': True, 'queued': True, 'chat_id': chat_id}
                     if assistant_message_id:
                         message = await Chats.get_message_by_id_and_message_id(chat_id, assistant_message_id)
                         if not message or (message.get('user_id') or chat.user_id) != user.id:
@@ -1804,23 +1814,10 @@ async def chat_completion(
                     and getattr(request.state, 'internal', False) is not True
                     and not await has_active_tasks(request.app.state.redis, chat_id)
                 ):
-                    from open_webui.utils.subagents import process_pending_internal_messages
+                    from open_webui.utils.subagents import get_pending_run, process_pending_internal_messages
 
                     await process_pending_internal_messages(
-                        request,
-                        chat_id,
-                        user.id,
-                        {
-                            'model_id': metadata.get('model_id') or form_data.get('model'),
-                            'session_id': metadata.get('session_id'),
-                            'tool_ids': metadata.get('tool_ids') or [],
-                            'skill_ids': metadata.get('skill_ids') or [],
-                            'chat_context': metadata.get('chat_context'),
-                            'filter_ids': metadata.get('filter_ids') or [],
-                            'terminal_id': metadata.get('terminal_id'),
-                            'features': metadata.get('features') or {},
-                            'variables': metadata.get('variables') or {},
-                        },
+                        request, chat_id, user.id, get_pending_run(metadata, form_data.get('model'))
                     )
             except Exception:
                 log.exception('Failed to process pending internal messages for chat %s', metadata.get('chat_id'))
@@ -2387,6 +2384,7 @@ async def get_app_config(request: Request):
         'code_execution.enable',
         'code_interpreter.enable',
         'image_generation.enable',
+        'video_generation.enable',
         'task.autocomplete.enable',
         'task.title.enable',
         'task.follow_up.enable',
@@ -2501,6 +2499,7 @@ async def get_app_config(request: Request):
                     'enable_code_execution': config.get('code_execution.enable'),
                     'enable_code_interpreter': config.get('code_interpreter.enable'),
                     'enable_image_generation': config.get('image_generation.enable'),
+                    'enable_video_generation': config.get('video_generation.enable'),
                     'enable_autocomplete_generation': config.get('task.autocomplete.enable'),
                     'enable_title_generation': config.get('task.title.enable'),
                     'enable_follow_up_generation': config.get('task.follow_up.enable'),

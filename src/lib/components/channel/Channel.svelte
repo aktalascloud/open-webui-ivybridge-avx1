@@ -188,12 +188,12 @@
 	};
 
 	const initHandler = async () => {
-		if (currentId) {
+		if (currentId && $active) {
 			updateLastReadAt(currentId);
 		}
 
 		currentId = id;
-		updateLastReadAt(id);
+		if ($active) updateLastReadAt(id);
 
 		top = false;
 		messages = null;
@@ -410,13 +410,19 @@
 	onDestroy(() => {
 		stopInvitation();
 		// last read at
-		updateLastReadAt(id);
+		if ($active) updateLastReadAt(id);
 		if ($_channelId === id) _channelId.set(null);
 		$socket?.off('events:channel', channelEventHandler);
 		mediaQuery?.removeEventListener('change', handleMediaQuery);
 	});
 	import PageTitle from '$lib/components/common/PageTitle.svelte';
 </script>
+
+<svelte:document
+	on:visibilitychange={() => {
+		if (mounted && $active && id && document.visibilityState === 'visible') updateLastReadAt(id);
+	}}
+/>
 
 <!-- LICENSE covers this Open WebUI browser-title identifier.
 	Do not alter, remove, obscure, or replace it except as LICENSE permits:
@@ -487,7 +493,7 @@
 				{#if channel && messages !== null}
 					<div class="flex-1 overflow-y-auto">
 						<div
-							class=" pb-2.5 max-w-full z-10 scrollbar-hidden w-full h-full pt-6 flex-1 flex flex-col-reverse overflow-auto"
+							class=" pb-2.5 max-w-full z-10 scrollbar-hidden w-full h-full flex-1 flex flex-col-reverse overflow-auto"
 							id="messages-container"
 							bind:this={messagesContainerElement}
 							on:scroll={(e) => {

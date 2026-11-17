@@ -3,7 +3,7 @@ from cryptography.fernet import InvalidToken
 from open_webui.utils.auth import create_token, decode_token, get_optional_verified_user_from_request
 
 
-def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None, *, owner_token, resource='browser'):
+def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=None, *, owner_token, resource='browser', instance_user_id=None):
     from open_webui.utils.oauth import encrypt_data
 
     relay = encrypt_data(
@@ -16,9 +16,10 @@ def browser_ticket(server_id, user_id, chat_id, session, headers=None, cookies=N
     )
     return create_token(
         {
-            'purpose': 'terminal-browser',
+            'typ': 'browser_view',
             'server': server_id,
             'user': user_id,
+            'instance_user': instance_user_id,
             'chat': chat_id,
             'session': session['id'],
             'mode': session.get('mode', 'proxy'),
@@ -33,7 +34,7 @@ async def browser_access(server_id, sid, ticket, request):
     data = decode_token(ticket)
     if (
         not data
-        or data.get('purpose') != 'terminal-browser'
+        or data.get('typ') != 'browser_view'
         or data.get('server') != server_id
         or data.get('session') != sid
         or data.get('mode') not in ('proxy', 'chrome')

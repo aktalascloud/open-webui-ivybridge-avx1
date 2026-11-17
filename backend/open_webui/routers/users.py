@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import io
 import logging
 import time
 from collections import Counter
@@ -10,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, Response
 from open_webui.config import DEFAULT_USER_PERMISSIONS
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.events import EVENTS, publish_event
@@ -130,7 +129,25 @@ async def get_all_users(
     user=Depends(get_admin_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    return await Users.get_users(db=db)
+    result = await Users.get_users(db=db)
+    users = result['users']
+    total = result['total']
+
+    # Look up by group: binding one IN parameter per user breaks past ~32k users
+    groups = await Groups.get_all_groups(db=db)
+    group_user_ids = await Groups.get_group_user_ids_by_ids([group.id for group in groups], db=db)
+
+    groups_by_user = {}
+    for group in groups:
+        for user_id in group_user_ids[group.id]:
+            groups_by_user.setdefault(user_id, []).append({'id': group.id, 'name': group.name})
+
+    return {
+        'users': [
+            UserInfoResponse(**{**user.model_dump(), 'groups': groups_by_user.get(user.id, [])}) for user in users
+        ],
+        'total': total,
+    }
 
 
 @router.get('/search', response_model=UserInfoListResponse)
@@ -262,6 +279,7 @@ class FeaturesPermissions(BaseModel):
 
     web_search: bool = True
     image_generation: bool = True
+    video_generation: bool = False
     code_interpreter: bool = True
     memories: bool = True
     subagents: bool = True
@@ -831,14 +849,13 @@ async def get_user_profile_image_by_id(user_id: str, user=Depends(get_verified_u
                 try:
                     header, base64_data = user.profile_image_url.split(',', 1)
                     image_data = base64.b64decode(base64_data)
-                    image_buffer = io.BytesIO(image_data)
                     media_type = header.split(';')[0].lstrip('data:').lower()
 
                     if media_type not in PROFILE_IMAGE_ALLOWED_MIME_TYPES:
                         return FileResponse(f'{STATIC_DIR}/user.png')
 
-                    return StreamingResponse(
-                        image_buffer,
+                    return Response(
+                        content=image_data,
                         media_type=media_type,
                         headers={
                             'Content-Disposition': 'inline',

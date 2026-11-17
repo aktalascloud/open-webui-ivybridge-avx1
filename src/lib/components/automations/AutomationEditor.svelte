@@ -37,6 +37,7 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import DeleteConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
+	import Textarea from '$lib/components/common/Textarea.svelte';
 	import Calendar from '$lib/components/icons/Calendar.svelte';
 	import Sparkles from '$lib/components/icons/Sparkles.svelte';
 	import Folder from '$lib/components/icons/Folder.svelte';
@@ -66,6 +67,8 @@
 	// The page is the editor: fields start from the saved automation, Save appears once they differ.
 	let name = '';
 	let prompt = '';
+	// Like the model editor's system prompt: a saved prompt starts collapsed.
+	let showPrompt = true;
 	let model_id = '';
 	let folder_id = '';
 	let target_type: 'chat' | 'channel' = 'chat';
@@ -76,6 +79,8 @@
 	let agentModels: AgentModel[] = [];
 	let scheduleDropdown: ScheduleDropdown;
 	let scheduleTick = 0;
+	// The stored rule as the schedule fields rebuild it, so an untouched schedule is not a change.
+	let savedRrule = '';
 	let saving = false;
 	let fieldsReady = false;
 
@@ -90,6 +95,7 @@
 		terminalCwd = source.data.terminal?.cwd ?? '';
 		await tick();
 		scheduleDropdown?.parseRrule(source.data.rrule);
+		savedRrule = scheduleDropdown?.buildRrule?.() ?? source.data.rrule;
 		scheduleTick++;
 		fieldsReady = true;
 	}
@@ -105,7 +111,7 @@
 			channel_id !== (automation.data.target?.channel_id ?? '') ||
 			terminalServerId !== (automation.data.terminal?.server_id ?? '') ||
 			terminalCwd.trim() !== (automation.data.terminal?.cwd ?? '') ||
-			rruleNow(scheduleTick) !== automation.data.rrule);
+			rruleNow(scheduleTick) !== savedRrule);
 
 	// Agent models depend on the chosen terminal, as in the automation modal.
 	let modelRequest = 0;
@@ -138,13 +144,15 @@
 		}
 		saving = true;
 		try {
+			const rrule = scheduleDropdown.buildRrule();
 			const form: AutomationForm = {
 				name: name.trim(),
 				folder_id: target_type === 'channel' ? null : folder_id || null,
 				data: {
 					prompt: prompt.trim(),
 					model_id: model_id.trim(),
-					rrule: scheduleDropdown.buildRrule(),
+					// An untouched schedule keeps its stored start date.
+					rrule: rrule === savedRrule ? automation.data.rrule : rrule,
 					terminal: terminalServerId
 						? { server_id: terminalServerId, cwd: terminalCwd.trim() || undefined }
 						: undefined,
@@ -257,16 +265,6 @@
 		if (copied) toast.success($i18n.t('Copied link to clipboard'));
 	};
 
-	// The prompt grows with its text instead of scrolling inside a box.
-	const autosize = (node: HTMLTextAreaElement, _value: string) => {
-		const fit = () => {
-			node.style.height = 'auto';
-			node.style.height = `${node.scrollHeight}px`;
-		};
-		fit();
-		return { update: fit };
-	};
-
 	const toggleHandler = async () => {
 		const previousState = automation.is_active;
 		const res = await toggleAutomationById(localStorage.token, automation.id).catch((err) => {
@@ -362,6 +360,7 @@
 		is_active = automation.is_active;
 
 		await resetFields(automation);
+		showPrompt = !prompt.trim();
 		await ensureFolders();
 		await ensureChannels();
 		terminalServers = await getTerminalServers(localStorage.token).catch(() => []);
@@ -424,14 +423,39 @@
 				aria-label={$i18n.t('Name')}
 				placeholder={$i18n.t('Automation name')}
 			/>
-			<textarea
-				class="mt-1 w-full resize-none overflow-hidden bg-transparent text-xs font-normal leading-relaxed text-gray-500 outline-hidden placeholder:text-gray-400 dark:text-gray-400 dark:placeholder:text-gray-500"
-				bind:value={prompt}
-				use:autosize={prompt}
-				rows={1}
-				aria-label={$i18n.t('Instructions')}
-				placeholder={$i18n.t('Enter prompt here.')}
-			></textarea>
+			{#if showPrompt || !prompt.trim()}
+				<Textarea
+					className="mt-1 w-full resize-none overflow-hidden bg-transparent text-xs font-normal leading-relaxed text-gray-500 outline-hidden placeholder:text-gray-400 dark:text-gray-400 dark:placeholder:text-gray-500"
+					bind:value={prompt}
+					rows={1}
+					ariaLabel={$i18n.t('Instructions')}
+					placeholder={$i18n.t('Enter prompt here.')}
+				/>
+			{:else}
+				<button
+					type="button"
+					aria-label={$i18n.t('Instructions')}
+					aria-expanded={false}
+					on:click={() => {
+						showPrompt = true;
+					}}
+					class="mt-1 w-full cursor-text text-start line-clamp-5 whitespace-pre-wrap break-words text-xs font-normal leading-relaxed text-gray-500 dark:text-gray-400"
+				>
+					{prompt}
+				</button>
+			{/if}
+			{#if prompt.trim()}
+				<button
+					class="mt-1 block text-xs text-gray-500 transition hover:text-gray-700 dark:hover:text-gray-300"
+					type="button"
+					aria-expanded={showPrompt}
+					on:click={() => {
+						showPrompt = !showPrompt;
+					}}
+				>
+					{showPrompt ? $i18n.t('Show less') : $i18n.t('Show more')}
+				</button>
+			{/if}
 
 			<div class="mt-6 mb-1 text-[0.6875rem] text-gray-400 dark:text-gray-500">
 				{$i18n.t('Properties')}
@@ -529,6 +553,13 @@
 							aria-hidden="true"><circle cx="8" cy="8" r="5.75" /><path d="M8 5v3l2 1.5" /></svg
 						>{$i18n.t('Next run')}
 					</span>
+					<!-- localisation keys kept from the previous runs list (so they don't get automatically removed):
+						{$i18n.t('Runs')}
+						{$i18n.t('Last run')}
+						{$i18n.t('No runs yet')}
+						{$i18n.t('View chat')}
+						{$i18n.t('View channel')}
+					-->
 					<span
 						class="min-w-0 flex-1 truncate text-xs {is_active
 							? 'text-gray-700 dark:text-gray-300'

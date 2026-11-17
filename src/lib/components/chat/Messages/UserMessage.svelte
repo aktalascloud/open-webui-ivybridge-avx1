@@ -6,9 +6,8 @@
 	import ChevronRightIcon from '$lib/components/layout/Sidebar/icons/ChevronRight.svelte';
 	import { toast } from 'svelte-sonner';
 	import { tick, getContext, onMount } from 'svelte';
-	import type { Writable } from 'svelte/store';
 
-	import { models, settings } from '$lib/stores';
+	import { settings } from '$lib/stores';
 	import { user as _user } from '$lib/stores';
 	import {
 		copyToClipboard as _copyToClipboard,
@@ -29,16 +28,16 @@
 	import Image from '$lib/components/common/Image.svelte';
 	import DeleteConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import SubagentResultRow from './SubagentResultRow.svelte';
+	import { getChatContext } from '$lib/components/chat/context';
+
+	const { models } = getChatContext();
 
 	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
-	const contextCompactions =
-		getContext<Writable<Record<string, 'in_progress' | { error: string }>>>('contextCompactions');
 	export let user;
 
 	export let chatId;
 	export let history;
 	export let messageId;
-	export let selectedModels: string[] = [];
 
 	export let siblings;
 
@@ -72,9 +71,6 @@
 	let editScrollContainer: HTMLDivElement;
 
 	let message = structuredClone(history.messages[messageId]);
-	$: canBranch = ![...selectedModels, ...(message.models ?? [])].some((id) =>
-		id.startsWith('agent:')
-	);
 	$: authorId = message.user_id || message.user?.id || user?.id;
 	$: author =
 		message.user?.id === authorId
@@ -124,7 +120,6 @@
 	};
 
 	const editMessageConfirmHandler = async (submit = true) => {
-		if (submit && !canBranch) return;
 		if (!editedContent && (editedFiles ?? []).length === 0) {
 			toast.error($i18n.t('Please enter a message or attach a file.'));
 			return;
@@ -205,12 +200,8 @@
 			</div>
 		{/if}
 
-		{#if message.contextSummary || $contextCompactions?.[messageId]}
-			<ContextCompactionLabel
-				summary={message.contextSummary}
-				status={$contextCompactions?.[messageId]}
-				{compactPreview}
-			/>
+		{#if message.contextSummary}
+			<ContextCompactionLabel summary={message.contextSummary} {compactPreview} />
 		{/if}
 
 		<div class="chat-{message.role} w-full min-w-full">
@@ -376,17 +367,15 @@
 								{$i18n.t('Cancel')}
 							</button>
 
-							{#if canBranch}
-								<button
-									id="confirm-edit-message-button"
-									class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 text-xs font-normal text-white transition hover:bg-black disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
-									on:click={() => {
-										editMessageConfirmHandler();
-									}}
-								>
-									{$i18n.t('Send')}
-								</button>
-							{/if}
+							<button
+								id="confirm-edit-message-button"
+								class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 text-xs font-normal text-white transition hover:bg-black disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+								on:click={() => {
+									editMessageConfirmHandler();
+								}}
+							>
+								{$i18n.t('Send')}
+							</button>
 						</div>
 					</div>
 				</div>

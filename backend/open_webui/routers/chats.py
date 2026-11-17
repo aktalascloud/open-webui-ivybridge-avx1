@@ -41,7 +41,6 @@ from open_webui.models.tags import TagModel, Tags
 from open_webui.models.users import UserModel
 from open_webui.socket.main import get_event_emitter
 from open_webui.tasks import get_response_streams_by_chat_id, has_active_tasks, stop_item_tasks
-from open_webui.tools.visualizations import DEFAULT_VISUALIZATION_PROMPT_TEMPLATE
 from open_webui.utils.access_control import has_permission, validate_access_grants
 from open_webui.utils.access_control.folders import has_chat_move_access, has_folder_write_access
 from open_webui.utils.auth import bearer_security, get_admin_user, get_current_user, get_verified_user
@@ -199,16 +198,16 @@ def set_message_authors(chat: dict, user: UserModel) -> None:
 
 
 async def add_active_state_to_chat_list(
-    request: Request, chat_list: list[ChatTitleIdResponse]
+    request: Request, chat_list: list[ChatTitleIdResponse], db: AsyncSession | None = None
 ) -> list[ChatTitleIdResponse]:
-    pending_approval_ids = await ChatMessages.get_chat_ids_with_pending_approval([chat.id for chat in chat_list])
+    pending_approval_ids = await ChatMessages.get_chat_ids_with_pending_approval([chat.id for chat in chat_list], db=db)
     for chat in chat_list:
         chat.pending_approval = chat.id in pending_approval_ids
         chat.active = False
         if not await has_active_tasks(request.app.state.redis, chat.id):
             continue
 
-        chat.active = await ChatMessages.has_unfinished_assistant_by_chat_id(chat.id)
+        chat.active = await ChatMessages.has_unfinished_assistant_by_chat_id(chat.id, db=db)
 
     return chat_list
 
@@ -288,7 +287,6 @@ class ChatConfigForm(BaseModel):
 class ChatConfigResponse(ChatConfigForm):
     DEFAULT_TOOL_PERMISSIONS_AUTO_PROMPT: str = DEFAULT_TOOL_PERMISSIONS_AUTO_PROMPT
     DEFAULT_TOOL_SEARCH_DECISIONS_PROMPT: str = DEFAULT_TOOL_SEARCH_DECISIONS_PROMPT
-    DEFAULT_VISUALIZATION_PROMPT_TEMPLATE: str = DEFAULT_VISUALIZATION_PROMPT_TEMPLATE
     TOOL_SEARCH_EMBEDDING_MODEL: str = ''
 
 
@@ -311,7 +309,6 @@ async def get_chat_config_values() -> dict:
         config[f'TOOL_PERMISSIONS_AUTO_DECISIONS_{key.upper()}'] = auto_config[key]
     config['DEFAULT_TOOL_PERMISSIONS_AUTO_PROMPT'] = DEFAULT_TOOL_PERMISSIONS_AUTO_PROMPT
     config['DEFAULT_TOOL_SEARCH_DECISIONS_PROMPT'] = DEFAULT_TOOL_SEARCH_DECISIONS_PROMPT
-    config['DEFAULT_VISUALIZATION_PROMPT_TEMPLATE'] = DEFAULT_VISUALIZATION_PROMPT_TEMPLATE
     config['TOOL_SEARCH_EMBEDDING_MODEL'] = values.get('rag.embedding_model') or ''
     return config
 
@@ -371,7 +368,7 @@ async def get_session_user_chat_list(
                 sort_dir=sort_dir,
                 db=db,
             )
-        return await add_active_state_to_chat_list(request, chats)
+        return await add_active_state_to_chat_list(request, chats, db=db)
     except Exception as e:
         log.exception(e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
@@ -847,7 +844,7 @@ async def get_user_chat_list_by_user_id(
     chats = await Chats.get_chat_list_by_user_id(
         user_id, include_archived=True, filter=filter, skip=skip, limit=limit, db=db
     )
-    return await add_active_state_to_chat_list(request, chats)
+    return await add_active_state_to_chat_list(request, chats, db=db)
 
 
 # Create New Chat
@@ -1002,7 +999,7 @@ async def search_user_chats(
                 log.debug('deleting tag: %s', tag_id)
                 await Tags.delete_tag_by_name_and_user_id(tag_id, user.id, db=db)
 
-    return await add_active_state_to_chat_list(request, chat_list)
+    return await add_active_state_to_chat_list(request, chat_list, db=db)
 
 
 @router.get('/{id}/search/snippet', response_model=str | None)
@@ -1057,7 +1054,7 @@ async def get_chat_list_by_folder_id(
             sort_dir=sort_dir,
             db=db,
         )
-        return await add_active_state_to_chat_list(request, chats)
+        return await add_active_state_to_chat_list(request, chats, db=db)
 
     except Exception as e:
         log.exception(e)
@@ -1072,7 +1069,7 @@ async def get_user_pinned_chats(
     request: Request, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     chats = await Chats.get_pinned_chats_by_user_id(user.id, db=db)
-    return await add_active_state_to_chat_list(request, chats)
+    return await add_active_state_to_chat_list(request, chats, db=db)
 
 
 # Get Chats
@@ -1187,7 +1184,7 @@ async def get_archived_session_user_chat_list(
         limit=limit,
         db=db,
     )
-    return await add_active_state_to_chat_list(request, chats)
+    return await add_active_state_to_chat_list(request, chats, db=db)
 
 
 # Get Archived Chats Count
@@ -1366,7 +1363,7 @@ async def get_user_chat_list_by_tag_name(
     if len(chats) == 0:
         await Tags.delete_tag_by_name_and_user_id(form_data.name, user.id, db=db)
 
-    return await add_active_state_to_chat_list(request, chats)
+    return await add_active_state_to_chat_list(request, chats, db=db)
 
 
 # Compact Chat
@@ -2397,8 +2394,10 @@ async def get_chat_with_tag_access(id: str, user, db: AsyncSession):
     if chat:
         return chat
     chat = await Chats.get_chat_by_id(id, db=db)
-    if chat and chat.folder_id and (
-        user.role == 'admin' or await has_folder_write_access(user.id, chat.folder_id, db=db)
+    if (
+        chat
+        and chat.folder_id
+        and (user.role == 'admin' or await has_folder_write_access(user.id, chat.folder_id, db=db))
     ):
         return chat
     return None
@@ -2481,8 +2480,13 @@ class TagColorForm(BaseModel):
 
 
 @router.patch('/{id}/tags', response_model=list[TagModel])
-async def update_chat_tag_color(request: Request, id: str, form_data: TagColorForm,
-    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
+async def update_chat_tag_color(
+    request: Request,
+    id: str,
+    form_data: TagColorForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
     tag_id = form_data.name.replace(' ', '_').lower()
     chat = await get_chat_with_tag_access(id, user, db)
     if not chat or tag_id not in (chat.meta or {}).get('tags', []):

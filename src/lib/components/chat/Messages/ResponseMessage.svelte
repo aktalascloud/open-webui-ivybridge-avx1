@@ -13,8 +13,6 @@
 	import type { i18n as i18nType, t } from 'i18next';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
-	const contextCompactions =
-		getContext<Writable<Record<string, 'in_progress' | { error: string }>>>('contextCompactions');
 
 	const dispatch = createEventDispatcher();
 
@@ -22,15 +20,7 @@
 	import { getChatById } from '$lib/apis/chats';
 	import { generateTags } from '$lib/apis';
 
-	import {
-		audioQueue,
-		config,
-		models,
-		settings,
-		TTSWorker,
-		user,
-		visibleControls
-	} from '$lib/stores';
+	import { config, settings, TTSWorker, user, visibleControls } from '$lib/stores';
 	import { synthesizeOpenAISpeech } from '$lib/apis/audio';
 	import { imageGenerations } from '$lib/apis/images';
 	import {
@@ -75,6 +65,9 @@
 	import MCPApp from '$lib/components/chat/Messages/MCPApp.svelte';
 	import OutputEditView from './OutputEditView.svelte';
 	import { getOutputText, replaceOutputMessageText, type OutputItem } from './structuredOutput';
+	import { getChatContext } from '$lib/components/chat/context';
+
+	const { audioQueue, models } = getChatContext();
 
 	interface MessageType {
 		user_id?: string;
@@ -135,13 +128,19 @@
 	export let chatId = '';
 	export let history;
 	export let messageId;
-	$: compactionStatus = $contextCompactions?.[messageId];
+	$: compacting =
+		!message.done &&
+		(message.output ?? []).some(
+			(item) => item?.type === 'open_webui:context_compaction' && item.status === 'in_progress'
+		);
 	export let selectedModels = [];
 
 	let messageSource = history.messages[messageId];
 	let message: MessageType = structuredClone(messageSource);
-	$: canBranch =
-		!message.model?.startsWith('agent:') && !selectedModels.some((id) => id.startsWith('agent:'));
+	$: isAgent =
+		message.model?.startsWith('agent:') || selectedModels.some((id) => id.startsWith('agent:'));
+	// Agents regenerate on a fork of their own conversation; continuing or copying a reply has no turn to fork.
+	$: canBranch = !isAgent;
 	$: if (history.messages) {
 		const source = history.messages[messageId];
 		if (source) {
@@ -731,7 +730,7 @@
 				</Name>
 			{/if}
 
-			{#if message.contextSummary && !compactionStatus}
+			{#if message.contextSummary}
 				<ContextCompactionLabel summary={message.contextSummary} {compactPreview} />
 			{/if}
 
@@ -742,15 +741,24 @@
 							<StatusHistory statusHistory={message?.statusHistory} />
 						{/if}
 
-						{#if message?.files && message.files?.filter( (f) => ['image', 'file'].includes(f.type) ).length > 0}
+						{#if message?.files && message.files?.filter( (f) => ['image', 'video', 'file'].includes(f.type) ).length > 0}
 							<div
 								class="my-1 w-full flex overflow-x-auto gap-2 flex-wrap"
 								dir={$settings?.chatDirection ?? 'auto'}
 							>
-								{#each message.files.filter((f) => ['image', 'file'].includes(f.type)) as file}
+								{#each message.files.filter( (f) => ['image', 'video', 'file'].includes(f.type) ) as file}
 									<div>
 										{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
 											<Image src={file.url} alt={file.name || $i18n.t('Generated Image')} />
+										{:else if file.type === 'video' || (file?.content_type ?? '').startsWith('video/')}
+											<!-- svelte-ignore a11y-media-has-caption -->
+											<video
+												src={file.url}
+												controls
+												preload="metadata"
+												class="max-h-96 max-w-full rounded-xl"
+												aria-label={file.name || $i18n.t('Generated Video')}
+											></video>
 										{:else}
 											<FileItem
 												item={file}
@@ -954,11 +962,7 @@
 								/>
 							{/if}
 
-							{#if compactionStatus}
-								<ContextCompactionLabel status={compactionStatus} {compactPreview} />
-							{/if}
-
-							{#if !compactionStatus && !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
+							{#if !compacting && !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
 								<div class="text-[0.90625rem] leading-relaxed">
 									<span
 										class="inline-block w-[0.125rem] h-3.5 bg-gray-400 dark:bg-gray-500 ml-0.5 animate-cursor-pulse align-text-bottom"
@@ -1477,7 +1481,7 @@
 								{/if}
 
 								{#if (!readOnly && (!message.user_id || message.user_id === $user?.id)) || writeAccess}
-									{#if canBranch && ($user?.role === 'admin' || ($user?.permissions?.chat?.regenerate_response ?? true))}
+									{#if $user?.role === 'admin' || ($user?.permissions?.chat?.regenerate_response ?? true)}
 										{#if $settings?.regenerateMenu ?? true}
 											<button
 												type="button"
@@ -1518,7 +1522,12 @@
 													});
 												}}
 											>
-												<Tooltip content={$i18n.t('Regenerate')} placement="bottom">
+												<Tooltip
+													content={isAgent
+														? $i18n.t('Regenerate (file changes are not undone)')
+														: $i18n.t('Regenerate')}
+													placement="bottom"
+												>
 													<button
 														type="button"
 														aria-label={$i18n.t('Regenerate')}
@@ -1563,7 +1572,12 @@
 												</Tooltip>
 											</RegenerateMenu>
 										{:else}
-											<Tooltip content={$i18n.t('Regenerate')} placement="bottom">
+											<Tooltip
+												content={isAgent
+													? $i18n.t('Regenerate (file changes are not undone)')
+													: $i18n.t('Regenerate')}
+												placement="bottom"
+											>
 												<button
 													type="button"
 													aria-label={$i18n.t('Regenerate')}

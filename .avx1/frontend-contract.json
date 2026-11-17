@@ -9,11 +9,11 @@
   "helper_sha256": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
-    "src/lib/components/chat/MessageInput.svelte": "0e7731407b28981dab119dfce4b43275a54ad5163941d1db6b8d21148ffd9c00",
-    "src/lib/components/chat/Chat.svelte": "336b7c5f36e424ea801b645195acba211554264884137b8ab8f49fef393c2393",
+    "src/lib/components/chat/MessageInput.svelte": "02bc019854a7ec7df73a8e02024f4b959a4159986befb1bbf0e9f8ac2eedb841",
+    "src/lib/components/chat/Chat.svelte": "822aa8bfb47a1d63925f946efbcf95f585041568dae962bfccb708e6c3fd92b8",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
-    "src/lib/components/chat/Messages/ResponseMessage.svelte": "05504c8a6b58d4b80092fa2a252022eb109d0dc05b46450f4607c467dc77de32",
-    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "39c5d885756c7b15b1c9ee5801cd13bbd7a832a8d366536ec7d36545c2671869"
+    "src/lib/components/chat/Messages/ResponseMessage.svelte": "9d86d161b82b66fc989bdd5b4b64ec115668c454a0e99e5b720389fce68cffd3",
+    "src/lib/components/chat/MessageInput/CallOverlay.svelte": "ed3a64f4a3a9f30873084850b55d6ce193556585c01756c605cc5160e3e324b3"
   },
   "reviewed_upstream_change": {
     "upstream_commit": "09fbbd6d69293084d9e09cbb7d3b93e5d305ec5c",
@@ -21,7 +21,7 @@
   },
   "reviewed_local_change": "The shared Chat composer now handles main and side chats. Mic provenance selects the actual editor inputId; explicit direct tool IDs and voice wire V1 retained.",
   "reviewed_mainstream_change": {
-    "upstream_commit": "31a8c5442345cec0dc0778ff188324f66708d5eb",
-    "scope": "Current chat and sidebar updates keep microphone provenance by inputId, explicit tool IDs, speech identity and voice/avatar hooks. Terminal browser owner and resource binding retained."
+    "upstream_commit": "c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d",
+    "scope": "Current voiceCall/store and settings changes; retain exact inputId mic tagging, assistant voice budget and authenticated Markdown media. Browser view tickets bind the owner credential and terminal instance."
   }
 }

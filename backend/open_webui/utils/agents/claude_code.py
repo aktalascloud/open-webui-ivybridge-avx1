@@ -107,13 +107,16 @@ async def run(transport, output, prompt, images, options):
                         streamed_thinking = True
                         await output.text(delta.get('thinking', ''), reasoning=True)
             elif kind == 'assistant':
+                if message.get('uuid') and not message.get('parent_tool_use_id'):
+                    # Later regenerations and edits resume the conversation at this turn's last reply.
+                    output.state['turn'] = message['uuid']
                 for block in message.get('message', {}).get('content', []):
                     if block['type'] == 'text' and not streamed_text:
                         await output.text(block['text'])
                     elif block['type'] == 'thinking' and not streamed_thinking:
                         await output.text(block['thinking'], reasoning=True)
                     elif block['type'] == 'tool_use':
-                        await output.tool(block['id'], block['name'], block['input'], native=block)
+                        await output.tool(block['id'], block['name'], block['input'], provider_data=block)
             elif kind == 'user':
                 blocks = message.get('message', {}).get('content', [])
                 for block in blocks if isinstance(blocks, list) else []:
@@ -123,7 +126,8 @@ async def run(transport, output, prompt, images, options):
                             block['tool_use_id'],
                             previous.get('name', 'agent_tool'),
                             json.loads(previous.get('arguments', '{}')),
-                            native=block,
+                            # The whole event: its tool_use_result has the edit's structuredPatch.
+                            provider_data=message,
                             result=block.get('content'),
                             done=True,
                         )

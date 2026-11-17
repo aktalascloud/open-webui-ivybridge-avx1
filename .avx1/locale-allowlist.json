@@ -106,5 +106,7 @@
   "URL": "URL",
   "Yahoo": "Yahoo",
   "YouTube": "YouTube",
-  "Git": "Git"
+  "Git": "Git",
+  "AUTOMATIC1111": "AUTOMATIC1111",
+  "OpenRouter": "OpenRouter"
 }

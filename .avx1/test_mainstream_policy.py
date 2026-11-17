@@ -186,7 +186,7 @@ class BrowserOwner(unittest.IsolatedAsyncioTestCase):
     async def test_purpose_server_session_cipher_and_old_tickets_fail_closed(self):
         ticket = self.ticket(self.parent())
         base = self.scope['decode_token'](ticket)
-        for field, value in [('purpose', 'wrong'), ('server', 'other'), ('session', 'other'), ('relay', 'invalid'), ('mode', 'invalid')]:
+        for field, value in [('typ', 'wrong'), ('server', 'other'), ('session', 'other'), ('relay', 'invalid'), ('mode', 'invalid')]:
             payload = {**base, field: value}
             with self.subTest(field=field), self.assertRaises(HTTPException):
                 await self.access(self.scope['create_token'](payload))

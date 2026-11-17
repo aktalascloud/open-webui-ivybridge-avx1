@@ -12,13 +12,7 @@
 
 	import { updateFolderById } from '$lib/apis/folders';
 
-	import {
-		config,
-		user,
-		models as _models,
-		temporaryChatEnabled,
-		selectedFolder
-	} from '$lib/stores';
+	import { config, user, selectedFolder } from '$lib/stores';
 	import { sanitizeResponseContent, extractCurlyBraceWords } from '$lib/utils';
 	import {
 		resolveLocalizedModelDescription,
@@ -33,6 +27,9 @@
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
 	import FolderPlaceholder from './Placeholder/FolderPlaceholder.svelte';
+	import { getChatContext } from '$lib/components/chat/context';
+
+	const { models: _models, temporary } = getChatContext();
 
 	const i18n: any = getContext('i18n');
 
@@ -69,6 +66,9 @@
 	export let showCommands = false;
 
 	export let imageGenerationEnabled = false;
+	export let selectedImageModelId = '';
+	export let videoGenerationEnabled = false;
+	export let selectedVideoModelId = '';
 	export let codeInterpreterEnabled = false;
 	export let webSearchEnabled = false;
 	export let toolApprovalMode = 'full';
@@ -98,7 +98,7 @@
 	// Height of the floating folder composer, so lists can scroll clear of it.
 	let composerHeight = 0;
 	// The composer only belongs with the folder's chats, not its automations.
-	let folderSection: 'chats' | 'automations' = 'chats';
+	let folderSection: 'chats' | 'automations' | 'knowledge' = 'chats';
 
 	let models = [];
 	export let selectedModelIdx = 0;
@@ -153,6 +153,9 @@
 		bind:selectedSkillIds
 		bind:selectedFilterIds
 		bind:imageGenerationEnabled
+		bind:selectedImageModelId
+		bind:videoGenerationEnabled
+		bind:selectedVideoModelId
 		bind:codeInterpreterEnabled
 		bind:webSearchEnabled
 		bind:atSelectedModel
@@ -187,7 +190,7 @@
 		: 'm-auto max-w-[58rem] px-1 md:@3xl:px-20 translate-y-6 py-24'} text-center"
 >
 	<!-- In a folder, temporary mode shows on the composer alone. -->
-	{#if $temporaryChatEnabled && !$selectedFolder}
+	{#if $temporary && !$selectedFolder}
 		<Tooltip
 			content={$i18n.t("This chat won't appear in history and your messages will not be saved.")}
 			className="w-full flex justify-center mb-0.5"
@@ -202,7 +205,9 @@
 	{#if $selectedFolder}
 		<div
 			class="relative min-h-0 w-full flex-1"
-			style="--folder-composer-space: {folderReadOnly || folderSection !== 'chats' ? 0 : composerHeight}px"
+			style="--folder-composer-space: {folderReadOnly || folderSection !== 'chats'
+				? 0
+				: composerHeight}px"
 		>
 			<FolderPlaceholder
 				folder={$selectedFolder}
@@ -338,11 +343,18 @@
 		</div>
 
 		<div
-			class="text-base font-normal mx-auto @md:max-w-3xl py-3 w-full {atSelectedModel
+			class="relative text-base font-normal mx-auto @md:max-w-3xl py-3 w-full {atSelectedModel
 				? 'mt-2'
 				: ''}"
 		>
-			{@render composer($i18n.t('How can I help you today?'))}
+			<!-- Soft halo, like the denser fade around the in-chat composer, so it doesn't float on a vivid background. -->
+			<div
+				aria-hidden="true"
+				class="pointer-events-none absolute -inset-x-8 -inset-y-3 rounded-[3rem] bg-white/40 blur-2xl dark:bg-gray-900/40"
+			></div>
+			<div class="relative">
+				{@render composer($i18n.t('How can I help you today?'))}
+			</div>
 		</div>
 
 		<div class="mx-auto max-w-2xl mt-2" in:fade={{ duration: 200, delay: 200 }}>

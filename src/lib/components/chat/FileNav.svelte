@@ -2,6 +2,7 @@
 	export let modelId: string | null = null;
 	export let target: TerminalTarget | null | undefined = undefined;
 	import { resolveTerminalTarget } from '$lib/apis/terminal';
+	import { readDroppedFiles, type DroppedEntry } from '$lib/utils/drop';
 	import type { TerminalContext } from '$lib/types';
 	import type { TerminalTarget } from '$lib/apis/terminal';
 	import { gitRequest, type GitStatus, type GitFile } from '$lib/apis/terminal/git';
@@ -51,6 +52,7 @@
 	import Spinner from '../common/Spinner.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import ConfirmDialog from '../common/ConfirmDialog.svelte';
+	import Dropdown from '../common/Dropdown.svelte';
 	import DropdownMenu from '../common/DropdownMenu.svelte';
 
 	import FileNavToolbar from './FileNav/FileNavToolbar.svelte';
@@ -85,7 +87,10 @@
 	export let onViewChange: ((view: any) => void) | null = null;
 	export let onFileSaved: ((content: string) => void) | null = null;
 	let viewRestored = !initialView;
+	let lastView: any = null;
 	export const captureView = () => {
+		// The editor is gone after teardown; a fresh capture would drop its unsaved edit.
+		if (disposed) return lastView;
 		const view =
 			!viewRestored && initialView
 				? initialView
@@ -97,10 +102,11 @@
 						dirty: dirty || saving,
 						scrollTop: viewerRoot?.scrollTop ?? 0
 					};
-		return {
+		lastView = {
 			...view,
 			isHome: homeDirectory !== null && asDirectoryPath(view.directory) === homeDirectory
 		};
+		return lastView;
 	};
 	const restoreView = async () => {
 		if (disposed || viewRestored || !initialView) return;
@@ -229,7 +235,7 @@
 	export let dirty = false;
 	let diskChanged = false;
 	let overwriteChoice: ((replace: boolean) => void) | null = null;
-	let saveTarget: (TerminalTarget & { path: string }) | null = null;
+	let selectedFileLocation: (TerminalTarget & { path: string }) | null = null;
 	let dirtyChoice: {
 		sending: boolean;
 		resolve: (confirmed: boolean) => void;
@@ -348,7 +354,7 @@
 	// Preserve translations for the former save notifications during extraction.
 	// $i18n.t('File saved'); $i18n.t('Failed to save file');
 	const saveFile = async (content: string) => {
-		const target = saveTarget;
+		const target = selectedFileLocation;
 		if (
 			diskChanged &&
 			!(await new Promise<boolean>((resolve) => {
@@ -374,7 +380,7 @@
 			new File([content], name, { type: 'text/plain' })
 		);
 		if (!result) throw new Error('Failed to save file. Your changes are still in the editor.');
-		if (saveTarget === target) {
+		if (selectedFileLocation === target) {
 			fileContent = content;
 			diskChanged = false;
 		}
@@ -652,7 +658,13 @@
 		await loadDir(entry.path);
 		if (entry.file) {
 			const fileName = entry.file.split('/').pop() ?? '';
-			await openEntry({ name: fileName, type: 'file', size: 0 });
+			await openEntry(
+				entries.find((item) => item.name === fileName) ?? {
+					name: fileName,
+					type: 'file',
+					writable: currentWritable
+				}
+			);
 		}
 		navigatingHistory = false;
 	};
@@ -665,7 +677,13 @@
 		await loadDir(entry.path);
 		if (entry.file) {
 			const fileName = entry.file.split('/').pop() ?? '';
-			await openEntry({ name: fileName, type: 'file', size: 0 });
+			await openEntry(
+				entries.find((item) => item.name === fileName) ?? {
+					name: fileName,
+					type: 'file',
+					writable: currentWritable
+				}
+			);
 		}
 		navigatingHistory = false;
 	};
@@ -770,12 +788,9 @@
 	let documentTargetPage: number | null = null;
 
 	// Office preview state
-	let fileOfficeHtml: string | null = null;
 	let fileOfficeSlides: string[] | null = null;
 	let currentSlide = 0;
-	let excelSheetNames: string[] = [];
 	let selectedExcelSheet = '';
-	let excelWorkbook: import('xlsx').WorkBook | null = null;
 
 	// File preview toolbar state (bound from FilePreview)
 	let showRaw = false;
@@ -877,6 +892,8 @@
 
 		if (mounted && terminal) {
 			if (chatChanged && chatId && !oldChatId && !terminalChanged) {
+				if (selectedFileLocation)
+					selectedFileLocation = { ...terminal, path: selectedFileLocation.path };
 				if (openedFile) {
 					openedFile = { ...openedFile, session_id: chatId };
 					publishFile();
@@ -953,6 +970,21 @@
 
 	const closeDirectoryMenu = () => {
 		directoryMenu = null;
+	};
+
+	const positionDirectoryMenu = (node: HTMLElement, point: { x: number; y: number }) => {
+		const update = (point: { x: number; y: number }) => {
+			computePosition({ getBoundingClientRect: () => new DOMRect(point.x, point.y) }, node, {
+				strategy: 'fixed',
+				placement: 'bottom-start',
+				middleware: [flip(), shift({ padding: 8 })]
+			}).then(({ x, y }) => {
+				node.style.left = `${x}px`;
+				node.style.top = `${y}px`;
+			});
+		};
+		update(point);
+		return { update };
 	};
 
 	const parentDirectoryPath = (path: string) => {
@@ -1110,7 +1142,9 @@
 		return clampToFileRoot(path);
 	};
 
-	const buildBreadcrumbs = (path: string) => {
+	$: rootLabel = fileRoot?.path === homeDirectory ? $i18n.t('Home') : (fileRoot?.label ?? '');
+
+	const buildBreadcrumbs = (path: string, rootLabel: string) => {
 		if (fileRoot) {
 			const directory = clampToFileRoot(path);
 			const relative = directory === fileRoot.path ? '' : directory.slice(fileRoot.path.length);
@@ -1121,7 +1155,7 @@
 					acc.push({ label: part, path: asDirectoryPath(joinPath(prev.path, part)) });
 					return acc;
 				},
-				[{ label: fileRoot.label, path: fileRoot.path }]
+				[{ label: rootLabel, path: fileRoot.path }]
 			);
 		}
 
@@ -1160,12 +1194,9 @@
 		fileSqliteData = null;
 		fileModelData = null;
 		fileDocxData = null;
-		fileOfficeHtml = null;
 		fileOfficeSlides = null;
 		currentSlide = 0;
-		excelSheetNames = [];
 		selectedExcelSheet = '';
-		excelWorkbook = null;
 	};
 
 	// Directory operations
@@ -1188,7 +1219,7 @@
 		}
 
 		openedFile = null;
-		saveTarget = null;
+		selectedFileLocation = null;
 		dirty = false;
 		loading = true;
 		error = null;
@@ -1253,6 +1284,11 @@
 			error = null;
 			currentWritable = listings[0].writable !== false;
 			entries = normalizeEntries(listings[0].entries);
+		} else {
+			error =
+				'Failed to load directory. Check your Terminal connection in Settings → Integrations.';
+			entries = [];
+			clearSelection();
 		}
 		const cache = new Map(treeCache);
 		paths.forEach(
@@ -1365,7 +1401,7 @@
 		if (terminalContext) terminalContext = { ...terminalContext, file: null };
 		dirty = false;
 		diskChanged = false;
-		saveTarget = { ...terminal, path: filePath };
+		selectedFileLocation = { ...terminal, path: filePath };
 		pendingFile = filesystemFile(
 			{ path: filePath, name: entry.name, size: entry.size, modified: entry.modified },
 			selector,
@@ -1394,11 +1430,7 @@
 			fileSqliteData: null,
 			fileModelData: null,
 			fileDocxData: null,
-			fileOfficeHtml: null,
 			fileOfficeSlides: null,
-			excelWorkbook: null,
-			excelSheetNames: [],
-			selectedExcelSheet: '',
 			currentSlide: 0,
 			fileContent: null
 		} as any;
@@ -1438,21 +1470,6 @@
 						const arrayBuffer = await result.blob.arrayBuffer();
 						next.fileDocxData = arrayBuffer;
 					}
-				} else if (ext === 'xlsx') {
-					const result = await downloadFileBlob(terminal, filePath);
-					if (result) {
-						const arrayBuffer = await result.blob.arrayBuffer();
-						const { readExcelWorkbook, excelToTable } = await import('$lib/utils/excelToTable');
-						const wb = await readExcelWorkbook(arrayBuffer);
-						next.excelWorkbook = wb;
-						next.excelSheetNames = wb.SheetNames;
-						if (next.excelSheetNames.length > 0) {
-							next.selectedExcelSheet = next.excelSheetNames[0];
-							const result = await excelToTable(wb.Sheets[next.selectedExcelSheet]);
-							const DOMPurify = (await import('dompurify')).default;
-							next.fileOfficeHtml = DOMPurify.sanitize(result.html, { ADD_ATTR: ['target'] });
-						}
-					}
 				} else if (ext === 'pptx') {
 					const preview = await downloadFilePreview(terminal, filePath);
 					if (preview) {
@@ -1489,11 +1506,7 @@
 		fileSqliteData = next.fileSqliteData;
 		fileModelData = next.fileModelData;
 		fileDocxData = next.fileDocxData;
-		fileOfficeHtml = next.fileOfficeHtml;
 		fileOfficeSlides = next.fileOfficeSlides;
-		excelWorkbook = next.excelWorkbook;
-		excelSheetNames = next.excelSheetNames;
-		selectedExcelSheet = next.selectedExcelSheet;
 		currentSlide = next.currentSlide;
 		fileContent = next.fileContent;
 		fileLoading = false;
@@ -1507,7 +1520,6 @@
 				next.fileSqliteData,
 				next.fileModelData,
 				next.fileDocxData,
-				next.fileOfficeHtml,
 				next.fileOfficeSlides
 			].some(Boolean)
 		) {
@@ -1587,41 +1599,7 @@
 	]);
 
 	// Drag-and-drop upload
-	type UploadEntry = { path: string; file?: File };
-
-	async function readDroppedFiles(data: DataTransfer): Promise<UploadEntry[]> {
-		// Capture all roots before the browser locks the drag data after this event.
-		const items = Array.from(data.items ?? []).filter((item) => item.kind === 'file');
-		const roots = items.map((item) => item.webkitGetAsEntry?.() ?? item.getAsFile());
-		if (!items.length) roots.push(...Array.from(data.files));
-		const entries: UploadEntry[] = [];
-		async function visit(entry: FileSystemEntry | File, parent = ''): Promise<void> {
-			const path = parent + entry.name;
-			if (!('isDirectory' in entry)) {
-				entries.push({ path, file: entry });
-			} else if (entry.isDirectory) {
-				entries.push({ path });
-				const reader = (entry as FileSystemDirectoryEntry).createReader();
-				while (true) {
-					const children = await new Promise<FileSystemEntry[]>((resolve, reject) =>
-						reader.readEntries(resolve, reject)
-					);
-					if (!children.length) break;
-					for (const child of children) await visit(child, `${path}/`);
-				}
-			} else {
-				const file = await new Promise<File>((resolve, reject) =>
-					(entry as FileSystemFileEntry).file(resolve, reject)
-				);
-				entries.push({ path, file });
-			}
-		}
-		for (const root of roots) {
-			if (!root) throw new Error('Unable to read a dropped file or folder.');
-			await visit(root);
-		}
-		return entries;
-	}
+	type UploadEntry = DroppedEntry;
 
 	const handleDragOver = (e: DragEvent) => {
 		if (selectedFile) return;
@@ -2520,7 +2498,7 @@
 				showGitDiff = !showGitDiff;
 				fileAsk = null;
 			}}
-			breadcrumbs={buildBreadcrumbs(currentPath)}
+			breadcrumbs={buildBreadcrumbs(currentPath, rootLabel)}
 			{selectedFile}
 			fileSize={openedFile?.size ?? pendingFile?.size}
 			{loading}
@@ -2538,10 +2516,25 @@
 			onGoBack={goBack}
 			onGoForward={goForward}
 			onNavigate={initialFile && onBrowseDirectory ? onBrowseDirectory : loadDir}
-			onRefresh={() => {
+			listFolders={async (path) => {
+				const terminal = selectedTerminal;
+				const entries =
+					treeCache.get(path) ?? (terminal ? (await listFiles(terminal, path))?.entries : null);
+				return (entries ?? [])
+					.filter((entry) => entry.type === 'directory')
+					.map((entry) => cleanEntryName(entry.name));
+			}}
+			onRefresh={async () => {
 				if (selectedFile) {
 					const fileName = selectedFile.split('/').pop() ?? '';
-					openEntry({ name: fileName, type: 'file', size: 0 });
+					await refreshBrowser();
+					openEntry(
+						entries.find((entry) => entry.name === fileName) ?? {
+							name: fileName,
+							type: 'file',
+							writable: currentWritable
+						}
+					);
 				} else {
 					refreshBrowser();
 				}
@@ -2570,6 +2563,43 @@
 						</button>
 					</Tooltip>
 				{/each}
+				{#if !showRaw && !fileSearchTarget && !showGitDiff}
+					<Dropdown align="end" sideOffset={4} closeOnSelect>
+						<Tooltip content={$i18n.t('Outline')}>
+							<button
+								type="button"
+								class="shrink-0 flex h-5 w-5 items-center justify-center rounded transition-colors duration-100 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+								aria-label={$i18n.t('Outline')}
+							>
+								<Icon name="list" size={11} strokeWidth={1.4} />
+							</button>
+						</Tooltip>
+
+						<div slot="content">
+							<DropdownMenu
+								className="min-w-[9.375rem] max-w-72 max-h-80 overflow-y-auto z-[9999999]"
+							>
+								{#each viewerRoot.querySelectorAll('h1, h2, h3, h4, h5, h6') as heading}
+									<button
+										type="button"
+										class="select-none flex h-7 w-full items-center rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition"
+										on:click={() => heading.scrollIntoView()}
+									>
+										<span
+											class="truncate"
+											style:padding-left={`${(Number(heading.tagName.slice(1)) - 1) * 12}px`}
+											>{heading.textContent}</span
+										>
+									</button>
+								{:else}
+									<div class="px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400">
+										{$i18n.t('No results')}
+									</div>
+								{/each}
+							</DropdownMenu>
+						</div>
+					</Dropdown>
+				{/if}
 			{:else if (isCsv || isHtml || isJson || isSvg || isNotebook) && fileContent !== null}
 				<Tooltip content={showRaw ? $i18n.t('Preview') : $i18n.t('Source')}>
 					<button
@@ -2688,7 +2718,7 @@
 
 		{#if !selectedFile && showSearch}
 			<div
-				class="flex h-8 shrink-0 items-center gap-1.5 border-b border-gray-50 px-3 dark:border-gray-850/30"
+				class="flex h-8 shrink-0 items-center gap-1.5 border-b border-gray-200/40 px-3 dark:border-gray-850/20"
 			>
 				<Icon name="search" size={13} strokeWidth={1.5} class="shrink-0 text-gray-400" />
 				<input
@@ -2840,20 +2870,9 @@
 							{fileModelData}
 							{fileDocxData}
 							{fileContent}
-							{fileOfficeHtml}
 							{fileOfficeSlides}
 							targetPage={documentTargetPage}
-							{excelSheetNames}
-							{selectedExcelSheet}
 							searchTarget={fileSearchTarget}
-							onSheetChange={async (sheet) => {
-								if (!excelWorkbook) return;
-								selectedExcelSheet = sheet;
-								const { excelToTable } = await import('$lib/utils/excelToTable');
-								const result = await excelToTable(excelWorkbook.Sheets[sheet]);
-								const DOMPurify = (await import('dompurify')).default;
-								fileOfficeHtml = DOMPurify.sanitize(result.html, { ADD_ATTR: ['target'] });
-							}}
 							target={selectedTerminal}
 							overlay={overlay || isDraggingHandle}
 							onSave={saveFile}
@@ -3157,7 +3176,7 @@
 		{/if}
 
 		{#if onSelectDirectory}
-			<div class="shrink-0 border-t border-gray-50 pt-3 dark:border-gray-850/30">
+			<div class="shrink-0 border-t border-gray-200/40 pt-3 dark:border-gray-850/20">
 				{#if gitAvailable && showCloneRepository && selectedTerminal}
 					{#key `${effectiveTerminalId}:${chatId}`}
 						<CloneRepository
@@ -3208,7 +3227,7 @@
 		{#if showTerminalDock && !onSelectDirectory}
 			<div
 				class:hidden={!hasSessions}
-				class="shrink-0 border-t border-gray-50 dark:border-gray-850/30"
+				class="shrink-0 border-t border-gray-200/40 dark:border-gray-850/20"
 			>
 				{#if terminalExpanded}
 					<!-- Drag handle (at top of panel) -->
@@ -3250,8 +3269,8 @@
 
 		{#if directoryMenu}
 			<div
+				use:positionDirectoryMenu={directoryMenu}
 				class="fixed z-[9999999]"
-				style="left: {directoryMenu.x}px; top: {directoryMenu.y}px;"
 				on:click|stopPropagation
 			>
 				<DropdownMenu className="min-w-[9.375rem]">

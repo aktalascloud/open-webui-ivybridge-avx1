@@ -73,6 +73,8 @@ def folder_status_since(meta: dict, status: str | None):
     if status is None or started is None:
         return None
     return started - (_as_seconds((meta.get('folder_status_durations') or {}).get(status)) or 0)
+
+
 CHAT_SEARCH_FILTER_PREFIXES = ('tag:', 'folder:', 'pinned:', 'archived:', 'shared:')
 
 
@@ -578,6 +580,11 @@ class ChatTable:
                     and child.get('id') == child_id
                     and child.get('role')
                     and child.get('parentId') == message_id
+                    # A queued message waits in the queue, not on the branch shown.
+                    and not (
+                        (child.get('meta') or {}).get('status') == 'pending'
+                        and (child.get('meta') or {}).get('internal') is not True
+                    )
                 ),
                 None,
             )
@@ -1650,8 +1657,6 @@ class ChatTable:
             async with get_async_db_context(db) as session:
                 chat = await session.get(Chat, id)
                 chat.pinned = not chat.pinned
-                chat.updated_at = int(time.time())
-                chat.last_read_at = int(time.time())
                 await session.commit()
                 return ChatModel.model_validate(chat)
         except Exception:
@@ -1663,8 +1668,6 @@ class ChatTable:
                 chat = await session.get(Chat, id)
                 chat.archived = not chat.archived
                 chat.folder_id = None
-                chat.updated_at = int(time.time())
-                chat.last_read_at = int(time.time())
                 await session.commit()
                 return ChatModel.model_validate(chat)
         except Exception:
@@ -2168,9 +2171,7 @@ class ChatTable:
             )
             # Unfinished chats are excluded above; count each approval-pending chat once.
             pending_chats = {
-                (folder_id, chat_id)
-                for folder_id, chat_id, output in result.all()
-                if has_pending_tool_approval(output)
+                (folder_id, chat_id) for folder_id, chat_id, output in result.all() if has_pending_tool_approval(output)
             }
             for folder_id, _ in pending_chats:
                 counts[folder_id] = counts.get(folder_id, 0) + 1
@@ -2707,9 +2708,7 @@ class ChatTable:
             matches = [stored.in_(named)] if named else []
             if NO_FOLDER_STATUS in status_ids:
                 # Unknown or deleted statuses read as no status.
-                matches.append(
-                    or_(stored.is_(None), stored.not_in(list(valid_status_ids)))
-                )
+                matches.append(or_(stored.is_(None), stored.not_in(list(valid_status_ids))))
             conditions.append(or_(*matches))
         return conditions
 
@@ -2831,9 +2830,7 @@ class ChatTable:
             labels = (
                 {
                     (tag.user_id, tag.id): tag
-                    for tag in (
-                        await session.execute(select(Tag).where(Tag.user_id.in_(owners), Tag.id.in_(tag_ids)))
-                    )
+                    for tag in (await session.execute(select(Tag).where(Tag.user_id.in_(owners), Tag.id.in_(tag_ids))))
                     .scalars()
                     .all()
                 }
@@ -2872,9 +2869,7 @@ class ChatTable:
             chat['status_since'] = folder_status_since(meta, chat['status'])
             # For the time-in-status tooltip: when the current stretch began, and earlier
             # time per status (statuses the folder no longer has are left out).
-            chat['status_entered_at'] = (
-                _as_seconds(meta.get('folder_status_at')) if chat['status'] else None
-            )
+            chat['status_entered_at'] = _as_seconds(meta.get('folder_status_at')) if chat['status'] else None
             chat['status_durations'] = {
                 key: seconds
                 for key, value in (meta.get('folder_status_durations') or {}).items()
@@ -2945,9 +2940,7 @@ class ChatTable:
         async with get_async_db_context(db) as session:
             row = (
                 await session.execute(
-                    select(Chat.meta).filter_by(
-                        id=id, folder_id=folder_id, **({'user_id': user_id} if user_id else {})
-                    )
+                    select(Chat.meta).filter_by(id=id, folder_id=folder_id, **({'user_id': user_id} if user_id else {}))
                 )
             ).one_or_none()
             if row is None:
@@ -2967,7 +2960,11 @@ class ChatTable:
                 .values(
                     meta={
                         # No status means no stored status, like chats that never had one.
-                        **{key: value for key, value in meta.items() if key not in ('folder_status', 'folder_status_at')},
+                        **{
+                            key: value
+                            for key, value in meta.items()
+                            if key not in ('folder_status', 'folder_status_at')
+                        },
                         **({'folder_status': status, 'folder_status_at': now} if status is not None else {}),
                         'folder_status_durations': durations,
                     }
@@ -3017,7 +3014,6 @@ class ChatTable:
                 chat = await session.get(Chat, id)
                 chat.folder_id = folder_id
                 if chat.user_id == user_id:
-                    chat.last_read_at = int(time.time())
                     chat.pinned = False
                 if folder_id is not None:
                     # Folder listings only show unarchived chats, so moving an archived

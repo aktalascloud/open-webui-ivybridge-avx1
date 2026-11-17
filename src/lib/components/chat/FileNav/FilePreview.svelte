@@ -76,13 +76,11 @@
 	}
 
 	// Office preview props
-	export let fileOfficeHtml: string | null = null;
+	export let excelWorkbook: import('xlsx').WorkBook | null = null;
 	export let fileOfficeSlides: string[] | null = null;
 	export let currentSlide = 0;
 	export let targetPage: number | null = null;
-	export let excelSheetNames: string[] = [];
 	export let selectedExcelSheet = '';
-	export let onSheetChange: ((sheet: string) => void) | null = null;
 
 	export let overlay = false;
 	export let readOnly = false;
@@ -165,12 +163,7 @@
 		}
 	};
 	$: void configurePreview(
-		JSON.stringify([
-			isHtml,
-			selectedFile,
-			target?.baseUrl,
-			target?.context
-		])
+		JSON.stringify([isHtml, selectedFile, target?.baseUrl, target?.context])
 	);
 	onDestroy(() => previewGeneration++);
 	// Simple CSV parser that handles quoted fields
@@ -334,11 +327,7 @@
 					path={selectedFile ?? ''}
 					loadResource={target?.baseUrl
 						? async (path, signal) => {
-								const result = await downloadFileBlob(
-									target,
-									path,
-									signal
-								);
+								const result = await downloadFileBlob(target, path, signal);
 								if (!result) throw new Error('Could not load model resource.');
 								return result.blob;
 							}
@@ -356,13 +345,8 @@
 		<SqliteView data={fileSqliteData} />
 	{:else if fileDocxData !== null}
 		<DocxPreview data={fileDocxData} {targetPage} className="w-full h-full" />
-	{:else if fileOfficeHtml !== null}
-		<ExcelPreview
-			html={fileOfficeHtml}
-			sheetNames={excelSheetNames}
-			selectedSheet={selectedExcelSheet}
-			{onSheetChange}
-		/>
+	{:else if excelWorkbook !== null}
+		<ExcelPreview workbook={excelWorkbook} bind:selectedSheet={selectedExcelSheet} />
 	{:else if fileOfficeSlides !== null && fileOfficeSlides.length > 0}
 		<PptxPreview
 			bind:this={pptxPreviewRef}
@@ -471,12 +455,7 @@
 			</div>
 		{:else if isNotebook && !showRaw && parsedNotebook}
 			<div class="overflow-auto h-full">
-				<NotebookView
-					notebook={parsedNotebook}
-					filePath={selectedFile ?? ''}
-					{target}
-					{readOnly}
-				/>
+				<NotebookView notebook={parsedNotebook} filePath={selectedFile ?? ''} {target} {readOnly} />
 			</div>
 		{:else if isJson && !showRaw && parsedJson !== undefined}
 			<div class="overflow-auto h-full">
