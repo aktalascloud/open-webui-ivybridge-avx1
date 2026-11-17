@@ -141,7 +141,7 @@ index 0000000000000000000000000000000000000000..b37391c6a152f7f1f95d2d9000c4aa14
 +});
 diff --git a/.avx1/test_chat_model_preservation.mjs b/.avx1/test_chat_model_preservation.mjs
 new file mode 100644
-index 0000000000000000000000000000000000000000..8442249144e75b96c43c9660f80b66890488c9f8
+index 0000000000000000000000000000000000000000..fdca8badd0b2b4ce1606c654e831eba1f1791d9c
 --- /dev/null
 +++ b/.avx1/test_chat_model_preservation.mjs
 @@ -0,0 +1,24 @@
@@ -154,7 +154,7 @@ index 0000000000000000000000000000000000000000..8442249144e75b96c43c9660f80b6689
 +const AsyncFunction=Object.getPrototypeOf(async()=>{}).constructor;
 +async function execute(overrides={},models=null){
 + const calls=[];
-+ const context={models,isShared:false,$chatId:'saved',$temporaryChatEnabled:false,chat:{id:'saved',chat:{models:['original'],files:[]}},
++ const context={models,isShared:false,$chatId:'saved',$temporaryChat:false,chat:{id:'saved',chat:{models:['original'],files:[]}},
 +  selectedModels:['fallback'],$models:[{id:'fallback'}],chatFiles:[],equal:(a,b)=>JSON.stringify(a)===JSON.stringify(b),
 +  localStorage:{token:'fixture'},console:{error(){}},updateChatById:async(token,id,params)=>{calls.push(params);return null;},...overrides};
 + await new AsyncFunction(...Object.keys(context),body)(...Object.values(context));return calls;
