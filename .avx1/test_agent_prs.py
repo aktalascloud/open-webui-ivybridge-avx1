@@ -137,7 +137,7 @@ class AgentPRs(unittest.IsolatedAsyncioTestCase):
         space={'Depends':lambda function:None,'get_verified_user':lambda:None,'get_async_session':lambda:None,
                'Chats':types.SimpleNamespace(get_chats_by_user_id_and_search_text=query),
                'chat_search_content_text':lambda value:value.strip(),'chat_search_terms':lambda value:[],
-               'ChatTitleIdResponse':lambda **value:value,'add_active_state_to_chat_list':AsyncMock(side_effect=lambda request,rows:rows)}
+               'ChatTitleIdResponse':lambda **value:value,'add_active_state_to_chat_list':AsyncMock(side_effect=lambda request,rows,db=None:rows)}
         call=function(Path('routers/chats.py'),'search_user_chats',space)
         result=await call(object(),text,user=types.SimpleNamespace(id='fixture-user'),db=object())
         self.assertEqual(query.call_args.args[0],'fixture-user')
