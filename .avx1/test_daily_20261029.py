@@ -4,7 +4,6 @@ import asyncio
 import copy
 import logging
 from pathlib import Path
-import threading
 import time
 from types import SimpleNamespace as NS
 import unittest
@@ -96,35 +95,58 @@ class AdminKeyRoutes(unittest.IsolatedAsyncioTestCase):
         s,u=self.fixture(enabled=False,permission=False,target='member')
         self.assertTrue(await s['delete_user_api_key_by_id'](None,'member',session_user=NS(id='owner'),db=None));u.delete_user_api_key_by_id.assert_awaited_once_with('member',db=None)
 
-class EmbeddingBuffers(unittest.TestCase):
-    def exercise(self,fail=False,add=False):
-        loop=asyncio.new_event_loop();thread=threading.Thread(target=loop.run_forever,daemon=True);thread.start()
-        calls=[];inserted=[];deleted=[]
-        async def embedding(texts,**kwargs):
+class EmbeddingBuffers(unittest.IsolatedAsyncioTestCase):
+    async def exercise(self, fail=False, add=False):
+        calls, inserted, deleted = [], [], []
+
+        async def embedding(texts, **kwargs):
             calls.append(texts)
-            if fail and len(calls)==2:raise RuntimeError('synthetic provider failure')
-            return [[1,2] for _ in texts]
-        client=NS(has_collection=lambda **_:False,insert=lambda **kwargs:inserted.extend(kwargs['items']),
-                  delete=lambda **kwargs:deleted.append(('ids',kwargs['ids'])),delete_collection=lambda **_:deleted.append(('collection',None)))
-        log=logging.getLogger('silent-embedding-fixture');log.disabled=True
-        scope={'log':log,'sanitize_text_for_db':lambda s:s,'get_vector_db_client':lambda:client,'get_embedding_function':lambda *a,**k:embedding,
-               'RAG_EMBEDDING_BUFFER_SIZE':3,'RAG_EMBEDDING_TIMEOUT':5,'asyncio':asyncio,'time':time,'uuid':uuid}
-        f=functions('routers/retrieval.py',['save_docs_to_vector_db'],scope)['save_docs_to_vector_db']
-        config={'rag.embedding_engine':'openai','rag.embedding_model':'fixture','rag.openai.api_base_url':'http://fixture.invalid',
-                'rag.openai.api_key':'fixture','rag.embedding_batch_size':2,'rag.embedding_content_prefix':'','rag.embedding_concurrent_requests':1,'rag.enable_async_embedding':True}
-        request=NS(app=NS(state=NS(ef=None,main_loop=loop)));docs=[NS(page_content='chunk'+str(i),metadata={'position':i}) for i in range(5)]
-        try:
-            if fail:
-                with self.assertRaisesRegex(RuntimeError,'synthetic'):f(request,docs,'fixture',config,split=False,add=add)
-            else:self.assertTrue(f(request,docs,'fixture',config,split=False))
-            return calls,inserted,deleted
-        finally:loop.call_soon_threadsafe(loop.stop);thread.join();loop.close()
-    def test_buffered_batches_keep_all_text_and_metadata_in_order(self):
-        calls,items,deleted=self.exercise();self.assertEqual(list(map(len,calls)),[4,1]);self.assertEqual([x['metadata']['position'] for x in items],list(range(5)));self.assertEqual(deleted,[])
-    def test_partial_failure_rolls_back_only_new_items_or_new_collection(self):
-        for add in (True,False):
-            calls,items,deleted=self.exercise(fail=True,add=add)
-            self.assertEqual(len(items),4);self.assertEqual(deleted[0][0],'ids' if add else 'collection')
-            if add:self.assertEqual(set(deleted[0][1]),{x['id'] for x in items})
+            if fail and len(calls) == 2:
+                raise RuntimeError('synthetic provider failure')
+            return [[1, 2] for _ in texts]
+
+        client = NS(
+            has_collection=AsyncMock(return_value=False),
+            insert=AsyncMock(side_effect=lambda **kwargs: inserted.extend(kwargs['items'])),
+            delete=AsyncMock(side_effect=lambda **kwargs: deleted.append(('ids', kwargs['ids']))),
+            delete_collection=AsyncMock(side_effect=lambda **_: deleted.append(('collection', None))),
+        )
+        log = logging.getLogger('silent-embedding-fixture')
+        log.disabled = True
+        chunks = AsyncMock(return_value=([f'chunk{i}' for i in range(5)], [{'position': i} for i in range(5)]))
+        scope = {
+            'log': log, 'ASYNC_VECTOR_DB_CLIENT': client, '_chunk_docs': object(), 'run_in_threadpool': chunks,
+            'get_embedding_function': lambda *a, **k: embedding, 'RAG_EMBEDDING_BUFFER_SIZE': 3,
+            'RAG_EMBEDDING_TIMEOUT': 5, 'asyncio': asyncio, 'time': time, 'uuid': uuid,
+        }
+        save = functions('routers/retrieval.py', ['save_docs_to_vector_db'], scope)['save_docs_to_vector_db']
+        config = {
+            'rag.embedding_engine': 'openai', 'rag.embedding_model': 'fixture',
+            'rag.openai.api_base_url': 'http://fixture.invalid', 'rag.openai.api_key': 'fixture',
+            'rag.embedding_batch_size': 2, 'rag.embedding_content_prefix': '',
+            'rag.embedding_concurrent_requests': 1, 'rag.enable_async_embedding': True,
+        }
+        request = NS(app=NS(state=NS(ef=None)))
+        if fail:
+            with self.assertRaisesRegex(RuntimeError, 'synthetic'):
+                await save(request, [], 'fixture', config, split=False, add=add)
+        else:
+            self.assertTrue(await save(request, [], 'fixture', config, split=False))
+        return calls, inserted, deleted
+
+    async def test_buffered_batches_keep_all_text_and_metadata_in_order(self):
+        calls, items, deleted = await self.exercise()
+        self.assertEqual(list(map(len, calls)), [4, 1])
+        self.assertEqual([x['metadata']['position'] for x in items], list(range(5)))
+        self.assertEqual(deleted, [])
+
+    async def test_partial_failure_rolls_back_only_new_items_or_new_collection(self):
+        for add in (True, False):
+            calls, items, deleted = await self.exercise(fail=True, add=add)
+            self.assertEqual(len(items), 4)
+            self.assertEqual(deleted[0][0], 'ids' if add else 'collection')
+            if add:
+                self.assertEqual(set(deleted[0][1]), {x['id'] for x in items})
+
 
 if __name__=='__main__':unittest.main()
