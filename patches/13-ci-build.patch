@@ -49,10 +49,10 @@ index 0000000000000000000000000000000000000000..81cd1e22f117a086b3819069fe8ff256
 +    subprocess.run([str(manager), pins["platform"], pins["build_tools"], pins["ndk"]], check=True)
 diff --git a/.avx1/build.py b/.avx1/build.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..24abe65958ed754405ea22afe5b9db864d490c41
+index 0000000000000000000000000000000000000000..68bc4d28b8c3e546fd08824f3ce609a590bd6d7f
 --- /dev/null
 +++ b/.avx1/build.py
-@@ -0,0 +1,302 @@
+@@ -0,0 +1,305 @@
 +"""Build one exact source revision. Outputs contain no local configuration."""
 +from __future__ import annotations
 +import base64
@@ -136,7 +136,8 @@ index 0000000000000000000000000000000000000000..24abe65958ed754405ea22afe5b9db86
 +        run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
 +        # The reviewed hatch hook uses npm ci and the checked-in lockfile.
 +        run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
-+        run("npm", "audit", "--omit=dev", "--audit-level=high", env=environment)
++        from audit_frontend import audit as audit_frontend
++        frontend_audit = audit_frontend(next(wheels.glob('open_webui-*.whl')), environment)
 +        from native_json import build
 +        manifest["native_json"] = build(wheels)
 +        policy = json.loads((ROOT / ".avx1/native-policy.json").read_text("utf-8"))
@@ -149,6 +150,8 @@ index 0000000000000000000000000000000000000000..24abe65958ed754405ea22afe5b9db86
 +    for path in wheel_paths:
 +        verify_archive(path)
 +    audit_target = audit_python(wheel_paths, manifest)
++    if project == 'webui':
++        manifest['security']['frontend_audit'] = frontend_audit
 +    def checked_script(script, *arguments):
 +        # --target installs do not process .pth files through PYTHONPATH alone.
 +        # pywin32 uses one to register its win32 paths and DLL directory.

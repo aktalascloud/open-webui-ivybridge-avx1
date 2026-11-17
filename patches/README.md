@@ -5,7 +5,7 @@ Only currently applied maintainer differences from the exact official baseline a
 Mainstream-only commits, rejected proposals and reverted experiments are excluded.
 Коммиты самого mainstream, неприменённые предложения и отменённые эксперименты исключены.
 
-Official baseline: `c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d`. Downstream snapshot: `47079df475367c13ffc3db59221ce4225c087dda`.
+Official baseline: `c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d`. Downstream snapshot: `577cef025168e5a06abee7c6a25d3d75c6b5f001`.
 Patches are already applied in this fork. Apply `series` only to a clean checkout of that exact baseline.
 В этом форке патчи уже применены. `series` предназначен только для чистого checkout указанной базы.
 Apply the numbered patches in the order listed in `series`. Each row describes one topic.
@@ -32,3 +32,4 @@ Assistant microphone/voice/VRM hooks, Strata/FreeLLM controls, scoped tool polic
 | 14 | [14-upstream-regressions.patch](14-upstream-regressions.patch) | Exercise adapted upstream contracts and regression fixtures / Проверяет адаптированные контракты upstream и сценарии регрессий. | 5 |
 | 15 | [15-project-docs.patch](15-project-docs.patch) | Document fork setup, support and license terms / Описывает установку, поддержку и условия лицензирования форка. | 2 |
 | 16 | [16-fork-records.patch](16-fork-records.patch) | Record fork changes, upstream reviews and qualification measurements / Хранит журнал изменений, разбор upstream и результаты проверок. | 5 |
+| 17 | [17-build.patch](17-build.patch) | Our reproducible build, toolchain and CI recipes / Наши сборочные рецепты, toolchain и CI. | 1 |
