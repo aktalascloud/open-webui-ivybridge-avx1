@@ -81,7 +81,8 @@ def build_python(project, package, manifest):
         run("node", "--test", ROOT / ".avx1/frontend_contract.test.mjs", env=environment)
         # The reviewed hatch hook uses npm ci and the checked-in lockfile.
         run(sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", wheels, env=environment)
-        run("npm", "audit", "--omit=dev", "--audit-level=high", env=environment)
+        from audit_frontend import audit as audit_frontend
+        frontend_audit = audit_frontend(next(wheels.glob('open_webui-*.whl')), environment)
         from native_json import build
         manifest["native_json"] = build(wheels)
         policy = json.loads((ROOT / ".avx1/native-policy.json").read_text("utf-8"))
@@ -94,6 +95,8 @@ def build_python(project, package, manifest):
     for path in wheel_paths:
         verify_archive(path)
     audit_target = audit_python(wheel_paths, manifest)
+    if project == 'webui':
+        manifest['security']['frontend_audit'] = frontend_audit
     def checked_script(script, *arguments):
         # --target installs do not process .pth files through PYTHONPATH alone.
         # pywin32 uses one to register its win32 paths and DLL directory.
