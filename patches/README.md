@@ -5,7 +5,7 @@ Only currently applied maintainer differences from the exact official baseline a
 Mainstream-only commits, rejected proposals and reverted experiments are excluded.
 Коммиты самого mainstream, неприменённые предложения и отменённые эксперименты исключены.
 
-Official baseline: `c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d`. Downstream snapshot: `577cef025168e5a06abee7c6a25d3d75c6b5f001`.
+Official baseline: `c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d`. Downstream snapshot: `58273da2548cddfbd6fe5296a21eff668a88be43`.
 Patches are already applied in this fork. Apply `series` only to a clean checkout of that exact baseline.
 В этом форке патчи уже применены. `series` предназначен только для чистого checkout указанной базы.
 Apply the numbered patches in the order listed in `series`. Each row describes one topic.
@@ -25,11 +25,11 @@ Assistant microphone/voice/VRM hooks, Strata/FreeLLM controls, scoped tool polic
 | 7 | [07-tools-and-subagents.patch](07-tools-and-subagents.patch) | Scope tool discovery to selected IDs and resolve subagents under the caller’s access rights / Ограничивает инструменты выбранными ID и проверяет права вызывающего для субагентов. | 8 |
 | 8 | [08-chat-integration.patch](08-chat-integration.patch) | Wire mic origin, voice budget, tool selection and model routing into shared chat and request handlers / Подключает источник микрофона, бюджет голоса, выбор инструментов и маршрутизацию моделей в общих обработчиках. | 21 |
 | 9 | [09-localization.patch](09-localization.patch) | Translate fork controls and localize generated UI content / Переводит настройки форка и локализует содержимое интерфейса. | 5 |
-| 10 | [10-native-json.patch](10-native-json.patch) | Qualify AVX1 orjson builds and native cache reuse, with stock JSON as default / Проверяет AVX1-сборки orjson и переиспользование кэша, оставляя штатный JSON по умолчанию. | 11 |
+| 10 | [10-native-json.patch](10-native-json.patch) | Qualify AVX1 orjson builds and native cache reuse, with stock JSON as default / Проверяет AVX1-сборки orjson и переиспользование кэша, оставляя штатный JSON по умолчанию. | 7 |
 | 11 | [11-package-assets.patch](11-package-assets.patch) | Adjust WebUI package hooks, Vite build and bundled browser assets / Адаптирует упаковку WebUI, сборку Vite и ресурсы браузера. | 5 |
 | 12 | [12-portable-install.patch](12-portable-install.patch) | Provide portable build commands and the fork installer / Добавляет команды переносимой сборки и установщик. | 4 |
 | 13 | [13-ci-build.patch](13-ci-build.patch) | Pin toolchains and package inputs, and run the fork build and publication checks / Закрепляет инструменты и входы сборки, запускает проверки пакетов и публикации. | 10 |
 | 14 | [14-upstream-regressions.patch](14-upstream-regressions.patch) | Exercise adapted upstream contracts and regression fixtures / Проверяет адаптированные контракты upstream и сценарии регрессий. | 5 |
-| 15 | [15-project-docs.patch](15-project-docs.patch) | Document fork setup, support and license terms / Описывает установку, поддержку и условия лицензирования форка. | 2 |
-| 16 | [16-fork-records.patch](16-fork-records.patch) | Record fork changes, upstream reviews and qualification measurements / Хранит журнал изменений, разбор upstream и результаты проверок. | 5 |
+| 15 | [15-project-docs.patch](15-project-docs.patch) | Document fork setup, support and license terms / Описывает установку, поддержку и условия лицензирования форка. | 1 |
+| 16 | [16-fork-records.patch](16-fork-records.patch) | Record fork changes, upstream reviews and qualification measurements / Хранит журнал изменений, разбор upstream и результаты проверок. | 2 |
 | 17 | [17-build.patch](17-build.patch) | Our reproducible build, toolchain and CI recipes / Наши сборочные рецепты, toolchain и CI. | 1 |

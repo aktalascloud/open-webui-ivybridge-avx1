@@ -1,6 +1,6 @@
 diff --git a/.avx1/test_free_llm.mjs b/.avx1/test_free_llm.mjs
 new file mode 100644
-index 0000000000000000000000000000000000000000..899cc8b746eaff7119b3f3438bff83098df0b225
+index 0000000000000000000000000000000000000000..83bda7cd14e2425e3245a4c569b9c8f2f08df8e4
 --- /dev/null
 +++ b/.avx1/test_free_llm.mjs
 @@ -0,0 +1,14 @@
@@ -16,7 +16,7 @@ index 0000000000000000000000000000000000000000..899cc8b746eaff7119b3f3438bff8309
 + assert.equal(preset.model_ids.length,2);assert.equal(FREE_LLM_CATALOG.hourly_requests_per_ip,200);
 + assert.equal(new Set(FREE_LLM_CATALOG.models.map(m=>m.vendor)).size,2);
 + preset.model_ids.length=0;assert.equal(freeLlmPreset().model_ids.length,2);
-+ assert.equal(FREE_LLM_CATALOG.research_sources.length,3);
++ assert.ok(FREE_LLM_CATALOG.models.every(m => m.parameters_b >= 120));
 +});
 diff --git a/.avx1/test_free_llm.py b/.avx1/test_free_llm.py
 new file mode 100644
@@ -85,7 +85,7 @@ index 0000000000000000000000000000000000000000..2bf22d93f95cb9614c65eee2bd42d1c9
 +if __name__=='__main__':unittest.main()
 diff --git a/backend/open_webui/utils/free_llm.py b/backend/open_webui/utils/free_llm.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..22346c10cc13700656b530301d14f7e7369a3b9f
+index 0000000000000000000000000000000000000000..af93dd806da1f8cbd379b4059ce2ce2cc3b87456
 --- /dev/null
 +++ b/backend/open_webui/utils/free_llm.py
 @@ -0,0 +1,25 @@
@@ -105,7 +105,7 @@ index 0000000000000000000000000000000000000000..22346c10cc13700656b530301d14f7e7
 +            or config.get('forward_cookies') or config.get('azure')
 +            or config.get('api_type')):
 +        raise HTTPException(400, 'FreeLLM requires its anonymous gateway profile without credentials or custom headers')
-+    if model is not None and model not in {row['id'] for row in CATALOG['models']}:
++    if model is not None and model not in {row['id'] for row in CATALOG['models'] if row['parameters_b'] >= 120}:
 +        raise HTTPException(400, 'This model is not in the reviewed FreeLLM catalog')
 +
 +
@@ -116,16 +116,16 @@ index 0000000000000000000000000000000000000000..22346c10cc13700656b530301d14f7e7
 +    return {name: value for name, value in payload.items() if name not in {'user', 'metadata'}}
 diff --git a/backend/open_webui/utils/free_llm_catalog.json b/backend/open_webui/utils/free_llm_catalog.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..d4c23f53a7c1825e4f76afab48c98b5a119ba662
+index 0000000000000000000000000000000000000000..fee9649c8cfb9d214179febb72faab5f0635cb57
 --- /dev/null
 +++ b/backend/open_webui/utils/free_llm_catalog.json
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,30 @@
 +{
 +  "base_url": "https://ai-gateway.kilo.ai/api/v1",
 +  "prefix_id": "FreeLLM",
 +  "hourly_requests_per_ip": 200,
 +  "quota_scope": "shared across all models and clients on the same public IP",
-+  "reviewed": "2026-11-01",
++  "reviewed": "2026-11-17",
 +  "models": [
 +    {
 +      "id": "reflection/beam-free",
@@ -137,19 +137,14 @@ index 0000000000000000000000000000000000000000..d4c23f53a7c1825e4f76afab48c98b5a
 +      "parameters_b": 501.3
 +    },
 +    {
-+      "id": "nvidia/nemotron-3.5-super-vl:free",
-+      "name": "NVIDIA Nemotron 3.5 Super VL · 120B",
++      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
++      "name": "NVIDIA Nemotron 3 Ultra · 550B",
 +      "context_length": 1000000,
-+      "vision": true,
-+      "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4",
++      "vision": false,
++      "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
 +      "vendor": "nvidia",
-+      "parameters_b": 120
++      "parameters_b": 550
 +    }
-+  ],
-+  "research_sources": [
-+    "dataelement/dsh-desktop",
-+    "nejib1/Free-LLM",
-+    "tashfeenahmed/freellmapi"
 +  ],
 +  "terms": "https://kilo.ai/docs/gateway/models-and-providers",
 +  "privacy": "Providers may retain prompts and outputs for training. Do not submit personal or confidential data.",
@@ -244,7 +239,7 @@ index b85e4ac35c5aa13d61f3f75049b4d0a3e06873dc..50bd073a54375458f5c545c9fd8cbd97
  									<Plus />
 diff --git a/src/lib/utils/freeLlm.js b/src/lib/utils/freeLlm.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..7d094a5dcaa6b108222bdc588acd6d2dd276eb7a
+index 0000000000000000000000000000000000000000..298a365fcf296d9027151fc67879b1f34853a846
 --- /dev/null
 +++ b/src/lib/utils/freeLlm.js
 @@ -0,0 +1,11 @@
@@ -255,7 +250,7 @@ index 0000000000000000000000000000000000000000..7d094a5dcaa6b108222bdc588acd6d2d
 +  return {
 +    url: catalog.base_url, key: '', provider: 'freellm',
 +    auth_type: 'none', prefix_id: catalog.prefix_id,
-+    model_ids: catalog.models.map(model => model.id),
++    model_ids: catalog.models.filter(model => model.parameters_b >= 120).map(model => model.id),
 +    forward_cookies: false, headers: {}, api_type: '', connection_type: 'external'
 +  };
 +}

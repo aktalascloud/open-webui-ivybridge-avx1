@@ -4,8 +4,8 @@
   "ownership": "applied-downstream-only",
   "project": "webui",
   "upstream": "c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d",
-  "snapshot_source": "577cef025168e5a06abee7c6a25d3d75c6b5f001",
-  "downstream_tree_without_patches": "7764711c88e2184797777ac61c22ddc160ea0a18",
+  "snapshot_source": "58273da2548cddfbd6fe5296a21eff668a88be43",
+  "downstream_tree_without_patches": "cfd64c37e1f480500bf04adc14ec7ad28a4abd13",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -41,7 +41,7 @@
         "src/lib/components/admin/Settings/Connections.svelte",
         "src/lib/utils/freeLlm.js"
       ],
-      "sha256": "d15e0dd6be1f6b857c83d72cdae7baa784dba17c0064caec65e401cd6da986b8"
+      "sha256": "6adb4cb18792f5f75e26f3dadd7688b39380968e5345c8260e1b47c5cde1bc21"
     },
     {
       "patch": "03-strata-reasoning.patch",
@@ -164,18 +164,14 @@
       "description": "Qualify AVX1 orjson builds and native cache reuse, with stock JSON as default / Проверяет AVX1-сборки orjson и переиспользование кэша, оставляя штатный JSON по умолчанию.",
       "paths": [
         ".avx1/bench_json.py",
-        ".avx1/bench_json_profiles.py",
-        ".avx1/experiment_json.py",
         ".avx1/hardware-profile.json",
         ".avx1/native-policy.json",
         ".avx1/native_cache.py",
         ".avx1/native_json.py",
         ".avx1/native_json_compat.py",
-        ".avx1/test_native_cache.py",
-        ".github/workflows/avx1-json-experiments.yml",
-        ".github/workflows/native-compare.yml"
+        ".avx1/test_native_cache.py"
       ],
-      "sha256": "25910fe5c82c97e3b77a0092295e61f4192c3ddafc665730548f6591adf4bd57"
+      "sha256": "47d947346106cfa21a1fc801abada6245090826a1ca441a21237a95c37cb783a"
     },
     {
       "patch": "11-package-assets.patch",
@@ -233,22 +229,18 @@
       "patch": "15-project-docs.patch",
       "description": "Document fork setup, support and license terms / Описывает установку, поддержку и условия лицензирования форка.",
       "paths": [
-        "README.md",
-        "README.ru.md"
+        "README.md"
       ],
-      "sha256": "c25c22758154576587dd5ed61a51921b2ffc580729f9a7971c6f7427a5d2a501"
+      "sha256": "0248a4ecccda9bc5e2f59f4b82e8d9c60be621ca6946349137ca2ff6ec179048"
     },
     {
       "patch": "16-fork-records.patch",
       "description": "Record fork changes, upstream reviews and qualification measurements / Хранит журнал изменений, разбор upstream и результаты проверок.",
       "paths": [
         ".avx1/PATCHES.json",
-        ".avx1/measurements/latest.json",
-        ".avx1/review-20261025.json",
-        ".avx1/review-20261029.json",
-        ".avx1/review-20261030.json"
+        ".avx1/measurements/latest.json"
       ],
-      "sha256": "83885d10769e75d26c0c118975c20f10f70a66d35a26d342af58bf1b7cccee7d"
+      "sha256": "dea91fd3daf7af3f740805323316691eab02ba0db372bfbeb81ace1dba4c4c56"
     },
     {
       "patch": "17-build.patch",
@@ -261,7 +253,7 @@
   ],
   "files": {
     "01-dependencies.patch": "2b4d999807178be2627c904ded5089353f3528739bd5430a0398b3b75913772c",
-    "02-free-llm.patch": "d15e0dd6be1f6b857c83d72cdae7baa784dba17c0064caec65e401cd6da986b8",
+    "02-free-llm.patch": "6adb4cb18792f5f75e26f3dadd7688b39380968e5345c8260e1b47c5cde1bc21",
     "03-strata-reasoning.patch": "98af29563d674c56b6f9f8bba81787d8154bfe85724e84584b97f3e36c30b595",
     "04-voice-avatars.patch": "867f5f63734a2820a741fc4e7c3db2e783ea4091368de4c9f38bab8617f25e4a",
     "05-protected-media.patch": "27abd86c2b16e3e25638a64b063630b76d2f100e657b2771d38424ea3ba8170e",
@@ -269,16 +261,16 @@
     "07-tools-and-subagents.patch": "7f177ebc08c7664408e42a5be0f31f7e85982b8693da1cfc903264973e04de09",
     "08-chat-integration.patch": "2670ad63bd4922ab34e41d198f3d2086d25e5e565c808bdc8890c5afa0241077",
     "09-localization.patch": "3780dce56173ccd24ee4c4aa9b42a4df5d78367afac80a52dc3fcc9b8fbdd2ad",
-    "10-native-json.patch": "25910fe5c82c97e3b77a0092295e61f4192c3ddafc665730548f6591adf4bd57",
+    "10-native-json.patch": "47d947346106cfa21a1fc801abada6245090826a1ca441a21237a95c37cb783a",
     "11-package-assets.patch": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac",
     "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
     "13-ci-build.patch": "51c161dea1e612cde2354517017a1aa333501c87a2b44ffc53dbdd29d116078a",
     "14-upstream-regressions.patch": "4f83ee02654f51f260593f55584001b7d06c9f765769e24b6b68e513246c95ee",
-    "15-project-docs.patch": "c25c22758154576587dd5ed61a51921b2ffc580729f9a7971c6f7427a5d2a501",
-    "16-fork-records.patch": "83885d10769e75d26c0c118975c20f10f70a66d35a26d342af58bf1b7cccee7d",
+    "15-project-docs.patch": "0248a4ecccda9bc5e2f59f4b82e8d9c60be621ca6946349137ca2ff6ec179048",
+    "16-fork-records.patch": "dea91fd3daf7af3f740805323316691eab02ba0db372bfbeb81ace1dba4c4c56",
     "17-build.patch": "3858d1d22497695c079e3f6b29aa4f638d6c1c83a1999fd51de338432fb9b513",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "aac3d6ba166c08984fd1627cbefcfb5c7682096818908aa80ee1880c9dc285d5",
-    "README.md": "2ec576328f57b5f55b7fb9ef48f8ce2079a8dbaf14dd9eac1998b3fe3629ed30"
+    "README.md": "0c7596efbe1e450c6a74587154a1f2926721e2fdbedbb32e099a56bcbe89221a"
   }
 }
