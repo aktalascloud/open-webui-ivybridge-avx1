@@ -7,7 +7,7 @@ assert.ok(body,'Actual saveControls callback must be found');
 const AsyncFunction=Object.getPrototypeOf(async()=>{}).constructor;
 async function execute(overrides={},models=null){
  const calls=[];
- const context={models,isShared:false,$chatId:'saved',$temporaryChatEnabled:false,chat:{id:'saved',chat:{models:['original'],files:[]}},
+ const context={models,isShared:false,$chatId:'saved',$temporaryChat:false,chat:{id:'saved',chat:{models:['original'],files:[]}},
   selectedModels:['fallback'],$models:[{id:'fallback'}],chatFiles:[],equal:(a,b)=>JSON.stringify(a)===JSON.stringify(b),
   localStorage:{token:'fixture'},console:{error(){}},updateChatById:async(token,id,params)=>{calls.push(params);return null;},...overrides};
  await new AsyncFunction(...Object.keys(context),body)(...Object.values(context));return calls;
