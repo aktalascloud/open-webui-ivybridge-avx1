@@ -5,7 +5,7 @@ export function freeLlmPreset() {
   return {
     url: catalog.base_url, key: '', provider: 'freellm',
     auth_type: 'none', prefix_id: catalog.prefix_id,
-    model_ids: catalog.models.map(model => model.id),
+    model_ids: catalog.models.filter(model => model.parameters_b >= 120).map(model => model.id),
     forward_cookies: false, headers: {}, api_type: '', connection_type: 'external'
   };
 }

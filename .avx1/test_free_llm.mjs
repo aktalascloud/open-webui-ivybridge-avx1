@@ -10,5 +10,5 @@ test('one anonymous preset exposes two fixed models without changing the catalog
  assert.equal(preset.model_ids.length,2);assert.equal(FREE_LLM_CATALOG.hourly_requests_per_ip,200);
  assert.equal(new Set(FREE_LLM_CATALOG.models.map(m=>m.vendor)).size,2);
  preset.model_ids.length=0;assert.equal(freeLlmPreset().model_ids.length,2);
- assert.equal(FREE_LLM_CATALOG.research_sources.length,3);
+ assert.ok(FREE_LLM_CATALOG.models.every(m => m.parameters_b >= 120));
 });

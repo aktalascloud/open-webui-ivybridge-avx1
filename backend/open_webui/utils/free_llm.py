@@ -14,7 +14,7 @@ def check_free_llm_request(config, url, key=None, model=None):
             or config.get('forward_cookies') or config.get('azure')
             or config.get('api_type')):
         raise HTTPException(400, 'FreeLLM requires its anonymous gateway profile without credentials or custom headers')
-    if model is not None and model not in {row['id'] for row in CATALOG['models']}:
+    if model is not None and model not in {row['id'] for row in CATALOG['models'] if row['parameters_b'] >= 120}:
         raise HTTPException(400, 'This model is not in the reviewed FreeLLM catalog')
 
 

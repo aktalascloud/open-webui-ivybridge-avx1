@@ -3,7 +3,7 @@
   "prefix_id": "FreeLLM",
   "hourly_requests_per_ip": 200,
   "quota_scope": "shared across all models and clients on the same public IP",
-  "reviewed": "2026-11-01",
+  "reviewed": "2026-11-17",
   "models": [
     {
       "id": "reflection/beam-free",
@@ -15,19 +15,14 @@
       "parameters_b": 501.3
     },
     {
-      "id": "nvidia/nemotron-3.5-super-vl:free",
-      "name": "NVIDIA Nemotron 3.5 Super VL · 120B",
+      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "name": "NVIDIA Nemotron 3 Ultra · 550B",
       "context_length": 1000000,
-      "vision": true,
-      "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4",
+      "vision": false,
+      "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
       "vendor": "nvidia",
-      "parameters_b": 120
+      "parameters_b": 550
     }
-  ],
-  "research_sources": [
-    "dataelement/dsh-desktop",
-    "nejib1/Free-LLM",
-    "tashfeenahmed/freellmapi"
   ],
   "terms": "https://kilo.ai/docs/gateway/models-and-providers",
   "privacy": "Providers may retain prompts and outputs for training. Do not submit personal or confidential data.",
