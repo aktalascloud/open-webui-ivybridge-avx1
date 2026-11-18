@@ -45,8 +45,18 @@ def audit_python(wheels, manifest):
     requirements = WORK / 'resolved-audit-requirements.txt'
     requirements.write_text(''.join(item['name']+'=='+item['version']+'\n' for item in libraries), encoding='utf-8')
     # A missing advisory service or unresolved advisory blocks publication.
-    audit=subprocess.run([sys.executable,'-m','pip_audit','--requirement',str(requirements),'--no-deps','--disable-pip','--strict','--format','json','--output',str(report)],cwd=ROOT)
-    if audit.returncode not in {0,1} or not report.exists():raise RuntimeError('Dependency audit unavailable; publication blocked')
+    audit_command = [sys.executable, '-m', 'pip_audit', '--requirement', str(requirements),
+                     '--no-deps', '--disable-pip', '--strict', '--timeout', '60',
+                     '--format', 'json', '--output', str(report)]
+    for attempt in range(2):
+        report.unlink(missing_ok=True)
+        audit = subprocess.run(audit_command, cwd=ROOT)
+        if audit.returncode in {0, 1} and report.is_file():
+            break
+        if attempt == 0:
+            time.sleep(5)
+    else:
+        raise RuntimeError('Dependency audit unavailable; publication blocked')
     data = json.loads(report.read_text("utf-8"))
     audited = {(re.sub(r'[-_.]+','-',item['name']).lower(), item['version']) for item in data['dependencies']}
     if audited != {(item['name'],item['version']) for item in libraries}:
