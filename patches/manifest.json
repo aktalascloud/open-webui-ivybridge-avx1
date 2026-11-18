@@ -4,8 +4,8 @@
   "ownership": "applied-downstream-only",
   "project": "webui",
   "upstream": "04cedc89f5e78c21636daf581829a9a3f1af97d2",
-  "snapshot_source": "2630467f864a4855ebd7a34260c6d27926dcc27a",
-  "downstream_tree_without_patches": "09f548cc086f1f7b4a73fddb9eeed44a93ccaf50",
+  "snapshot_source": "fc641a81928cb9f60afa31a27afbcbbacf504c03",
+  "downstream_tree_without_patches": "200f2e937679640c3565d50d652eaa6192fd5e08",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -211,7 +211,7 @@
         ".github/workflows/avx1-build.yml",
         ".gitignore"
       ],
-      "sha256": "508ab7606deeafe65800da24ff0bac4f7cf0fd46fd6ca2682e264b8d6432fcc7"
+      "sha256": "061acabdc1a31c5c5c08d990eaad97391e44470db1ab46f0a78c281539460412"
     },
     {
       "patch": "14-upstream-regressions.patch",
@@ -264,13 +264,13 @@
     "10-native-json.patch": "47d947346106cfa21a1fc801abada6245090826a1ca441a21237a95c37cb783a",
     "11-package-assets.patch": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac",
     "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
-    "13-ci-build.patch": "508ab7606deeafe65800da24ff0bac4f7cf0fd46fd6ca2682e264b8d6432fcc7",
+    "13-ci-build.patch": "061acabdc1a31c5c5c08d990eaad97391e44470db1ab46f0a78c281539460412",
     "14-upstream-regressions.patch": "4f83ee02654f51f260593f55584001b7d06c9f765769e24b6b68e513246c95ee",
     "15-project-docs.patch": "0248a4ecccda9bc5e2f59f4b82e8d9c60be621ca6946349137ca2ff6ec179048",
     "16-fork-records.patch": "dea91fd3daf7af3f740805323316691eab02ba0db372bfbeb81ace1dba4c4c56",
     "17-build.patch": "66ab9a8359facf8485630095318b42b1c287c2dd0e989e8c6c1d248fbb25ef55",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "aac3d6ba166c08984fd1627cbefcfb5c7682096818908aa80ee1880c9dc285d5",
-    "README.md": "50122949987d8d7fefd9043677626ea8e501001d4f66d4e2b49d6d3c3bfcf990"
+    "README.md": "8ab334203a3fda6daa92357da77b7deadb02acbd1cd617a83991868035e05d55"
   }
 }

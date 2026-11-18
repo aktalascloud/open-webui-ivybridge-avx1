@@ -49,10 +49,10 @@ index 0000000000000000000000000000000000000000..81cd1e22f117a086b3819069fe8ff256
 +    subprocess.run([str(manager), pins["platform"], pins["build_tools"], pins["ndk"]], check=True)
 diff --git a/.avx1/build.py b/.avx1/build.py
 new file mode 100644
-index 0000000000000000000000000000000000000000..68bc4d28b8c3e546fd08824f3ce609a590bd6d7f
+index 0000000000000000000000000000000000000000..b3fd3e8fae033e6eda8136c3ed437031531bc24e
 --- /dev/null
 +++ b/.avx1/build.py
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,315 @@
 +"""Build one exact source revision. Outputs contain no local configuration."""
 +from __future__ import annotations
 +import base64
@@ -100,8 +100,18 @@ index 0000000000000000000000000000000000000000..68bc4d28b8c3e546fd08824f3ce609a5
 +    requirements = WORK / 'resolved-audit-requirements.txt'
 +    requirements.write_text(''.join(item['name']+'=='+item['version']+'\n' for item in libraries), encoding='utf-8')
 +    # A missing advisory service or unresolved advisory blocks publication.
-+    audit=subprocess.run([sys.executable,'-m','pip_audit','--requirement',str(requirements),'--no-deps','--disable-pip','--strict','--format','json','--output',str(report)],cwd=ROOT)
-+    if audit.returncode not in {0,1} or not report.exists():raise RuntimeError('Dependency audit unavailable; publication blocked')
++    audit_command = [sys.executable, '-m', 'pip_audit', '--requirement', str(requirements),
++                     '--no-deps', '--disable-pip', '--strict', '--timeout', '60',
++                     '--format', 'json', '--output', str(report)]
++    for attempt in range(2):
++        report.unlink(missing_ok=True)
++        audit = subprocess.run(audit_command, cwd=ROOT)
++        if audit.returncode in {0, 1} and report.is_file():
++            break
++        if attempt == 0:
++            time.sleep(5)
++    else:
++        raise RuntimeError('Dependency audit unavailable; publication blocked')
 +    data = json.loads(report.read_text("utf-8"))
 +    audited = {(re.sub(r'[-_.]+','-',item['name']).lower(), item['version']) for item in data['dependencies']}
 +    if audited != {(item['name'],item['version']) for item in libraries}:
