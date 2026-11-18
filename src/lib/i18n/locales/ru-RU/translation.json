@@ -3669,6 +3669,8 @@
 	"settings.admin.models.builtinTools.tools.label": "Создание инструментов",
 	"settings.admin.models.builtinTools.userInput.description": "Приостановить ответ, чтобы задать пользователю уточняющий вопрос",
 	"settings.admin.models.builtinTools.userInput.label": "Спросить пользователя",
+	"settings.admin.models.builtinTools.users.description": "Поиск пользователей в каталоге для обработки @упоминаний",
+	"settings.admin.models.builtinTools.users.label": "Пользователи",
 	"settings.admin.models.builtinTools.videoGeneration.description": "Разрешает модели создавать видео.",
 	"settings.admin.models.builtinTools.videoGeneration.label": "Создание видео",
 	"settings.admin.models.builtinTools.visualizations.description": "Позволяет моделям создавать интерактивные визуализации.",

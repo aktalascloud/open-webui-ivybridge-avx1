@@ -6493,6 +6493,7 @@
 									{selectedTerminalId}
 									{terminalSkills}
 									chatId={$chatId}
+									{onTemporaryChange}
 									bind:terminalContext
 									callActive={!!(bridge?.connected || bridge?.connecting)}
 									callEnabled={!isShared}
