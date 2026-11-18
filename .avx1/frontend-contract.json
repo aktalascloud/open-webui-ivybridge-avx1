@@ -10,7 +10,7 @@
   "sources": {
     "src/lib/utils/assistantCompatibility.js": "44efcb7b1fffefbf17c25e0a3596ba65775a337de6f30df9f353428a46ec8abb",
     "src/lib/components/chat/MessageInput.svelte": "02bc019854a7ec7df73a8e02024f4b959a4159986befb1bbf0e9f8ac2eedb841",
-    "src/lib/components/chat/Chat.svelte": "822aa8bfb47a1d63925f946efbcf95f585041568dae962bfccb708e6c3fd92b8",
+    "src/lib/components/chat/Chat.svelte": "cc3676b4567c40f328fb1a22153f7da339e6e2fc9f6459ed0e55a778d65fa4a5",
     "src/lib/apis/audio/index.ts": "f64a9d2ea7483c181e34216055690cd839530a2ff1a7c253a2c865cf760955f1",
     "src/lib/components/chat/Messages/ResponseMessage.svelte": "9d86d161b82b66fc989bdd5b4b64ec115668c454a0e99e5b720389fce68cffd3",
     "src/lib/components/chat/MessageInput/CallOverlay.svelte": "ed3a64f4a3a9f30873084850b55d6ce193556585c01756c605cc5160e3e324b3"
@@ -21,7 +21,7 @@
   },
   "reviewed_local_change": "The shared Chat composer now handles main and side chats. Mic provenance selects the actual editor inputId; explicit direct tool IDs and voice wire V1 retained.",
   "reviewed_mainstream_change": {
-    "upstream_commit": "c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d",
-    "scope": "Current voiceCall/store and settings changes; retain exact inputId mic tagging, assistant voice budget and authenticated Markdown media. Browser view tickets bind the owner credential and terminal instance."
+    "upstream_commit": "04cedc89f5e78c21636daf581829a9a3f1af97d2",
+    "scope": "Chat.svelte adds onTemporaryChange to MessageInput. Mic provenance, voice budget, speech identity, and call emoji hooks remain intact."
   }
 }
