@@ -3,9 +3,9 @@
   "grouping_version": 3,
   "ownership": "applied-downstream-only",
   "project": "webui",
-  "upstream": "c3dfec2b0dd9d4e5e5907e93ab312ebcf293309d",
-  "snapshot_source": "58273da2548cddfbd6fe5296a21eff668a88be43",
-  "downstream_tree_without_patches": "cfd64c37e1f480500bf04adc14ec7ad28a4abd13",
+  "upstream": "04cedc89f5e78c21636daf581829a9a3f1af97d2",
+  "snapshot_source": "395f20511a592f79bd7c8665b41d7f2bfc34d35d",
+  "downstream_tree_without_patches": "3631ca21047ae33959406814521629653ba1359d",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -117,7 +117,7 @@
         "src/lib/components/admin/Settings/Subagents.svelte",
         "src/lib/utils/toolServerPolicy.js"
       ],
-      "sha256": "7f177ebc08c7664408e42a5be0f31f7e85982b8693da1cfc903264973e04de09"
+      "sha256": "d50e20c03f4b73855b29734bd58a40a687586890ae4771dd4b040606dc881191"
     },
     {
       "patch": "08-chat-integration.patch",
@@ -145,7 +145,7 @@
         "src/lib/stores/index.ts",
         "src/lib/utils/assistantCompatibility.js"
       ],
-      "sha256": "2670ad63bd4922ab34e41d198f3d2086d25e5e565c808bdc8890c5afa0241077"
+      "sha256": "dde3570f815dce580bc0a0067bd2cd292deb17c554631a1cde938a2997960174"
     },
     {
       "patch": "09-localization.patch",
@@ -157,7 +157,7 @@
         "src/lib/i18n/locales/ru-RU/translation.json",
         "src/lib/utils/localizedContent.ts"
       ],
-      "sha256": "3780dce56173ccd24ee4c4aa9b42a4df5d78367afac80a52dc3fcc9b8fbdd2ad"
+      "sha256": "3ece7a7fe5b141587ec7585affed932c00e966d6ff10255cdfa39d251dd616f5"
     },
     {
       "patch": "10-native-json.patch",
@@ -258,9 +258,9 @@
     "04-voice-avatars.patch": "867f5f63734a2820a741fc4e7c3db2e783ea4091368de4c9f38bab8617f25e4a",
     "05-protected-media.patch": "27abd86c2b16e3e25638a64b063630b76d2f100e657b2771d38424ea3ba8170e",
     "06-terminal-browser-access.patch": "5aa5275466daaf53abf9a2315ac47fb8f0ede8e010348f1a9e3353b101eba45e",
-    "07-tools-and-subagents.patch": "7f177ebc08c7664408e42a5be0f31f7e85982b8693da1cfc903264973e04de09",
-    "08-chat-integration.patch": "2670ad63bd4922ab34e41d198f3d2086d25e5e565c808bdc8890c5afa0241077",
-    "09-localization.patch": "3780dce56173ccd24ee4c4aa9b42a4df5d78367afac80a52dc3fcc9b8fbdd2ad",
+    "07-tools-and-subagents.patch": "d50e20c03f4b73855b29734bd58a40a687586890ae4771dd4b040606dc881191",
+    "08-chat-integration.patch": "dde3570f815dce580bc0a0067bd2cd292deb17c554631a1cde938a2997960174",
+    "09-localization.patch": "3ece7a7fe5b141587ec7585affed932c00e966d6ff10255cdfa39d251dd616f5",
     "10-native-json.patch": "47d947346106cfa21a1fc801abada6245090826a1ca441a21237a95c37cb783a",
     "11-package-assets.patch": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac",
     "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
@@ -271,6 +271,6 @@
     "17-build.patch": "3858d1d22497695c079e3f6b29aa4f638d6c1c83a1999fd51de338432fb9b513",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "aac3d6ba166c08984fd1627cbefcfb5c7682096818908aa80ee1880c9dc285d5",
-    "README.md": "0c7596efbe1e450c6a74587154a1f2926721e2fdbedbb32e099a56bcbe89221a"
+    "README.md": "4b0a4e43a3928e5160eedbd4b27b20870969d8d087805a65986c94ae73561689"
   }
 }

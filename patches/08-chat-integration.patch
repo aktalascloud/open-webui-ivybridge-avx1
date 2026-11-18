@@ -570,7 +570,7 @@ index 36d5bb07c79e2fd3f91cb9b3cd46e3a38759852f..f716f0a8f5f26fd835177c698e73a8c0
      headers = {
          'Content-Type': 'application/json',
 diff --git a/backend/open_webui/utils/middleware.py b/backend/open_webui/utils/middleware.py
-index e3656d42a122fda3fb6cfa8e99aa13b3ad35b2e8..2fc432d7833f82f31a0670c1f07def8753502397 100644
+index 1b3be005d1582183ea4f3081847f25083962e451..68bb560f69f8987a60dad62d129aea4a4d4a6776 100644
 --- a/backend/open_webui/utils/middleware.py
 +++ b/backend/open_webui/utils/middleware.py
 @@ -1926,13 +1926,17 @@ def strip_reasoning_details(output: list) -> list:
@@ -621,7 +621,7 @@ index 374b5b49045e33e6727b31a1f3ac41b9511d845d..28e3e7d766814cce91884e45df5745c4
  
  from open_webui.utils.json_codec import JSONCodec
 diff --git a/src/lib/components/chat/Chat.svelte b/src/lib/components/chat/Chat.svelte
-index 5cacdf70823db2c47d70448706d7f5d196e49283..85f09a269e767010197daa6e6b51da6405fd4d1b 100644
+index 7eec01e380df1d055f3d492d463078f42931b0c4..bb59f8990e32442b755edbfe168e6511a22f22b2 100644
 --- a/src/lib/components/chat/Chat.svelte
 +++ b/src/lib/components/chat/Chat.svelte
 @@ -1,4 +1,6 @@

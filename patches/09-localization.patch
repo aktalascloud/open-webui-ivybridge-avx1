@@ -158,7 +158,7 @@ index 0000000000000000000000000000000000000000..c08ce8b6cabbd90f797e706467133345
 +    checked+=1
 +print('RUSSIAN_LOCALE_KEYS_AND_PARAMETERS_VERIFIED='+str(checked))
 diff --git a/src/lib/i18n/locales/en-US/translation.json b/src/lib/i18n/locales/en-US/translation.json
-index faa9b11b440b082967ff2431144a4d34536c5b22..d64e38b69a787b0111a658b20a23e043317a210d 100644
+index 6b896f4fe5b558fadbcace261be125bc504157bf..c47741702989e38f540bf53ee3557cc16c84fe39 100644
 --- a/src/lib/i18n/locales/en-US/translation.json
 +++ b/src/lib/i18n/locales/en-US/translation.json
 @@ -2083,7 +2083,7 @@
@@ -170,7 +170,7 @@ index faa9b11b440b082967ff2431144a4d34536c5b22..d64e38b69a787b0111a658b20a23e043
  	"Modified": "",
  	"Mojeek": "",
  	"Mon": "",
-@@ -4872,5 +4872,90 @@
+@@ -4874,5 +4874,90 @@
  	"YouTube": "",
  	"YouTube video player": "",
  	"Zoom in": "",
@@ -263,7 +263,7 @@ index faa9b11b440b082967ff2431144a4d34536c5b22..d64e38b69a787b0111a658b20a23e043
 +	"Drag to rotate; pinch or scroll to zoom. Double-tap to reset.": "Drag to rotate; pinch or scroll to zoom. Double-tap to reset."
  }
 diff --git a/src/lib/i18n/locales/ru-RU/translation.json b/src/lib/i18n/locales/ru-RU/translation.json
-index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc534eb63e77 100644
+index b358e5f74caff1455fdc2d8ab631336e6217d165..20cf8459eb6867d3c3d9f279e3303bcaf8b469bb 100644
 --- a/src/lib/i18n/locales/ru-RU/translation.json
 +++ b/src/lib/i18n/locales/ru-RU/translation.json
 @@ -1,6 +1,6 @@
@@ -2518,7 +2518,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.admin.interface.voiceModePrompt.description": "Применять инструкции для голоса, пока активен голосовой режим.",
  	"settings.admin.interface.voiceModePrompt.label": "Промпт голосового режима",
  	"settings.admin.interface.webSearchQueryGeneration.description": "Переписывать запросы пользователей в запросы к поисковой системе.",
-@@ -3665,14 +3665,14 @@
+@@ -3665,16 +3665,16 @@
  	"settings.admin.models.builtinTools.time.description": "Получить текущее время и выполнить вычисления с датой/временем",
  	"settings.admin.models.builtinTools.time.label": "Время и вычисления",
  	"settings.admin.models.builtinTools.title": "Встроенные инструменты",
@@ -2527,10 +2527,14 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.admin.models.builtinTools.tools.label": "Создание инструментов",
  	"settings.admin.models.builtinTools.userInput.description": "Приостановить ответ, чтобы задать пользователю уточняющий вопрос",
  	"settings.admin.models.builtinTools.userInput.label": "Спросить пользователя",
+-	"settings.admin.models.builtinTools.users.description": "",
+-	"settings.admin.models.builtinTools.users.label": "",
 -	"settings.admin.models.builtinTools.videoGeneration.description": "",
 -	"settings.admin.models.builtinTools.videoGeneration.label": "",
 -	"settings.admin.models.builtinTools.visualizations.description": "",
 -	"settings.admin.models.builtinTools.visualizations.label": "",
++	"settings.admin.models.builtinTools.users.description": "Поиск пользователей в каталоге для обработки @упоминаний",
++	"settings.admin.models.builtinTools.users.label": "Пользователи",
 +	"settings.admin.models.builtinTools.videoGeneration.description": "Разрешает модели создавать видео.",
 +	"settings.admin.models.builtinTools.videoGeneration.label": "Создание видео",
 +	"settings.admin.models.builtinTools.visualizations.description": "Позволяет моделям создавать интерактивные визуализации.",
@@ -2538,7 +2542,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.admin.models.builtinTools.webSearch.description": "Поиск через поисковую систему и загрузка URL",
  	"settings.admin.models.builtinTools.webSearch.label": "Поисковая система",
  	"settings.admin.models.capabilities.builtinTools.description": "Автоматически подключать системные инструменты в режиме вызова функций (временные метки, воспоминания, история чата, заметки и т.д.)",
-@@ -3696,8 +3696,8 @@
+@@ -3698,8 +3698,8 @@
  	"settings.admin.models.capabilities.title": "Возможности",
  	"settings.admin.models.capabilities.usage.description": "Отправляет в запросе \"stream_options: { include_usage: true }\".\nПоддерживаемые провайдеры будут возвращать информацию об использовании токена в ответе, когда это будет установлено.",
  	"settings.admin.models.capabilities.usage.label": "Использование",
@@ -2549,7 +2553,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.admin.models.capabilities.vision.description": "Модель принимает изображения как входные данные",
  	"settings.admin.models.capabilities.vision.label": "Видение",
  	"settings.admin.models.capabilities.webSearch.description": "Модель может искать информацию через поисковую систему",
-@@ -3746,14 +3746,14 @@
+@@ -3748,14 +3748,14 @@
  	"settings.admin.subagents.systemPrompt.description": "Оставьте пустым для встроенного значения по умолчанию.",
  	"settings.admin.subagents.systemPrompt.label": "Системный промпт",
  	"settings.admin.subagents.title": "Субагенты",
@@ -2572,7 +2576,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.admin.web.bingSearchV7Endpoint.label": "Энд-поинт поиска Bing V7",
  	"settings.admin.web.bingSearchV7SubscriptionKey.label": "Ключ API Bing Search V7",
  	"settings.admin.web.bochaSearchApiKey.label": "Ключ API поиска Bocha",
-@@ -3795,10 +3795,10 @@
+@@ -3797,10 +3797,10 @@
  	"settings.admin.web.parameters.label": "Параметры",
  	"settings.admin.web.perplexityApiKey.label": "Ключ API для Perplexity",
  	"settings.admin.web.perplexityModel.label": "Модель Perplexity",
@@ -2585,7 +2589,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.admin.web.searchapiApiKey.label": "Ключ SearchApi API",
  	"settings.admin.web.searchapiEngine.label": "Движок SearchApi",
  	"settings.admin.web.searchLimits.description": "Управляйте объёмом результатов и параллельными поисковыми запросами.",
-@@ -3816,8 +3816,8 @@
+@@ -3818,8 +3818,8 @@
  	"settings.admin.web.serphouseDomain.label": "Домен SERPHouse",
  	"settings.admin.web.serplyApiKey.label": "Ключ API Serply",
  	"settings.admin.web.serpstackApiKey.label": "Ключ API Serpstack",
@@ -2596,7 +2600,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.admin.web.tavilyApiKey.label": "Ключ API Tavily",
  	"settings.admin.web.tavilyExtractDepth.label": "Глубина извлечения Tavily",
  	"settings.admin.web.tavilySearchDepth.label": "Глубина поиска Tavily",
-@@ -3858,7 +3858,7 @@
+@@ -3860,7 +3860,7 @@
  	"settings.audio.realtime.inputParams": "Входные параметры",
  	"settings.audio.realtime.inputParamsHelp": "Дополнительные параметры аудиоввода в реальном времени в формате JSON.",
  	"settings.audio.realtime.openai": "OpenAI / совместимый",
@@ -2605,7 +2609,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.personal.about.checkForUpdates.label": "Проверить обновления",
  	"settings.personal.about.sections.community.title": "Сообщество",
  	"settings.personal.about.sections.ollamaVersion.title": "Версия Ollama",
-@@ -3903,7 +3903,7 @@
+@@ -3905,7 +3905,7 @@
  	"settings.personal.audio.instantAutoSendAfterVoiceTranscription.description": "Отправлять расшифрованный голосовой ввод сразу после завершения распознавания речи.",
  	"settings.personal.audio.instantAutoSendAfterVoiceTranscription.label": "Мгновенная автоматическая отправка после расшифровки голоса",
  	"settings.personal.audio.kokoroJsDtype.description": "Выберите точность локальной модели, используемой Kokoro.js.",
@@ -2614,7 +2618,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.personal.audio.kokoroVoice.description": "Выберите голос Kokoro.js для озвучивания.",
  	"settings.personal.audio.kokoroVoice.label": "Задать голос",
  	"settings.personal.audio.language.description": "Задайте язык распознавания речи или оставьте поле пустым для автоматического определения.",
-@@ -4174,7 +4174,7 @@
+@@ -4176,7 +4176,7 @@
  	"settings.personal.shortcuts.toggleDictation.label": "Включить/выключить диктовку",
  	"settings.personal.shortcuts.toggleMute.label": "Переключить отключение звука",
  	"settings.personal.shortcuts.toggleSidebar.label": "Показать/скрыть боковую панель",
@@ -2623,7 +2627,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"settings.personal.shortcuts.voiceNote.label": "Голосовая заметка",
  	"settings.personal.usage.sections.activity.title": "Активность",
  	"settings.personal.usage.sections.activityInsights.title": "Аналитика активности",
-@@ -4182,9 +4182,9 @@
+@@ -4184,9 +4184,9 @@
  	"settings.personal.usage.sections.overview.title": "Обзор",
  	"settings.personal.usage.sections.topModels.title": "Топ моделей",
  	"settings.personal.usage.title": "Использование",
@@ -2636,7 +2640,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Share": "Поделиться",
  	"Share Chat": "Поделиться чатом",
  	"Share link copied to clipboard.": "Ссылка скопирована в буфер обмена.",
-@@ -4194,7 +4194,7 @@
+@@ -4196,7 +4196,7 @@
  	"Shared chat": "Общий чат",
  	"Shared Chats": "Общие чаты",
  	"Shared note": "Общая заметка",
@@ -2645,7 +2649,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Shared with you": "Доступные вам",
  	"Sharing mode": "Режим общего доступа",
  	"Sharing Permissions": "Разрешения на общий доступ",
-@@ -4202,10 +4202,10 @@
+@@ -4204,10 +4204,10 @@
  	"Shorten older messages so this chat can keep going.": "Сократить старые сообщения, чтобы можно было продолжить этот чат.",
  	"Show": "Показать",
  	"Show \"What's New\" Modal on Login": "Показывать окно «Что нового» при входе в систему",
@@ -2658,7 +2662,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Show {{count}} unchanged lines_one": "Показать {{count}} неизменённую строку",
  	"Show {{count}} unchanged lines_few": "Показать {{count}} неизменённые строки",
  	"Show {{count}} unchanged lines_many": "Показать {{count}} неизменённых строк",
-@@ -4217,8 +4217,8 @@
+@@ -4219,8 +4219,8 @@
  	"Show all {{count}} contributors_few": "Показать всех {{count}} авторов",
  	"Show all {{count}} contributors_many": "Показать всех {{count}} авторов",
  	"Show all {{count}} contributors_other": "Показать всех {{count}} авторов",
@@ -2669,7 +2673,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Show Files": "Показать файлы",
  	"Show Hidden Files": "Показывать скрытые файлы",
  	"Show image preview": "Показать предварительный просмотр изображения",
-@@ -4293,22 +4293,22 @@
+@@ -4295,22 +4295,22 @@
  	"Split screen": "Разделить экран",
  	"Sponsor on GitHub": "Стать спонсором на GitHub",
  	"SQL query": "SQL-запрос",
@@ -2698,7 +2702,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Starting in {{count}} minutes_one": "Начнется через {{count}} минуту",
  	"Starting in {{count}} minutes_few": "Начнется через {{count}} минуты",
  	"Starting in {{count}} minutes_many": "Начнется через {{count}} минут",
-@@ -4319,14 +4319,14 @@
+@@ -4321,14 +4321,14 @@
  	"State animations": "Анимации состояний",
  	"Status": "Статус",
  	"Status cleared successfully": "Статус успешно очищен",
@@ -2718,7 +2722,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Stop": "Остановить",
  	"Stop before each tool call until you allow or deny it.": "Останавливаться перед каждым вызовом инструмента, пока вы не разрешите или не отклоните его.",
  	"Stop camera": "Остановить камеру",
-@@ -4337,29 +4337,29 @@
+@@ -4339,29 +4339,29 @@
  	"Stop terminal": "Остановить терминал",
  	"Stop terminal?": "Остановить терминал?",
  	"Stop this terminal and close the tab?": "Остановить этот терминал и закрыть вкладку?",
@@ -2755,7 +2759,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Sun": "Вс",
  	"Support": "Поддержать",
  	"Support this plugin:": "Поддержите этот плагин",
-@@ -4368,12 +4368,12 @@
+@@ -4370,12 +4370,12 @@
  	"Swap sides": "Поменять стороны местами",
  	"Switch branch": "Переключить ветку",
  	"Switch camera": "Переключить камеру",
@@ -2770,7 +2774,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Sync": "Синхронизация",
  	"Sync a local directory with this knowledge base. Only new and modified files will be uploaded. The directory structure will be mirrored.": "Синхронизировать локальный каталог с этой базой знаний. Будут загружены только новые и изменённые файлы. Структура каталога будет воспроизведена.",
  	"Sync complete: {{added}} added, {{modified}} modified, {{deleted}} deleted, {{unmodified}} unmodified": "Синхронизация завершена: добавлено {{added}}, изменено {{modified}}, удалено {{deleted}}, без изменений {{unmodified}}",
-@@ -4416,9 +4416,9 @@
+@@ -4418,9 +4418,9 @@
  	"Terminal connection unavailable": "Подключение к терминалу недоступно",
  	"Terminal Not Found": "Терминал не найден",
  	"Terminal servers saved": "Серверы терминала сохранены",
@@ -2782,7 +2786,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Test": "Проверить",
  	"Test must pass before a source is created.": "Проверка должна пройти успешно перед созданием источника.",
  	"Test notification sent.": "Тестовое уведомление отправлено.",
-@@ -4434,7 +4434,7 @@
+@@ -4436,7 +4436,7 @@
  	"The Application Account DN you bind with for search": "Логин учетной записи приложения, к которому вы привязываетесь для поиска",
  	"The base to search for users": "База для поиска пользователей",
  	"The batch size determines how many text requests are processed together at once. A higher batch size can increase the performance and speed of the model, but it also requires more memory.": "Размер пакета определяет, сколько текстовых запросов обрабатывается одновременно. Больший размер пакета может повысить производительность и быстродействие модели, но также требует больше памяти.",
@@ -2791,7 +2795,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"The developers behind this plugin are passionate volunteers from the community. If you find this plugin helpful, please consider contributing to its development.": "Разработчики этого плагина - увлеченные волонтеры из сообщества. Если вы считаете этот плагин полезным, пожалуйста, подумайте о том, чтобы внести свой вклад в его разработку.",
  	"The evaluation leaderboard is based on the Elo rating system and is updated in real-time.": "Таблица лидеров оценки основана на рейтинговой системе Elo и обновляется в режиме реального времени.",
  	"The file has changed. Reopen the comparison before applying.": "Файл изменился. Снова откройте сравнение перед применением.",
-@@ -4452,17 +4452,17 @@
+@@ -4454,17 +4454,17 @@
  	"thinking, output_config": "thinking, output_config",
  	"Thinking...": "Думаю...",
  	"This action cannot be undone. Do you wish to continue?": "Это действие нельзя отменить. Вы хотите продолжить?",
@@ -2813,7 +2817,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"This file changed on disk. Replace it with your edits?": "Этот файл изменён на диске. Заменить его своими правками?",
  	"This file is already open. Close its tab or choose another name.": "Этот файл уже открыт. Закройте его вкладку или выберите другое имя.",
  	"This folder is empty": "Эта папка пуста",
-@@ -4475,10 +4475,10 @@
+@@ -4477,10 +4477,10 @@
  	"This option sets the maximum number of tokens the model can generate in its response. Increasing this limit allows the model to provide longer answers, but it may also increase the likelihood of unhelpful or irrelevant content being generated.": "Этот параметр устанавливает максимальное количество токенов, которые модель может генерировать в своем ответе. Увеличение этого ограничения позволяет модели предоставлять более длинные ответы, но также может увеличить вероятность создания бесполезного или нерелевантного контента.",
  	"This page no longer exists": "Эта страница больше не существует",
  	"This response was generated by \"{{model}}\"": "Этот ответ был сгенерирован для \"{{model}}\"",
@@ -2827,7 +2831,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"This user will need to sign in again on every device. API keys remain active.": "Этому пользователю потребуется снова войти на каждом устройстве. Ключи API останутся активными.",
  	"This week": "На этой неделе",
  	"This will delete": "Это приведет к удалению",
-@@ -4487,7 +4487,7 @@
+@@ -4489,7 +4489,7 @@
  	"This will delete the cached model and cannot be undone.": "Это удалит кэшированную модель, и действие нельзя отменить.",
  	"This will permanently delete the calendar \"{{name}}\" and all its events. This action cannot be undone.": "Календарь \"{{name}}\" и все его события будут удалены безвозвратно. Это действие нельзя отменить.",
  	"This will remove all files and directories from this knowledge base. This action cannot be undone.": "Это удалит все файлы и каталоги из этой базы знаний. Это действие нельзя отменить.",
@@ -2836,7 +2840,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"This will reset the saved settings for this base model to their defaults. The model will remain available.": "Сохранённые настройки этой базовой модели будут сброшены до значений по умолчанию. Модель останется доступной.",
  	"This will revoke the current API key.": "Это отзовёт текущий API-ключ.",
  	"This workbook link cannot be opened in the preview.": "Эту ссылку в книге нельзя открыть в предпросмотре.",
-@@ -4506,7 +4506,7 @@
+@@ -4508,7 +4508,7 @@
  	"Tika Server URL required.": "Требуется URL-адрес сервера Tika.",
  	"Tiktoken": "Tiktoken",
  	"Time": "Время",
@@ -2845,7 +2849,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Timeline": "Временная шкала",
  	"Timeout": "Тайм-аут",
  	"Timer": "Таймер",
-@@ -4543,7 +4543,7 @@
+@@ -4545,7 +4545,7 @@
  	"Token activity": "Активность токенов",
  	"Token counts are estimates and may not reflect actual API usage": "Количество токенов является приблизительным и может не отражать фактическое использование API",
  	"Token share": "Доля токенов",
@@ -2854,7 +2858,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"tokens": "токены",
  	"Tokens": "Токены",
  	"Too verbose": "Слишком многословно",
-@@ -4581,7 +4581,7 @@
+@@ -4583,7 +4583,7 @@
  	"Translation key": "Ключ перевода",
  	"Translations": "Переводы",
  	"Trial License": "Пробная лицензия",
@@ -2863,7 +2867,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Try adjusting your search or filter to find what you are looking for.": "Попробуйте изменить поиск или фильтр, чтобы найти нужное.",
  	"Try again": "Попробовать снова",
  	"Try Again": "Попробовать снова",
-@@ -4591,7 +4591,7 @@
+@@ -4593,7 +4593,7 @@
  	"Tu_day_of_week": "Вт",
  	"Tue": "Вт",
  	"Type": "Тип",
@@ -2872,7 +2876,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Type a model ref": "Введите ссылку на модель",
  	"Type changed": "Тип изменён",
  	"Type here...": "Введите текст...",
-@@ -4600,7 +4600,7 @@
+@@ -4602,7 +4602,7 @@
  	"Uh-oh! There was an issue with the response.": "Ошибка генерации ответа.",
  	"Ultra-fast": "Сверхбыстрая",
  	"Unable to copy link": "Не удалось скопировать ссылку",
@@ -2881,7 +2885,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Unable to load session.": "Не удалось загрузить сессию.",
  	"Unable to load sessions.": "Не удалось загрузить сессии.",
  	"Unable to load tools": "Не удалось загрузить инструменты",
-@@ -4609,12 +4609,12 @@
+@@ -4611,12 +4611,12 @@
  	"Unarchive Chat": "Разархивировать чат",
  	"Unassigned": "Не назначено",
  	"Unavailable": "Недоступные",
@@ -2896,7 +2900,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Unified": "Единый",
  	"Uninstall": "Удалить",
  	"Uninstall app": "Удалить приложение",
-@@ -4632,24 +4632,24 @@
+@@ -4634,24 +4634,24 @@
  	"Unmute to continue": "Включите микрофон, чтобы продолжить",
  	"Unpin": "Открепить",
  	"Unpin from Sidebar": "Открепить от боковой панели",
@@ -2926,7 +2930,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Upcoming event": "Предстоящее событие",
  	"Update": "Обновить",
  	"Update All Models": "Обновить все модели",
-@@ -4659,16 +4659,16 @@
+@@ -4661,16 +4661,16 @@
  	"Update for the latest features and improvements.": "Обновитесь для получения последних функций и улучшений.",
  	"Update your status": "Обновите свой статус",
  	"Updated": "Обновлено",
@@ -2947,7 +2951,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Upload animation": "Загрузить анимацию",
  	"Upload Audio": "Загрузить аудио",
  	"Upload directory": "Загрузить каталог",
-@@ -4696,26 +4696,26 @@
+@@ -4698,26 +4698,26 @@
  	"URL is required": "Требуется URL",
  	"URL Mode": "Режим URL",
  	"Usage metric": "Показатель использования",
@@ -2980,7 +2984,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Use the terminal’s default directory": "Каталог терминала по умолчанию",
  	"Use these in model system prompts as {{example}}.": "Используйте их в системных промптах моделей как {{example}}.",
  	"Use this directory": "Использовать этот каталог",
-@@ -4725,7 +4725,7 @@
+@@ -4727,7 +4727,7 @@
  	"user": "пользователь",
  	"User": "Пользователь",
  	"User Activity": "Активность пользователей",
@@ -2989,7 +2993,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"User Count": "Количество пользователей",
  	"User group": "Группа пользователей",
  	"User Groups": "Группы пользователей",
-@@ -4750,7 +4750,7 @@
+@@ -4752,7 +4752,7 @@
  	"Using Entire Document": "Использование всего документа",
  	"Using Focused Retrieval": "Использование фокусированного поиска",
  	"Using the default arena model with all models. Click the plus button to add custom models.": "Использование модели арены по умолчанию со всеми моделями. Нажмите кнопку «плюс», чтобы добавить пользовательские модели.",
@@ -2998,7 +3002,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Value": "Значение",
  	"Valves": "Параметры",
  	"Valves updated": "Параметры обновлены",
-@@ -4759,10 +4759,10 @@
+@@ -4761,10 +4761,10 @@
  	"Variable key": "Ключ переменной",
  	"Variable keys must be unique.": "Ключи переменных должны быть уникальными.",
  	"Variable keys must use lowercase snake case.": "Ключи переменных должны использовать нижний регистр в стиле snake_case.",
@@ -3011,7 +3015,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Verified": "Проверено",
  	"Verify": "Проверить",
  	"Verify Connection": "Проверить подключение",
-@@ -4773,18 +4773,18 @@
+@@ -4775,18 +4775,18 @@
  	"Version deleted": "Версия удалена",
  	"Vertical Layout": "Вертикальная компоновка",
  	"Video": "Видео",
@@ -3036,7 +3040,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"View Replies": "С ответами",
  	"View Result from {{NAME}}": "Просмотреть результат от {{NAME}}",
  	"View source": "Исходный код",
-@@ -4796,11 +4796,11 @@
+@@ -4798,11 +4798,11 @@
  	"Visible": "Видимо",
  	"Visible to all users": "Видимо всем пользователям",
  	"Visual": "Визуальный",
@@ -3053,7 +3057,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"vocabulary for a college entrance exam": "к словарной части вступительного экзамена",
  	"Voice": "Голос",
  	"Voice avatar": "Голосовой аватар",
-@@ -4851,7 +4851,7 @@
+@@ -4853,7 +4853,7 @@
  	"What's on your mind?": "О чём хотите поговорить?",
  	"When": "Когда",
  	"When should the model use this gesture?": "Когда модель должна использовать этот жест?",
@@ -3062,7 +3066,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Whisper (Local)": "Whisper (Локально)",
  	"Who can share to this group": "Кто может делиться с этой группой",
  	"Who can use this app?": "Кто может использовать это приложение?",
-@@ -4860,8 +4860,8 @@
+@@ -4862,8 +4862,8 @@
  	"Wikipedia": "Википедия",
  	"Won": "Победа",
  	"Work": "Работа",
@@ -3073,7 +3077,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Working directory": "Рабочий каталог",
  	"Working Directory": "Рабочий каталог",
  	"Working Directory Context": "Контекст рабочего каталога",
-@@ -4874,7 +4874,7 @@
+@@ -4876,7 +4876,7 @@
  	"Workspace Permissions": "Разрешения для Рабочего пространства",
  	"Workspace search": "Поиск в рабочем пространстве",
  	"Worktree branch": "Ветка рабочего дерева",
@@ -3082,7 +3086,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"Worktrees": "Рабочие деревья",
  	"Write": "Напишите",
  	"Write a prompt…": "Напишите промпт…",
-@@ -4892,9 +4892,9 @@
+@@ -4894,9 +4894,9 @@
  	"You are a sub-agent...": "Вы — субагент...",
  	"You are currently using a trial license. Please contact support to upgrade your license.": "В настоящее время вы используете пробную лицензию. Пожалуйста, обратитесь в службу поддержки для обновления вашей лицензии.",
  	"You can only chat with a maximum of {{maxCount}} file(s) at a time.": "Одновременно вы можете общаться только с максимальным количеством файлов {{maxCount}}.",
@@ -3094,7 +3098,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"You do not have permission to edit this model": "У вас нет прав на редактирование этой модели",
  	"You do not have permission to edit this prompt.": "У вас нет прав на редактирование этого промпта.",
  	"You do not have permission to edit this skill.": "У вас нет прав на редактирование этого скилла.",
-@@ -4905,7 +4905,7 @@
+@@ -4907,7 +4907,7 @@
  	"You do not have permission to upload files to this knowledge base.": "У вас нет прав на загрузку файлов в эту базу знаний.",
  	"You do not have permission to upload files.": "У вас нет разрешения на загрузку файлов.",
  	"You do not have permission to upload web content.": "У вас нет прав на загрузку веб-контента.",
@@ -3103,7 +3107,7 @@ index cb61b9361f9fcd84c05ecc08e57b2c645f2a0027..fc526304860ea62ee5d9eebdde95bc53
  	"You have more than 50 users, which often means this workspace is supporting organizational use. Open WebUI is free to use as-is, with no restrictions or hidden limits, and we want to keep it that way.": "У вас более 50 пользователей, что часто означает, что это рабочее пространство используется в организации. Open WebUI можно использовать бесплатно как есть, без ограничений или скрытых лимитов, и мы хотим сохранить это так.",
  	"You have no archived conversations.": "У вас нет архивированных бесед.",
  	"You have no shared conversations.": "У вас нет общих бесед.",
-@@ -4930,5 +4930,100 @@
+@@ -4932,5 +4932,100 @@
  	"YouTube": "YouTube",
  	"YouTube video player": "Видеоплеер YouTube",
  	"Zoom in": "Увеличить",

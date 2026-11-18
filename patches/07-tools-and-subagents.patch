@@ -441,10 +441,10 @@ index 3baa6938c23d89c02ffaabc1d4c8034967719f76..4160e683d98ebe04091359b60e796b5e
                      subagent_system_prompt,
                      [*chat_context.get('messages', []), {'role': 'user', 'content': prompt}],
 diff --git a/backend/open_webui/utils/tools.py b/backend/open_webui/utils/tools.py
-index 999f77b16ab69ffe85ef491426c3ac8002fa4931..5e4ae829e3b8b624d95f1d5917681343497451d6 100644
+index 89884e3e6f6bb2e0dcbeb1d3f518e1ece7be34ea..d3508a74a74acbf1c7c31fc978209adf4f25b7bb 100644
 --- a/backend/open_webui/utils/tools.py
 +++ b/backend/open_webui/utils/tools.py
-@@ -1014,7 +1014,7 @@ async def get_builtin_tools(
+@@ -1018,7 +1018,7 @@ async def get_builtin_tools(
  
              subagent_models = await get_subagent_models(request, UserModel(**user), model) if user else []
              if subagent_models:
