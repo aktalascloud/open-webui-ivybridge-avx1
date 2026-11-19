@@ -933,7 +933,7 @@ async def process_tool_result(
         tool_result = {'results': tool_result}
 
     if isinstance(tool_result, dict) or isinstance(tool_result, list):
-        tool_result = json.dumps(tool_result, indent=2, ensure_ascii=False)
+        tool_result = json.dumps(tool_result, separators=(',', ':'), ensure_ascii=False)
 
     # Safety: ensure tool_result is always a string (or None) to prevent
     # downstream TypeError when concatenating (e.g. if an upstream callable
@@ -941,9 +941,15 @@ async def process_tool_result(
     if tool_result is not None and not isinstance(tool_result, str):
         if isinstance(tool_result, tuple):
             # execute_tool_server returns (data, headers); unpack the data part
-            tool_result = json.dumps(tool_result[0], indent=2, ensure_ascii=False) if len(tool_result) > 0 else ''
+            tool_result = (
+                json.dumps(tool_result[0], separators=(',', ':'), ensure_ascii=False) if len(tool_result) > 0 else ''
+            )
         else:
             tool_result = str(tool_result)
+
+    max_chars = await Config.get('tools.output_max_chars')
+    if max_chars and tool_result and len(tool_result) > max_chars:
+        tool_result = f'{tool_result[:max_chars]}\n\n[Truncated: {len(tool_result)} characters, limit {max_chars}]'
 
     return tool_result, tool_result_files, tool_result_embeds
 
