@@ -341,10 +341,10 @@ index 0000000000000000000000000000000000000000..70387d4f118d1e5c48144b62ec90089c
 + assert.strictEqual(resolve(null, {'ru-RU': explicit}, 'ru-RU', t), explicit);
 +});
 diff --git a/backend/open_webui/config.py b/backend/open_webui/config.py
-index 0b6ae4b2497ce88633d0c9289f9afd7b20f65fb4..11f8cb7797a382a3084d6858077b98213fb639f0 100644
+index ae324f0aa6e8fa85a97a97ab9bc90c584480337c..9c05d233570dfcc2a15b11dd1c80e47bbf1fc9f2 100644
 --- a/backend/open_webui/config.py
 +++ b/backend/open_webui/config.py
-@@ -2101,6 +2101,16 @@ ENABLE_CALENDAR = os.getenv('ENABLE_CALENDAR', 'True').lower() == 'true'
+@@ -2105,6 +2105,16 @@ ENABLE_CALENDAR = os.getenv('ENABLE_CALENDAR', 'True').lower() == 'true'
  ENABLE_AUTOMATIONS = os.getenv('ENABLE_AUTOMATIONS', 'True').lower() == 'true'
  
  ENABLE_SUBAGENTS = os.getenv('ENABLE_SUBAGENTS', 'False').lower() == 'true'
@@ -361,7 +361,7 @@ index 0b6ae4b2497ce88633d0c9289f9afd7b20f65fb4..11f8cb7797a382a3084d6858077b9821
  SUBAGENTS_BACKGROUND_ENABLED = os.getenv('SUBAGENTS_BACKGROUND_ENABLED', 'False').lower() == 'true'
  # Leave empty for unlimited.
  SUBAGENTS_MAX_CONCURRENT = os.getenv('SUBAGENTS_MAX_CONCURRENT', '')
-@@ -3282,6 +3292,7 @@ DEFAULT_CONFIG = {
+@@ -3287,6 +3297,7 @@ DEFAULT_CONFIG = {
      'calendar.enable': ENABLE_CALENDAR,
      'automations.enable': ENABLE_AUTOMATIONS,
      'subagents.enable': ENABLE_SUBAGENTS,
@@ -570,10 +570,10 @@ index 36d5bb07c79e2fd3f91cb9b3cd46e3a38759852f..f716f0a8f5f26fd835177c698e73a8c0
      headers = {
          'Content-Type': 'application/json',
 diff --git a/backend/open_webui/utils/middleware.py b/backend/open_webui/utils/middleware.py
-index 1b3be005d1582183ea4f3081847f25083962e451..68bb560f69f8987a60dad62d129aea4a4d4a6776 100644
+index 1d212ec81a8ece4421406ed3189f4ba5e9ad24dc..fecbae69de7a5744ccf1d0467134f651c21b71f6 100644
 --- a/backend/open_webui/utils/middleware.py
 +++ b/backend/open_webui/utils/middleware.py
-@@ -1926,13 +1926,17 @@ def strip_reasoning_details(output: list) -> list:
+@@ -1932,13 +1932,17 @@ def strip_reasoning_details(output: list) -> list:
  
  def strip_tool_images(output: list, model: dict) -> list:
      """Replace tool result images with a text note when the model has Vision turned off."""
