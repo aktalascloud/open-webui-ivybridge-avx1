@@ -5,7 +5,7 @@ Only currently applied maintainer differences from the exact official baseline a
 Mainstream-only commits, rejected proposals and reverted experiments are excluded.
 Коммиты самого mainstream, неприменённые предложения и отменённые эксперименты исключены.
 
-Official baseline: `58fb2453b`. Downstream snapshot: `e908ddd4d42f5da2b4cd1eb0618e716177ed3cfa`.
+Official baseline: `58fb2453b`. Downstream snapshot: `04c1b16daf79f9a334c8502efdc9317d7035d7b7`.
 Patches are already applied in this fork. Apply `series` only to a clean checkout of that exact baseline.
 В этом форке патчи уже применены. `series` предназначен только для чистого checkout указанной базы.
 Apply the numbered patches in the order listed in `series`. Each row describes one topic.
@@ -31,5 +31,5 @@ Assistant microphone/voice/VRM hooks, Strata/FreeLLM controls, scoped tool polic
 | 13 | [13-ci-build.patch](13-ci-build.patch) | Pin toolchains and package inputs, and run the fork build and publication checks / Закрепляет инструменты и входы сборки, запускает проверки пакетов и публикации. | 10 |
 | 14 | [14-upstream-regressions.patch](14-upstream-regressions.patch) | Exercise adapted upstream contracts and regression fixtures / Проверяет адаптированные контракты upstream и сценарии регрессий. | 5 |
 | 15 | [15-project-docs.patch](15-project-docs.patch) | Document fork setup, support and license terms / Описывает установку, поддержку и условия лицензирования форка. | 1 |
-| 16 | [16-fork-records.patch](16-fork-records.patch) | Record fork changes, upstream reviews and qualification measurements / Хранит журнал изменений, разбор upstream и результаты проверок. | 2 |
+| 16 | [16-fork-records.patch](16-fork-records.patch) | Record fork changes, upstream reviews and qualification measurements / Хранит журнал изменений, разбор upstream и результаты проверок. | 3 |
 | 17 | [17-build.patch](17-build.patch) | Our reproducible build, toolchain and CI recipes / Наши сборочные рецепты, toolchain и CI. | 1 |

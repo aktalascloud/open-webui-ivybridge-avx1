@@ -385,3 +385,145 @@ index 0000000000000000000000000000000000000000..9050215273058f02f6b8e55e4f321ae5
 +  "cpu_cycle_reduction_percent": 94.63,
 +  "wall_time_reduction_percent": 94.59
 +}
+diff --git a/.avx1/measurements/performance-20261119.json b/.avx1/measurements/performance-20261119.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..fd421b6e4913644e6a33022d1863ac2c23eb8bf6
+--- /dev/null
++++ b/.avx1/measurements/performance-20261119.json
+@@ -0,0 +1,136 @@
++{
++  "scope": "Synthetic fixtures on E5-2697 v2; batched process CPU medians overcome Windows clock granularity; no private data or model inference",
++  "source_before": "97ef89cab11eb39ffd34a0183eefd5b7f45d83db",
++  "source_after": "68d47cde8fd62e3e810c2b0dd324784cba1343c5",
++  "disabled_compaction": {
++    "before": {
++      "median_cpu_ns": 58593750.0,
++      "sample_cpu_ns": [
++        58593750.0,
++        58593750.0,
++        58593750.0,
++        60546875.0,
++        58593750.0,
++        58593750.0,
++        56640625.0
++      ],
++      "sql_reads_per_call": 1.0,
++      "batch_loops": 8,
++      "function_sha256": "abb7b04dcf4517d245e578b7f65eb879e3ed0d9bd1e8a32b1bc9065ab9bde04c"
++    },
++    "after": {
++      "median_cpu_ns": 566.2441253662109,
++      "sample_cpu_ns": [
++        566.2441253662109,
++        596.0464477539062,
++        566.2441253662109,
++        566.2441253662109,
++        536.4418029785156,
++        596.0464477539062,
++        566.2441253662109
++      ],
++      "sql_reads_per_call": 0.0,
++      "batch_loops": 524288,
++      "function_sha256": "aafc84628744014d95624cd9c7db3d71e7bae35aaeacc4ce6beca000cc61c88e"
++    },
++    "synthetic_history_bytes": 15756981,
++    "limit": "Real source functions with a controlled SQLite message-map adapter; not a live HTTP latency test"
++  },
++  "tool_json": {
++    "before": {
++      "median_cpu_ns": 39062500.0,
++      "sample_cpu_ns": [
++        37109375.0,
++        39062500.0,
++        42968750.0,
++        39062500.0,
++        41015625.0,
++        39062500.0,
++        41015625.0
++      ],
++      "characters": 554601,
++      "bytes": 554601,
++      "batch_loops": 8
++    },
++    "after": {
++      "median_cpu_ns": 5371093.75,
++      "sample_cpu_ns": [
++        5126953.125,
++        5371093.75,
++        5371093.75,
++        5371093.75,
++        5126953.125,
++        5371093.75,
++        5371093.75
++      ],
++      "characters": 194593,
++      "bytes": 194593,
++      "batch_loops": 64
++    },
++    "cpu_reduction_percent": 86.25,
++    "bytes_reduction_percent": 64.91297347101789
++  },
++  "hardware": {
++    "cpu": "2x Xeon E5-2697 v2; 8 visible cores per socket; AVX/F16C; AVX2/FMA unavailable",
++    "ram": "16 x 16 GiB DDR3-1866 reported by Windows",
++    "gpu": "Tesla P40 24 GiB, PCIe 3.0 x16, TCC",
++    "runtime": {
++      "torch": "2.14.0+cpu",
++      "torch_threads": 16,
++      "torch_interop_threads": 16,
++      "onnxruntime": "1.26.0",
++      "onnx_providers": [
++        "AzureExecutionProvider",
++        "CPUExecutionProvider"
++      ]
++    }
++  },
++  "decisions": [
++    {
++      "change": "47cf51eb7 / upstream #34640",
++      "decision": "adopted via upstream",
++      "evidence": "tool_json benchmark; JSON round-trip equality"
++    },
++    {
++      "change": "3a7291ba7 / upstream #34671",
++      "decision": "adopted via upstream",
++      "evidence": "disabled_compaction benchmark; same None result, zero message-map reads"
++    },
++    {
++      "change": "PR #34675",
++      "decision": "reviewed; await isolated transaction/ownership/legacy-row tests",
++      "reason": "changes chat SQL lookup and ownership metadata, outside current upstream"
++    },
++    {
++      "change": "PR #34673",
++      "decision": "reviewed; await cancellation, continuation and multi-model tests",
++      "reason": "moves task IDs and saved response start timestamps"
++    },
++    {
++      "change": "Conduit #1050",
++      "decision": "reviewed; defer isolated mobile validation",
++      "reason": "LRU retains large prepared messages under a 16 MiB character budget; mobile memory/FPS not measured"
++    },
++    {
++      "change": "Cline integration removal",
++      "decision": "applied",
++      "evidence": "removed standalone gateway/client/routes; four SSH-only dependencies gone; CI checks retired-backend routing"
++    },
++    {
++      "change": "compiler flags",
++      "decision": "retain measured compatible profiles",
++      "evidence": "Ivy Bridge AVX/F16C; native O3/LTO; ARMv8-A O3 ThinLTO; no AVX2/FMA on this CPU"
++    },
++    {
++      "change": "additional inference engines",
++      "decision": "existing Python CPU runtime and pinned native Android providers retained",
++      "reason": "WebUI mainly transports data to configured inference services; no matched model benchmark for a runtime replacement"
++    }
++  ],
++  "limits": [
++    "Synthetic CPU measurements do not establish LLM token generation gains.",
++    "No physical Android timing or phone test.",
++    "No changes to Strata, model weights, GPU drivers or private CODE.",
++    "Only relevant listed PRs were semantically reviewed."
++  ]
++}
