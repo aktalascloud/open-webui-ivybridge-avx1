@@ -4,8 +4,8 @@
   "ownership": "applied-downstream-only",
   "project": "webui",
   "upstream": "58fb2453b",
-  "snapshot_source": "9d02321cab57154b6f4c416eef3a3a1441af0037",
-  "downstream_tree_without_patches": "3be6ecbb4de6d88081367cabf0f2dc09cb6b7a92",
+  "snapshot_source": "c3a8833e92c50ba3def99234860fbbddc8c84326",
+  "downstream_tree_without_patches": "4b1926726e3aff1f3e7674375c14f234818ab11a",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -231,7 +231,7 @@
       "paths": [
         "README.md"
       ],
-      "sha256": "0248a4ecccda9bc5e2f59f4b82e8d9c60be621ca6946349137ca2ff6ec179048"
+      "sha256": "c16d9844c68bf930045e2b9d9e4a78d947ccf1ebc1131e01011b43ca8dd84fc4"
     },
     {
       "patch": "16-fork-records.patch",
@@ -266,11 +266,11 @@
     "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
     "13-ci-build.patch": "222ba7044bd23469e0fbd13237f19dce2466bcf267d22f34abf40bc7d57d56a9",
     "14-upstream-regressions.patch": "4f83ee02654f51f260593f55584001b7d06c9f765769e24b6b68e513246c95ee",
-    "15-project-docs.patch": "0248a4ecccda9bc5e2f59f4b82e8d9c60be621ca6946349137ca2ff6ec179048",
+    "15-project-docs.patch": "c16d9844c68bf930045e2b9d9e4a78d947ccf1ebc1131e01011b43ca8dd84fc4",
     "16-fork-records.patch": "dea91fd3daf7af3f740805323316691eab02ba0db372bfbeb81ace1dba4c4c56",
     "17-build.patch": "66ab9a8359facf8485630095318b42b1c287c2dd0e989e8c6c1d248fbb25ef55",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "aac3d6ba166c08984fd1627cbefcfb5c7682096818908aa80ee1880c9dc285d5",
-    "README.md": "08631cbac39c1ab5c289c5eb6469d893857196453e8df2b59fd1528f66e09252"
+    "README.md": "88b439c6e144370940116d2492c5e7d8b24d363ffa296e23b398fc0fefb48978"
   }
 }
