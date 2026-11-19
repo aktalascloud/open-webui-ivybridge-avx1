@@ -4,8 +4,8 @@
   "ownership": "applied-downstream-only",
   "project": "webui",
   "upstream": "58fb2453b",
-  "snapshot_source": "04c1b16daf79f9a334c8502efdc9317d7035d7b7",
-  "downstream_tree_without_patches": "ce523a63b94ed8227fca7253dff3985394490872",
+  "snapshot_source": "ad7814bd91590cace8cf644dade4f26f0744e9ac",
+  "downstream_tree_without_patches": "bfc511572ed560efd0b29df1e89f49fc7292a5e2",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -241,7 +241,7 @@
         ".avx1/measurements/latest.json",
         ".avx1/measurements/performance-20261119.json"
       ],
-      "sha256": "2d25718ba7725307478c60b0ba89fb9c238adbf5ce04b71a6be20a356acbae6d"
+      "sha256": "32450d35f836ce4ce722cb53e5a6e03dc7c1ad0a86bed75ce1bc3aa397e1e298"
     },
     {
       "patch": "17-build.patch",
@@ -268,10 +268,10 @@
     "13-ci-build.patch": "222ba7044bd23469e0fbd13237f19dce2466bcf267d22f34abf40bc7d57d56a9",
     "14-upstream-regressions.patch": "4f83ee02654f51f260593f55584001b7d06c9f765769e24b6b68e513246c95ee",
     "15-project-docs.patch": "c16d9844c68bf930045e2b9d9e4a78d947ccf1ebc1131e01011b43ca8dd84fc4",
-    "16-fork-records.patch": "2d25718ba7725307478c60b0ba89fb9c238adbf5ce04b71a6be20a356acbae6d",
+    "16-fork-records.patch": "32450d35f836ce4ce722cb53e5a6e03dc7c1ad0a86bed75ce1bc3aa397e1e298",
     "17-build.patch": "66ab9a8359facf8485630095318b42b1c287c2dd0e989e8c6c1d248fbb25ef55",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "aac3d6ba166c08984fd1627cbefcfb5c7682096818908aa80ee1880c9dc285d5",
-    "README.md": "b91f1e503b35f9cdffcf4ee26b624749c54da184df6147bf7cb14b254b2af732"
+    "README.md": "641092352052482dc95db1d7ed7abf1d6b14ebee158029ce594caeb14f5c24eb"
   }
 }

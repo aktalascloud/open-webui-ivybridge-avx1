@@ -387,10 +387,10 @@ index 0000000000000000000000000000000000000000..9050215273058f02f6b8e55e4f321ae5
 +}
 diff --git a/.avx1/measurements/performance-20261119.json b/.avx1/measurements/performance-20261119.json
 new file mode 100644
-index 0000000000000000000000000000000000000000..fd421b6e4913644e6a33022d1863ac2c23eb8bf6
+index 0000000000000000000000000000000000000000..f42f7ad6aca33a024777fdc0d29d72ec189eadb3
 --- /dev/null
 +++ b/.avx1/measurements/performance-20261119.json
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,143 @@
 +{
 +  "scope": "Synthetic fixtures on E5-2697 v2; batched process CPU medians overcome Windows clock granularity; no private data or model inference",
 +  "source_before": "97ef89cab11eb39ffd34a0183eefd5b7f45d83db",
@@ -525,5 +525,12 @@ index 0000000000000000000000000000000000000000..fd421b6e4913644e6a33022d1863ac2c
 +    "No physical Android timing or phone test.",
 +    "No changes to Strata, model weights, GPU drivers or private CODE.",
 +    "Only relevant listed PRs were semantically reviewed."
-+  ]
++  ],
++  "reproduction": {
++    "python": "Installed CPython 3.12 runtime, standard json/sqlite3, exact source functions extracted through AST",
++    "timing": "Double batch iterations until at least 250 ms of process_time_ns CPU; report median of seven batches per arm",
++    "tool_json_fixture": "{'results': [{'path': f'synthetic/{i}.json', 'status': 'ok', 'details': {'count': i, 'description': 'synthetic output', 'values': list(range(20))}} for i in range(1200)]}",
++    "history_fixture": "{str(i): {'id': str(i), 'parentId': str(i-1) if i else None, 'content': 'synthetic latency measurement '*1024} for i in range(512)}",
++    "history_adapter": "One SQLite in-memory TEXT row storing json.dumps(history_fixture), select and json.loads on each Chats.get_messages_map_by_chat_id call; _load_config returns enable=False; both real get_chat_context_usage functions must return None"
++  }
 +}
