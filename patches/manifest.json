@@ -4,8 +4,8 @@
   "ownership": "applied-downstream-only",
   "project": "webui",
   "upstream": "58fb2453b",
-  "snapshot_source": "c3a8833e92c50ba3def99234860fbbddc8c84326",
-  "downstream_tree_without_patches": "4b1926726e3aff1f3e7674375c14f234818ab11a",
+  "snapshot_source": "e908ddd4d42f5da2b4cd1eb0618e716177ed3cfa",
+  "downstream_tree_without_patches": "0604220429ff33ae4b0752ee96a1187cf706eead",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -157,7 +157,7 @@
         "src/lib/i18n/locales/ru-RU/translation.json",
         "src/lib/utils/localizedContent.ts"
       ],
-      "sha256": "4eb1ac4c258accd2ec079db7e8132cf2f8b73a3e681e5585a0190b5f9eb74123"
+      "sha256": "380aa08a28c1480096aa6a323dd32992b1697f5980465a746a913637cb098f92"
     },
     {
       "patch": "10-native-json.patch",
@@ -260,7 +260,7 @@
     "06-terminal-browser-access.patch": "5aa5275466daaf53abf9a2315ac47fb8f0ede8e010348f1a9e3353b101eba45e",
     "07-tools-and-subagents.patch": "d50e20c03f4b73855b29734bd58a40a687586890ae4771dd4b040606dc881191",
     "08-chat-integration.patch": "92c0e642dae5de78962a3445c6fd1189962f5372f2f51ae189b4f69feff106ac",
-    "09-localization.patch": "4eb1ac4c258accd2ec079db7e8132cf2f8b73a3e681e5585a0190b5f9eb74123",
+    "09-localization.patch": "380aa08a28c1480096aa6a323dd32992b1697f5980465a746a913637cb098f92",
     "10-native-json.patch": "47d947346106cfa21a1fc801abada6245090826a1ca441a21237a95c37cb783a",
     "11-package-assets.patch": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac",
     "12-portable-install.patch": "a5f4c34a7c7c47f8f56c4bebdee4b03422237c66a6b0445f57c1f5d3aceeb4c9",
@@ -271,6 +271,6 @@
     "17-build.patch": "66ab9a8359facf8485630095318b42b1c287c2dd0e989e8c6c1d248fbb25ef55",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
     "series": "aac3d6ba166c08984fd1627cbefcfb5c7682096818908aa80ee1880c9dc285d5",
-    "README.md": "88b439c6e144370940116d2492c5e7d8b24d363ffa296e23b398fc0fefb48978"
+    "README.md": "de02d279edca10c985454b60cecfd39f7e5a440ca1507279d2f87adb61996ad6"
   }
 }
