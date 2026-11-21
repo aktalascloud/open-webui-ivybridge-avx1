@@ -302,10 +302,48 @@ index 0000000000000000000000000000000000000000..7d4ea070bf24208f10830ec340de720b
 +  assert.deepEqual(provenance(mic, 'same', 'chat-input'), {input_source:'microphone'});
 +});
 diff --git a/backend/open_webui/tools/builtin.py b/backend/open_webui/tools/builtin.py
-index 0dfa235e18bdea2623e29b8c8cbf08dee756e3b8..301007b219b2c3e7f66a06fe773a36461c60bf8a 100644
+index 0dfa235e18bdea2623e29b8c8cbf08dee756e3b8..3b8be734c90c515cd49a2ed6a850d4401d43714e 100644
 --- a/backend/open_webui/tools/builtin.py
 +++ b/backend/open_webui/tools/builtin.py
-@@ -1957,7 +1957,7 @@ async def delegate_task(
+@@ -8,6 +8,7 @@ IMPORTANT: DO NOT IMPORT THIS MODULE DIRECTLY IN OTHER PARTS OF THE CODEBASE.
+ 
+ import asyncio
+ import logging
++import re
+ import time
+ from typing import Literal, Optional
+ from urllib.parse import unquote
+@@ -77,6 +78,7 @@ from open_webui.utils.skill_files import SkillFile, SkillFileOperation, skill_co
+ from open_webui.utils.terminals import get_terminal_file, upload_files_to_terminal
+ 
+ log = logging.getLogger(__name__)
++_WINDOWS_DRIVE_PATH = re.compile(r'^[A-Za-z]:[\\/]')
+ 
+ MAX_KNOWLEDGE_BASE_SEARCH_ITEMS = 10_000
+ 
+@@ -479,7 +481,7 @@ async def edit_image(
+ 
+         resolved_images = []
+         for url in image_urls:
+-            if url.startswith('/') and not url.startswith('/api/v1/files/'):
++            if (url.startswith('/') or _WINDOWS_DRIVE_PATH.match(url)) and not url.startswith('/api/v1/files/'):
+                 data = await get_terminal_file(__request__, user, __metadata__ or {}, url, max_bytes=50 * 1024 * 1024)
+                 url = await asyncio.to_thread(get_image_data_url, data)
+             resolved_images.append(url)
+@@ -575,7 +577,11 @@ async def generate_video(
+     try:
+         user = UserModel(**__user__) if __user__ else None
+ 
+-        if image_url and image_url.startswith('/') and not image_url.startswith('/api/v1/files/'):
++        if (
++            image_url
++            and (image_url.startswith('/') or _WINDOWS_DRIVE_PATH.match(image_url))
++            and not image_url.startswith('/api/v1/files/')
++        ):
+             data = await get_terminal_file(__request__, user, __metadata__ or {}, image_url, max_bytes=50 * 1024 * 1024)
+             image_url = await asyncio.to_thread(get_image_data_url, data)
+ 
+@@ -1957,7 +1963,7 @@ async def delegate_task(
      :param file_ids: Attached file IDs the sub-agent needs. Use this for images or files;
          do not put file IDs only in context.
      :param background: Return immediately and continue this chat when the sub-agent finishes

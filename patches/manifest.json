@@ -3,9 +3,9 @@
   "grouping_version": 3,
   "ownership": "applied-downstream-only",
   "project": "webui",
-  "upstream": "58fb2453b",
-  "snapshot_source": "ad7814bd91590cace8cf644dade4f26f0744e9ac",
-  "downstream_tree_without_patches": "bfc511572ed560efd0b29df1e89f49fc7292a5e2",
+  "upstream": "58fb2453b301e1c62273ff6171c8a4ed1bed890d",
+  "snapshot_source": "3f4bc0d70ab6f55fdb5fc0a179a8874dc28a7c2f",
+  "downstream_tree_without_patches": "adaaaf460656884da6152ba4c28bfec68bce8ead",
   "groups": [
     {
       "patch": "01-dependencies.patch",
@@ -117,7 +117,7 @@
         "src/lib/components/admin/Settings/Subagents.svelte",
         "src/lib/utils/toolServerPolicy.js"
       ],
-      "sha256": "d50e20c03f4b73855b29734bd58a40a687586890ae4771dd4b040606dc881191"
+      "sha256": "c574541c2a68d592a86ed564bb6aab06c0066c0d29412606aa6da57b0999e5de"
     },
     {
       "patch": "08-chat-integration.patch",
@@ -131,6 +131,7 @@
         ".avx1/test_responses_clients.py",
         ".avx1/test_suggestions.mjs",
         "backend/open_webui/config.py",
+        "backend/open_webui/routers/analytics.py",
         "backend/open_webui/routers/configs.py",
         "backend/open_webui/routers/models.py",
         "backend/open_webui/routers/openai.py",
@@ -145,7 +146,7 @@
         "src/lib/stores/index.ts",
         "src/lib/utils/assistantCompatibility.js"
       ],
-      "sha256": "92c0e642dae5de78962a3445c6fd1189962f5372f2f51ae189b4f69feff106ac"
+      "sha256": "8f1069a34279ad4927ff812a993a8aa497a544023280d6b9c44560bef372e194"
     },
     {
       "patch": "09-localization.patch",
@@ -244,7 +245,15 @@
       "sha256": "32450d35f836ce4ce722cb53e5a6e03dc7c1ad0a86bed75ce1bc3aa397e1e298"
     },
     {
-      "patch": "17-build.patch",
+      "patch": "17-runtime.patch",
+      "description": "Local runtime, integration, security, dependency and platform adaptations / Наши изменения работы, интеграций, безопасности и платформ.",
+      "paths": [
+        "src/lib/components/chat/Tabs/ChromeBrowser.svelte"
+      ],
+      "sha256": "386f5d7f757465eb9fd9c45718015ec925aa2d0ccfe2afa15721b1f75af12392"
+    },
+    {
+      "patch": "18-build.patch",
       "description": "Our reproducible build, toolchain and CI recipes / Наши сборочные рецепты, toolchain и CI.",
       "paths": [
         ".avx1/audit_frontend.py"
@@ -259,8 +268,8 @@
     "04-voice-avatars.patch": "867f5f63734a2820a741fc4e7c3db2e783ea4091368de4c9f38bab8617f25e4a",
     "05-protected-media.patch": "27abd86c2b16e3e25638a64b063630b76d2f100e657b2771d38424ea3ba8170e",
     "06-terminal-browser-access.patch": "5aa5275466daaf53abf9a2315ac47fb8f0ede8e010348f1a9e3353b101eba45e",
-    "07-tools-and-subagents.patch": "d50e20c03f4b73855b29734bd58a40a687586890ae4771dd4b040606dc881191",
-    "08-chat-integration.patch": "92c0e642dae5de78962a3445c6fd1189962f5372f2f51ae189b4f69feff106ac",
+    "07-tools-and-subagents.patch": "c574541c2a68d592a86ed564bb6aab06c0066c0d29412606aa6da57b0999e5de",
+    "08-chat-integration.patch": "8f1069a34279ad4927ff812a993a8aa497a544023280d6b9c44560bef372e194",
     "09-localization.patch": "380aa08a28c1480096aa6a323dd32992b1697f5980465a746a913637cb098f92",
     "10-native-json.patch": "47d947346106cfa21a1fc801abada6245090826a1ca441a21237a95c37cb783a",
     "11-package-assets.patch": "fb4f27f56c95bc5aa826ebf467ac05254fd77735bb3a4674427a54bd56b0f7ac",
@@ -269,9 +278,10 @@
     "14-upstream-regressions.patch": "4f83ee02654f51f260593f55584001b7d06c9f765769e24b6b68e513246c95ee",
     "15-project-docs.patch": "c16d9844c68bf930045e2b9d9e4a78d947ccf1ebc1131e01011b43ca8dd84fc4",
     "16-fork-records.patch": "32450d35f836ce4ce722cb53e5a6e03dc7c1ad0a86bed75ce1bc3aa397e1e298",
-    "17-build.patch": "66ab9a8359facf8485630095318b42b1c287c2dd0e989e8c6c1d248fbb25ef55",
+    "17-runtime.patch": "386f5d7f757465eb9fd9c45718015ec925aa2d0ccfe2afa15721b1f75af12392",
+    "18-build.patch": "66ab9a8359facf8485630095318b42b1c287c2dd0e989e8c6c1d248fbb25ef55",
     ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
-    "series": "aac3d6ba166c08984fd1627cbefcfb5c7682096818908aa80ee1880c9dc285d5",
-    "README.md": "641092352052482dc95db1d7ed7abf1d6b14ebee158029ce594caeb14f5c24eb"
+    "series": "fa2c3f6b072717f94e73012421598e53dbe1319a0617fa958260d0f2b1042e9b",
+    "README.md": "76b66a6312a9d60b65cf6b79e0789abc865479983a0cfbcb9b0941a146453b2e"
   }
 }

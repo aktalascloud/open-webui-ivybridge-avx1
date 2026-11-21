@@ -5,7 +5,7 @@ Only currently applied maintainer differences from the exact official baseline a
 Mainstream-only commits, rejected proposals and reverted experiments are excluded.
 Коммиты самого mainstream, неприменённые предложения и отменённые эксперименты исключены.
 
-Official baseline: `58fb2453b`. Downstream snapshot: `ad7814bd91590cace8cf644dade4f26f0744e9ac`.
+Official baseline: `58fb2453b301e1c62273ff6171c8a4ed1bed890d`. Downstream snapshot: `3f4bc0d70ab6f55fdb5fc0a179a8874dc28a7c2f`.
 Patches are already applied in this fork. Apply `series` only to a clean checkout of that exact baseline.
 В этом форке патчи уже применены. `series` предназначен только для чистого checkout указанной базы.
 Apply the numbered patches in the order listed in `series`. Each row describes one topic.
@@ -23,7 +23,7 @@ Assistant microphone/voice/VRM hooks, Strata/FreeLLM controls, scoped tool polic
 | 5 | [05-protected-media.patch](05-protected-media.patch) | Load and download protected audio, video and files through authenticated requests / Загружает защищённые аудио, видео и файлы с авторизацией. | 8 |
 | 6 | [06-terminal-browser-access.patch](06-terminal-browser-access.patch) | Bind browser and watch tickets to the terminal owner, token and chat scope / Привязывает браузерные и файловые билеты к владельцу терминала, токену и чату. | 5 |
 | 7 | [07-tools-and-subagents.patch](07-tools-and-subagents.patch) | Scope tool discovery to selected IDs and resolve subagents under the caller’s access rights / Ограничивает инструменты выбранными ID и проверяет права вызывающего для субагентов. | 8 |
-| 8 | [08-chat-integration.patch](08-chat-integration.patch) | Wire mic origin, voice budget, tool selection and model routing into shared chat and request handlers / Подключает источник микрофона, бюджет голоса, выбор инструментов и маршрутизацию моделей в общих обработчиках. | 21 |
+| 8 | [08-chat-integration.patch](08-chat-integration.patch) | Wire mic origin, voice budget, tool selection and model routing into shared chat and request handlers / Подключает источник микрофона, бюджет голоса, выбор инструментов и маршрутизацию моделей в общих обработчиках. | 22 |
 | 9 | [09-localization.patch](09-localization.patch) | Translate fork controls and localize generated UI content / Переводит настройки форка и локализует содержимое интерфейса. | 5 |
 | 10 | [10-native-json.patch](10-native-json.patch) | Qualify AVX1 orjson builds and native cache reuse, with stock JSON as default / Проверяет AVX1-сборки orjson и переиспользование кэша, оставляя штатный JSON по умолчанию. | 7 |
 | 11 | [11-package-assets.patch](11-package-assets.patch) | Adjust WebUI package hooks, Vite build and bundled browser assets / Адаптирует упаковку WebUI, сборку Vite и ресурсы браузера. | 5 |
@@ -32,4 +32,5 @@ Assistant microphone/voice/VRM hooks, Strata/FreeLLM controls, scoped tool polic
 | 14 | [14-upstream-regressions.patch](14-upstream-regressions.patch) | Exercise adapted upstream contracts and regression fixtures / Проверяет адаптированные контракты upstream и сценарии регрессий. | 5 |
 | 15 | [15-project-docs.patch](15-project-docs.patch) | Document fork setup, support and license terms / Описывает установку, поддержку и условия лицензирования форка. | 1 |
 | 16 | [16-fork-records.patch](16-fork-records.patch) | Record fork changes, upstream reviews and qualification measurements / Хранит журнал изменений, разбор upstream и результаты проверок. | 3 |
-| 17 | [17-build.patch](17-build.patch) | Our reproducible build, toolchain and CI recipes / Наши сборочные рецепты, toolchain и CI. | 1 |
+| 17 | [17-runtime.patch](17-runtime.patch) | Local runtime, integration, security, dependency and platform adaptations / Наши изменения работы, интеграций, безопасности и платформ. | 1 |
+| 18 | [18-build.patch](18-build.patch) | Our reproducible build, toolchain and CI recipes / Наши сборочные рецепты, toolchain и CI. | 1 |
