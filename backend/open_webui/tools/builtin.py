@@ -8,6 +8,7 @@ IMPORTANT: DO NOT IMPORT THIS MODULE DIRECTLY IN OTHER PARTS OF THE CODEBASE.
 
 import asyncio
 import logging
+import re
 import time
 from typing import Literal, Optional
 from urllib.parse import unquote
@@ -77,6 +78,7 @@ from open_webui.utils.skill_files import SkillFile, SkillFileOperation, skill_co
 from open_webui.utils.terminals import get_terminal_file, upload_files_to_terminal
 
 log = logging.getLogger(__name__)
+_WINDOWS_DRIVE_PATH = re.compile(r'^[A-Za-z]:[\\/]')
 
 MAX_KNOWLEDGE_BASE_SEARCH_ITEMS = 10_000
 
@@ -479,7 +481,7 @@ async def edit_image(
 
         resolved_images = []
         for url in image_urls:
-            if url.startswith('/') and not url.startswith('/api/v1/files/'):
+            if (url.startswith('/') or _WINDOWS_DRIVE_PATH.match(url)) and not url.startswith('/api/v1/files/'):
                 data = await get_terminal_file(__request__, user, __metadata__ or {}, url, max_bytes=50 * 1024 * 1024)
                 url = await asyncio.to_thread(get_image_data_url, data)
             resolved_images.append(url)
@@ -575,7 +577,11 @@ async def generate_video(
     try:
         user = UserModel(**__user__) if __user__ else None
 
-        if image_url and image_url.startswith('/') and not image_url.startswith('/api/v1/files/'):
+        if (
+            image_url
+            and (image_url.startswith('/') or _WINDOWS_DRIVE_PATH.match(image_url))
+            and not image_url.startswith('/api/v1/files/')
+        ):
             data = await get_terminal_file(__request__, user, __metadata__ or {}, image_url, max_bytes=50 * 1024 * 1024)
             image_url = await asyncio.to_thread(get_image_data_url, data)
 
